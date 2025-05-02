@@ -62,6 +62,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 20), // Added top margin
                 const Text(
                   'Change Password',
                   style: TextStyle(

@@ -51,12 +51,67 @@ class _ReusableTableState extends State<ReusableTable> {
     });
   }
 
+  void _showDescriptionDialog(BuildContext context, String description) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.9,
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Description',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Text(
+                        description,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+    );
+  }
+
   Widget _buildSortableHeader(String text, int columnIndex) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(text, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Flexible(
+          child: Text(
+            text,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
         if (_sortColumnIndex == columnIndex)
           Icon(
             _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
@@ -69,11 +124,37 @@ class _ReusableTableState extends State<ReusableTable> {
     );
   }
 
+  Widget _buildTableCell(String value, String header, BuildContext context) {
+    if (header == 'Description') {
+      final isLongText = value.length > 100;
+      return Container(
+        constraints: const BoxConstraints(maxWidth: 200, minWidth: 200),
+        child: InkWell(
+          onTap: () => _showDescriptionDialog(context, value),
+          child: Text(
+            isLongText ? '${value.substring(0, 100)}...' : value,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.black87, // Changed to regular text color
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+          ),
+        ),
+      );
+    }
+
+    // For other columns
+    return Text(value, style: const TextStyle(fontSize: 14));
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
+        columnSpacing: 20,
+        horizontalMargin: 12,
         sortColumnIndex: _sortColumnIndex,
         sortAscending: _sortAscending,
         headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
@@ -92,8 +173,13 @@ class _ReusableTableState extends State<ReusableTable> {
                     cells:
                         widget.headers
                             .map(
-                              (header) =>
-                                  DataCell(Text(row[header]?.toString() ?? '')),
+                              (header) => DataCell(
+                                _buildTableCell(
+                                  row[header]?.toString() ?? '',
+                                  header,
+                                  context,
+                                ),
+                              ),
                             )
                             .toList(),
                   ),

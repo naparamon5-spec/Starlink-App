@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final Function(Map<String, String>)? onProfileUpdated;
@@ -11,20 +12,36 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
+  late SharedPreferences _prefs;
+
   // Profile Information
-  final _firstNameController = TextEditingController(text: 'John');
-  final _lastNameController = TextEditingController(text: 'Doe');
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _middleNameController = TextEditingController();
-  final _emailController = TextEditingController(text: 'johndoe@example.com');
+  final _emailController = TextEditingController();
   final _companyNameController = TextEditingController();
   final _jobTitleController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _loadSavedData();
     // Add listeners to text controllers
     _jobTitleController.addListener(_onFieldChanged);
     _companyNameController.addListener(_onFieldChanged);
+  }
+
+  Future<void> _loadSavedData() async {
+    _prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _firstNameController.text = _prefs.getString('firstName') ?? 'John';
+      _lastNameController.text = _prefs.getString('lastName') ?? 'Doe';
+      _middleNameController.text = _prefs.getString('middleName') ?? '';
+      _emailController.text =
+          _prefs.getString('email') ?? 'johndoe@example.com';
+      _companyNameController.text = _prefs.getString('companyName') ?? '';
+      _jobTitleController.text = _prefs.getString('jobTitle') ?? '';
+    });
   }
 
   void _onFieldChanged() {
@@ -50,34 +67,49 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  void _saveProfile() {
+  Future<void> _saveProfile() async {
     if (_formKey.currentState!.validate()) {
-      // Return the updated profile data to the previous screen
-      Navigator.pop(context, {
-        'jobTitle': _jobTitleController.text,
-        'companyName': _companyNameController.text,
-      });
+      // Save to SharedPreferences
+      await _prefs.setString('firstName', _firstNameController.text);
+      await _prefs.setString('lastName', _lastNameController.text);
+      await _prefs.setString('middleName', _middleNameController.text);
+      await _prefs.setString('email', _emailController.text);
+      await _prefs.setString('companyName', _companyNameController.text);
+      await _prefs.setString('jobTitle', _jobTitleController.text);
 
-      // Show success message with enhanced styling
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
-              Text(
-                'Profile updated successfully!',
-                style: TextStyle(fontSize: 16),
-              ),
-            ],
+      if (mounted) {
+        // Return the updated profile data to the previous screen
+        Navigator.pop(context, {
+          'jobTitle': _jobTitleController.text,
+          'companyName': _companyNameController.text,
+          'firstName': _firstNameController.text,
+          'lastName': _lastNameController.text,
+          'email': _emailController.text,
+        });
+
+        // Show success message with enhanced styling
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                const Text(
+                  'Profile updated successfully!',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF133343),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
-          backgroundColor: Color(0xFF133343),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+        );
+      }
     }
   }
 

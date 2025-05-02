@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'edit_profile.dart';
 import '../login_screen.dart';
 import 'security_settings.dart';
@@ -11,21 +12,55 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  late SharedPreferences _prefs;
   String _jobTitle = 'No Job Title';
   String _companyName = 'Not Set';
   String _userId = '32';
+  String _fullName = 'John Doe';
+  String _email = 'johndoe@example.com';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfileData();
+  }
+
+  Future<void> _loadProfileData() async {
+    _prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _jobTitle = _prefs.getString('jobTitle') ?? 'No Job Title';
+      _companyName = _prefs.getString('companyName') ?? 'Not Set';
+      _userId = _prefs.getString('userId') ?? '32';
+
+      String firstName = _prefs.getString('firstName') ?? 'John';
+      String lastName = _prefs.getString('lastName') ?? 'Doe';
+      String middleName = _prefs.getString('middleName') ?? '';
+      _fullName =
+          middleName.isEmpty
+              ? '$firstName $lastName'
+              : '$firstName $middleName $lastName';
+
+      _email = _prefs.getString('email') ?? 'johndoe@example.com';
+    });
+  }
 
   void _updateProfileData(Map<String, String> data) {
     setState(() {
-      _jobTitle =
-          data['jobTitle']?.isNotEmpty == true
-              ? data['jobTitle']!
-              : 'No Job Title';
-      _companyName =
-          data['companyName']?.isNotEmpty == true
-              ? data['companyName']!
-              : 'Not Set';
-      _userId = data['userId']?.isNotEmpty == true ? data['userId']! : '32';
+      _jobTitle = data['jobTitle'] ?? _jobTitle;
+      _companyName = data['companyName'] ?? _companyName;
+      if (data['firstName'] != null || data['lastName'] != null) {
+        String firstName =
+            data['firstName'] ?? _prefs.getString('firstName') ?? 'John';
+        String lastName =
+            data['lastName'] ?? _prefs.getString('lastName') ?? 'Doe';
+        String middleName =
+            data['middleName'] ?? _prefs.getString('middleName') ?? '';
+        _fullName =
+            middleName.isEmpty
+                ? '$firstName $lastName'
+                : '$firstName $middleName $lastName';
+      }
+      _email = data['email'] ?? _email;
     });
   }
 
@@ -36,7 +71,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text('Profile'),
         centerTitle: true,
         elevation: 2,
-        backgroundColor: Color(0xFF133343),
+        backgroundColor: const Color(0xFF133343),
         foregroundColor: Colors.white,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
@@ -68,7 +103,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              // ignore: deprecated_member_use
                               color: Colors.black.withOpacity(0.1),
                               blurRadius: 8,
                               offset: const Offset(0, 3),
@@ -87,7 +121,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       // Profile Name
                       Text(
-                        'John Doe',
+                        _fullName,
                         style: Theme.of(
                           context,
                         ).textTheme.headlineSmall?.copyWith(
@@ -98,7 +132,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       const SizedBox(height: 4),
 
-                      // User ID (replacing job title here)
+                      // User ID
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -122,10 +156,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 24),
 
                       // Contact Info
-                      const _InfoItem(
+                      _InfoItem(
                         icon: Icons.email_outlined,
                         label: 'Email',
-                        value: 'johndoe@example.com',
+                        value: _email,
                       ),
 
                       const Divider(height: 24),
