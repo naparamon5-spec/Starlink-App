@@ -15,6 +15,8 @@ class _ReusableTableState extends State<ReusableTable> {
   int? _sortColumnIndex;
   bool _sortAscending = true;
   late List<Map<String, dynamic>> _sortedData;
+  int _currentPage = 0;
+  static const int _rowsPerPage = 10;
 
   @override
   void initState() {
@@ -49,6 +51,30 @@ class _ReusableTableState extends State<ReusableTable> {
         return ascending ? aValue.compareTo(bValue) : bValue.compareTo(aValue);
       });
     });
+  }
+
+  List<Map<String, dynamic>> get _paginatedData {
+    final startIndex = _currentPage * _rowsPerPage;
+    final endIndex = (startIndex + _rowsPerPage).clamp(0, _sortedData.length);
+    return _sortedData.sublist(startIndex, endIndex);
+  }
+
+  int get _pageCount => (_sortedData.length / _rowsPerPage).ceil();
+
+  void _nextPage() {
+    if (_currentPage < _pageCount - 1) {
+      setState(() {
+        _currentPage++;
+      });
+    }
+  }
+
+  void _previousPage() {
+    if (_currentPage > 0) {
+      setState(() {
+        _currentPage--;
+      });
+    }
   }
 
   void _showDescriptionDialog(BuildContext context, String description) {
@@ -150,42 +176,105 @@ class _ReusableTableState extends State<ReusableTable> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columnSpacing: 20,
-        horizontalMargin: 12,
-        sortColumnIndex: _sortColumnIndex,
-        sortAscending: _sortAscending,
-        headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-        columns:
-            widget.headers.asMap().entries.map((entry) {
-              return DataColumn(
-                label: _buildSortableHeader(entry.value, entry.key),
-                onSort:
-                    (columnIndex, ascending) => _sort(columnIndex, ascending),
-              );
-            }).toList(),
-        rows:
-            _sortedData
-                .map(
-                  (row) => DataRow(
-                    cells:
-                        widget.headers
-                            .map(
-                              (header) => DataCell(
-                                _buildTableCell(
-                                  row[header]?.toString() ?? '',
-                                  header,
-                                  context,
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columnSpacing: 20,
+              horizontalMargin: 12,
+              sortColumnIndex:
+                  _sortColumnIndex != null ? _sortColumnIndex! + 1 : null,
+              sortAscending: _sortAscending,
+              headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
+              columns: [
+                const DataColumn(
+                  label: Text(
+                    'No.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                ...widget.headers.asMap().entries.map((entry) {
+                  return DataColumn(
+                    label: _buildSortableHeader(entry.value, entry.key),
+                    onSort:
+                        (columnIndex, ascending) =>
+                            _sort(columnIndex - 1, ascending),
+                  );
+                }).toList(),
+              ],
+              rows:
+                  _paginatedData
+                      .asMap()
+                      .entries
+                      .map(
+                        (entry) => DataRow(
+                          cells: [
+                            DataCell(
+                              Text(
+                                '${(_currentPage * _rowsPerPage) + entry.key + 1}',
+                                style: const TextStyle(
+                                  color: Color(0xFF133343),
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                            )
-                            .toList(),
+                            ),
+                            ...widget.headers
+                                .map(
+                                  (header) => DataCell(
+                                    _buildTableCell(
+                                      entry.value[header]?.toString() ?? '',
+                                      header,
+                                      context,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ],
+                        ),
+                      )
+                      .toList(),
+            ),
+          ),
+        ),
+        if (_sortedData.length > _rowsPerPage)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: _currentPage > 0 ? _previousPage : null,
+                  color:
+                      _currentPage > 0 ? const Color(0xFF133343) : Colors.grey,
+                  tooltip: 'Previous page',
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Page ${_currentPage + 1} of $_pageCount',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF133343),
+                    ),
                   ),
-                )
-                .toList(),
-      ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: _currentPage < _pageCount - 1 ? _nextPage : null,
+                  color:
+                      _currentPage < _pageCount - 1
+                          ? const Color(0xFF133343)
+                          : Colors.grey,
+                  tooltip: 'Next page',
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

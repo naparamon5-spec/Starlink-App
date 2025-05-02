@@ -161,13 +161,55 @@ class _TicketScreenState extends State<TicketScreen> {
       );
 
       if (result != null && mounted) {
-        // Force rebuild of the table with new data
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket created successfully'),
-            backgroundColor: Colors.green,
-          ),
+        setState(() {}); // Keep the setState to refresh the UI
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.check_circle,
+                      color: Color(0xFF133343),
+                      size: 48,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Success!',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Ticket created successfully',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 20),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'OK',
+                        style: TextStyle(
+                          color: Color(0xFF133343),
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       }
     } catch (e) {
@@ -297,31 +339,35 @@ class _TicketScreenState extends State<TicketScreen> {
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 child:
                     _isLoading
                         ? const Center(child: CircularProgressIndicator())
-                        : Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child:
-                                _filteredTickets.isEmpty
-                                    ? Center(
-                                      child: Text(
-                                        _tickets.isEmpty
-                                            ? 'No tickets found. Create a new ticket to get started.'
-                                            : 'No tickets match your search.',
-                                      ),
-                                    )
-                                    : ReusableTable(
-                                      headers: _tableHeaders,
-                                      data: _filteredTickets,
-                                    ),
-                          ),
+                        : Stack(
+                          children: [
+                            Card(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child:
+                                    _filteredTickets.isEmpty
+                                        ? Center(
+                                          child: Text(
+                                            _tickets.isEmpty
+                                                ? 'No tickets found. Create a new ticket to get started.'
+                                                : 'No tickets match your search.',
+                                          ),
+                                        )
+                                        : ReusableTable(
+                                          headers: _tableHeaders,
+                                          data: _filteredTickets,
+                                        ),
+                              ),
+                            ),
+                          ],
                         ),
               ),
             ),
@@ -330,14 +376,10 @@ class _TicketScreenState extends State<TicketScreen> {
       ),
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 16.0, right: 16.0),
-        child: FloatingActionButton.extended(
+        child: FloatingActionButton(
           onPressed: _showNewTicketModal,
           backgroundColor: const Color(0xFF133343),
-          icon: const Icon(Icons.add, color: Colors.white),
-          label: const Text(
-            'New Ticket',
-            style: TextStyle(color: Colors.white),
-          ),
+          child: const Icon(Icons.add, color: Colors.white),
           tooltip: 'Create new ticket',
           elevation: 10,
         ),
