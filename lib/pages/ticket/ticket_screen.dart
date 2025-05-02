@@ -8,7 +8,6 @@ class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _TicketScreenState createState() => _TicketScreenState();
 }
 
@@ -16,6 +15,7 @@ class _TicketScreenState extends State<TicketScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedFilter = 'All';
   List<Map<String, dynamic>> _tickets = [];
+  bool _isLoading = true;
 
   final List<String> _tableHeaders = [
     'Type',
@@ -28,7 +28,7 @@ class _TicketScreenState extends State<TicketScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTickets(); // Load saved tickets
+    _loadTickets();
   }
 
   @override
@@ -38,44 +38,117 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   Future<void> _loadTickets() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? ticketsJson = prefs.getString('tickets');
-    if (ticketsJson != null) {
-      final List<dynamic> decoded = jsonDecode(ticketsJson);
+    if (!mounted) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? ticketsJson = prefs.getString('tickets');
+      if (ticketsJson != null) {
+        final List<dynamic> decoded = jsonDecode(ticketsJson);
+        if (!mounted) return;
+
+        setState(() {
+          _tickets = List<Map<String, dynamic>>.from(
+            decoded.map((item) => Map<String, dynamic>.from(item)),
+          );
+          _isLoading = false;
+        });
+        print('Loaded ${_tickets.length} tickets successfully');
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _tickets = [];
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading tickets: $e');
+      if (!mounted) return;
       setState(() {
-        _tickets = decoded.cast<Map<String, dynamic>>();
+        _tickets = [];
+        _isLoading = false;
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading tickets: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
-  Future<void> _saveTickets() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(_tickets);
-    await prefs.setString('tickets', encoded);
+  Future<bool> _saveTickets() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String encoded = jsonEncode(_tickets);
+      await prefs.setString('tickets', encoded);
+      return true;
+    } catch (e) {
+      print('Error saving tickets: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving ticket: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return false;
+    }
   }
 
-  void _showNewTicketModal() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => NewTicketModal(
-            onConfirm: (newTicket) async {
-              setState(() {
-                _tickets.add({
-                  'Type': newTicket['type'],
-                  'Contact': newTicket['contact'],
-                  'Subscription': newTicket['subscription'],
-                  'Description': newTicket['description'],
-                  'Attachments': newTicket['attachments'].join(', '),
-                });
-              });
-              await _saveTickets(); // Save after adding
-            },
-            onCancel: () {
-              Navigator.of(context).pop();
-            },
+  Future<void> _showNewTicketModal() async {
+    try {
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierDismissible: false,
+        builder:
+            (BuildContext context) => NewTicketModal(
+              onConfirm: (Map<String, dynamic> newTicket) async {
+                try {
+                  if (!mounted) return;
+
+                  setState(() {
+                    _tickets = [
+                      ..._tickets,
+                      Map<String, dynamic>.from(newTicket),
+                    ];
+                  });
+
+                  final saved = await _saveTickets();
+                  if (saved) {
+                    Navigator.of(context).pop(newTicket);
+                  }
+                } catch (e) {
+                  print('Error adding ticket: $e');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error creating ticket: ${e.toString()}'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              onCancel: () => Navigator.of(context).pop(null),
+            ),
+      );
+
+      if (result != null && mounted) {
+        // Force rebuild of the table with new data
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket created successfully'),
+            backgroundColor: Colors.green,
           ),
-    );
+        );
+      }
+    } catch (e) {
+      print('Error showing modal: $e');
+    }
   }
 
   @override
@@ -85,7 +158,7 @@ class _TicketScreenState extends State<TicketScreen> {
         title: const Text('Tickets'),
         centerTitle: true,
         elevation: 2,
-        backgroundColor: Color(0xFF133343),
+        backgroundColor: const Color(0xFF133343),
         foregroundColor: Colors.white,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
@@ -187,9 +260,10 @@ class _TicketScreenState extends State<TicketScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'All Tickets',
+                    'All Tickets (${_tickets.length})',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -200,19 +274,29 @@ class _TicketScreenState extends State<TicketScreen> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: ReusableTable(
-                      headers: _tableHeaders,
-                      data: _tickets,
-                    ),
-                  ),
-                ),
+                child:
+                    _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child:
+                                _tickets.isEmpty
+                                    ? const Center(
+                                      child: Text(
+                                        'No tickets found. Create a new ticket to get started.',
+                                      ),
+                                    )
+                                    : ReusableTable(
+                                      headers: _tableHeaders,
+                                      data: _tickets,
+                                    ),
+                          ),
+                        ),
               ),
             ),
           ],
@@ -222,7 +306,7 @@ class _TicketScreenState extends State<TicketScreen> {
         padding: const EdgeInsets.only(bottom: 16.0, right: 16.0),
         child: FloatingActionButton.extended(
           onPressed: _showNewTicketModal,
-          backgroundColor: Color(0xFF133343),
+          backgroundColor: const Color(0xFF133343),
           icon: const Icon(Icons.add, color: Colors.white),
           label: const Text(
             'New Ticket',

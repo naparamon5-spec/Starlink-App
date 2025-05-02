@@ -1,7 +1,33 @@
 import 'package:flutter/material.dart';
+import 'edit_profile.dart';
+import '../login_screen.dart';
+import 'security_settings.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String _jobTitle = 'No Job Title';
+  String _companyName = 'Not Set';
+  String _userId = '32';
+
+  void _updateProfileData(Map<String, String> data) {
+    setState(() {
+      _jobTitle =
+          data['jobTitle']?.isNotEmpty == true
+              ? data['jobTitle']!
+              : 'No Job Title';
+      _companyName =
+          data['companyName']?.isNotEmpty == true
+              ? data['companyName']!
+              : 'Not Set';
+      _userId = data['userId']?.isNotEmpty == true ? data['userId']! : '32';
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +98,7 @@ class ProfileScreen extends StatelessWidget {
 
                       const SizedBox(height: 4),
 
-                      // Profile Role/Title
+                      // User ID (replacing job title here)
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -81,13 +107,12 @@ class ProfileScreen extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: Theme.of(
                             context,
-                            // ignore: deprecated_member_use
                           ).primaryColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          'Admin User',
-                          style: TextStyle(
+                          'ID: $_userId',
+                          style: const TextStyle(
                             color: Colors.black,
                             fontWeight: FontWeight.w500,
                           ),
@@ -105,18 +130,18 @@ class ProfileScreen extends StatelessWidget {
 
                       const Divider(height: 24),
 
-                      const _InfoItem(
-                        icon: Icons.phone_outlined,
-                        label: 'Phone',
-                        value: '+1234567890',
+                      _InfoItem(
+                        icon: Icons.business_outlined,
+                        label: 'Company',
+                        value: _companyName,
                       ),
 
                       const Divider(height: 24),
 
-                      const _InfoItem(
-                        icon: Icons.location_on_outlined,
-                        label: 'Location',
-                        value: 'New York, USA',
+                      _InfoItem(
+                        icon: Icons.work_outline,
+                        label: 'Job Title',
+                        value: _jobTitle,
                       ),
                     ],
                   ),
@@ -131,7 +156,17 @@ class ProfileScreen extends StatelessWidget {
                   _ActionButton(
                     icon: Icons.edit,
                     label: 'Edit Profile',
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) => EditProfileScreen(
+                                onProfileUpdated: _updateProfileData,
+                              ),
+                        ),
+                      );
+                    },
                     backgroundColor: Colors.grey[300] ?? Colors.grey,
                     iconColor: Colors.black87,
                     textColor: Colors.black87,
@@ -141,8 +176,15 @@ class ProfileScreen extends StatelessWidget {
 
                   _ActionButton(
                     icon: Icons.security,
-                    label: 'Privacy Settings',
-                    onPressed: () {},
+                    label: 'Security Settings',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SecuritySettingsScreen(),
+                        ),
+                      );
+                    },
                     backgroundColor: Colors.grey[300] ?? Colors.grey,
                     iconColor: Colors.black87,
                     textColor: Colors.black87,
@@ -151,8 +193,8 @@ class ProfileScreen extends StatelessWidget {
                   const SizedBox(height: 12),
 
                   _ActionButton(
-                    icon: Icons.notifications,
-                    label: 'Notification Settings',
+                    icon: Icons.notifications_active,
+                    label: 'Notification',
                     onPressed: () {},
                     backgroundColor: Colors.grey[300] ?? Colors.grey,
                     iconColor: Colors.black87,
@@ -164,7 +206,14 @@ class ProfileScreen extends StatelessWidget {
                   _ActionButton(
                     icon: Icons.logout,
                     label: 'Logout',
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LoginScreen(),
+                        ),
+                      );
+                    },
                     backgroundColor: Colors.grey[300] ?? Colors.grey,
                     iconColor: Colors.black87,
                     textColor: Colors.black87,
