@@ -15,6 +15,7 @@ class _TicketScreenState extends State<TicketScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedFilter = 'All';
   List<Map<String, dynamic>> _tickets = [];
+  List<Map<String, dynamic>> _filteredTickets = [];
   bool _isLoading = true;
 
   final List<String> _tableHeaders = [
@@ -29,12 +30,31 @@ class _TicketScreenState extends State<TicketScreen> {
   void initState() {
     super.initState();
     _loadTickets();
+    _searchController.addListener(_handleSearch);
   }
 
   @override
   void dispose() {
+    _searchController.removeListener(_handleSearch);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _handleSearch() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredTickets = _tickets;
+      } else {
+        _filteredTickets =
+            _tickets.where((ticket) {
+              return _tableHeaders.any((header) {
+                final value = ticket[header]?.toString().toLowerCase() ?? '';
+                return value.contains(query);
+              });
+            }).toList();
+      }
+    });
   }
 
   Future<void> _loadTickets() async {
@@ -52,6 +72,7 @@ class _TicketScreenState extends State<TicketScreen> {
           _tickets = List<Map<String, dynamic>>.from(
             decoded.map((item) => Map<String, dynamic>.from(item)),
           );
+          _filteredTickets = _tickets;
           _isLoading = false;
         });
         print('Loaded ${_tickets.length} tickets successfully');
@@ -59,6 +80,7 @@ class _TicketScreenState extends State<TicketScreen> {
         if (!mounted) return;
         setState(() {
           _tickets = [];
+          _filteredTickets = [];
           _isLoading = false;
         });
       }
@@ -67,6 +89,7 @@ class _TicketScreenState extends State<TicketScreen> {
       if (!mounted) return;
       setState(() {
         _tickets = [];
+        _filteredTickets = [];
         _isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,6 +106,7 @@ class _TicketScreenState extends State<TicketScreen> {
       final prefs = await SharedPreferences.getInstance();
       final String encoded = jsonEncode(_tickets);
       await prefs.setString('tickets', encoded);
+      _handleSearch(); // Refresh filtered results after saving
       return true;
     } catch (e) {
       print('Error saving tickets: $e');
@@ -263,7 +287,7 @@ class _TicketScreenState extends State<TicketScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'All Tickets (${_tickets.length})',
+                    'All Tickets (${_filteredTickets.length})',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -285,15 +309,17 @@ class _TicketScreenState extends State<TicketScreen> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child:
-                                _tickets.isEmpty
-                                    ? const Center(
+                                _filteredTickets.isEmpty
+                                    ? Center(
                                       child: Text(
-                                        'No tickets found. Create a new ticket to get started.',
+                                        _tickets.isEmpty
+                                            ? 'No tickets found. Create a new ticket to get started.'
+                                            : 'No tickets match your search.',
                                       ),
                                     )
                                     : ReusableTable(
                                       headers: _tableHeaders,
-                                      data: _tickets,
+                                      data: _filteredTickets,
                                     ),
                           ),
                         ),
