@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'pages/login_screen.dart'; // Import the LoginScreen
+import 'screens/connection_test_screen.dart'; // Import the ConnectionTestScreen
 
 void main() {
   runApp(const MyApp());
@@ -15,7 +16,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
       ),
-      home: LoginScreen(), // Set LoginScreen as the initial screen
+      home: ConnectionTestScreen(), // Set LoginScreen as the initial screen
     );
   }
 }
