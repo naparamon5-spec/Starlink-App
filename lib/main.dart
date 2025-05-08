@@ -16,7 +16,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
       ),
-      home: ConnectionTestScreen(), // Set LoginScreen as the initial screen
+      home: LoginScreen(), // Set LoginScreen as the initial screen
     );
   }
 }
