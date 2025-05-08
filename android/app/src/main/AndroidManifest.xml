@@ -2,11 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Add internet permission -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Add storage permissions -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
     
     <application
         android:label="starlink_app"
         android:name="${applicationName}"
-        android:icon="@mipmap/logo_high_res">
+        android:icon="@mipmap/logo_high_res"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

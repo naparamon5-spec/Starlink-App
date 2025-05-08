@@ -28,11 +28,19 @@ class _ReusableTableState extends State<ReusableTable> {
   void didUpdateWidget(ReusableTable oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.data != oldWidget.data) {
-      _initSortedData();
+      setState(() {
+        _initSortedData();
+        _currentPage = 0; // Reset to first page when data changes
+      });
     }
   }
 
   void _initSortedData() {
+    if (widget.data.isEmpty) {
+      _sortedData = [];
+      return;
+    }
+
     _sortedData = List.from(widget.data);
     if (_sortColumnIndex != null) {
       _sort(_sortColumnIndex!, _sortAscending);
@@ -40,6 +48,8 @@ class _ReusableTableState extends State<ReusableTable> {
   }
 
   void _sort(int columnIndex, bool ascending) {
+    if (_sortedData.isEmpty) return;
+
     setState(() {
       _sortColumnIndex = columnIndex;
       _sortAscending = ascending;
@@ -54,6 +64,8 @@ class _ReusableTableState extends State<ReusableTable> {
   }
 
   List<Map<String, dynamic>> get _paginatedData {
+    if (_sortedData.isEmpty) return [];
+
     final startIndex = _currentPage * _rowsPerPage;
     final endIndex = (startIndex + _rowsPerPage).clamp(0, _sortedData.length);
     return _sortedData.sublist(startIndex, endIndex);

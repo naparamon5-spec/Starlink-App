@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:starlink_app/services/api_service.dart' show ApiService;
+import 'package:starlink_app/services/api_service.dart';
 
 class NewTicketModal extends StatefulWidget {
   final Function(Map<String, dynamic>) onConfirm;
@@ -15,50 +18,187 @@ class _NewTicketModalState extends State<NewTicketModal> {
   String? _selectedContact;
   String? _selectedSubscription;
   final _descriptionController = TextEditingController();
-  final List<String> _attachedFiles = [];
-  bool _isSubmitting = false;
-  final _formKey = GlobalKey<FormState>();
+  final List<PlatformFile> _attachedFiles = [];
 
-  final List<String> _ticketTypes = [
-    'Technical Support',
-    'Billing Issue',
-    'Feature Request',
-    'Bug Report',
-    'Other',
-  ];
-  final List<String> _contacts = ['John Doe', 'Jane Smith', 'Alex Johnson'];
-  final List<String> _subscriptions = ['Basic', 'Pro', 'Enterprise'];
+  List<String> _ticketTypes = [];
+  List<String> _contacts = [];
+  List<String> _subscriptions = [];
 
-  Future<void> _submitTicket() async {
-    if (!_formKey.currentState!.validate()) return;
+  bool _isLoading = true;
+  String? _errorMessage;
 
-    setState(() => _isSubmitting = true);
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
-      if (_selectedTicketType != null &&
-          _selectedContact != null &&
-          _selectedSubscription != null &&
-          _descriptionController.text.isNotEmpty) {
-        final newTicket = {
-          'Type': _selectedTicketType,
-          'Contact': _selectedContact,
-          'Subscription': _selectedSubscription,
-          'Description': _descriptionController.text,
-          'Attachments':
-              _attachedFiles.isEmpty ? 'None' : _attachedFiles.join(', '),
-        };
-        await widget.onConfirm(newTicket);
+      // Fetch ticket categories
+      final categoriesData = await ApiService.getCategories();
+      setState(() {
+        _ticketTypes = List<String>.from(
+          categoriesData['data'].map((item) => item['name']),
+        );
+      });
+
+      // Fetch agents
+      final agentsData = await ApiService.getAgents();
+      setState(() {
+        _contacts = List<String>.from(
+          agentsData['data'].map((item) => item['name']),
+        );
+      });
+
+      // Fetch subscriptions
+      final subscriptionsData = await ApiService.getSubscriptions();
+      setState(() {
+        _subscriptions = List<String>.from(
+          subscriptionsData['data'].map((item) => item['nickname']),
+        );
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error fetching data: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _pickFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'docx', 'jpg', 'jpeg', 'png'],
+        allowMultiple: true,
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _attachedFiles.addAll(result.files);
+        });
       }
     } catch (e) {
-      setState(() => _isSubmitting = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating ticket: ${e.toString()}'),
+            content: Text('Error picking files: ${e.toString()}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
+    }
+  }
+
+  void _removeFile(int index) {
+    setState(() {
+      _attachedFiles.removeAt(index);
+    });
+  }
+
+  void _submitTicket() {
+    if (_selectedTicketType != null &&
+        _selectedContact != null &&
+        _selectedSubscription != null &&
+        _descriptionController.text.isNotEmpty) {
+      if (_attachedFiles.isEmpty) {
+        // Show confirmation dialog if no files are attached
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('No Files Attached'),
+              content: const Text(
+                'You haven\'t attached any files. Do you want to continue without attachments?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close dialog
+                  },
+                  child: const Text('Go Back'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    Navigator.of(context).pop(); // Close dialog
+                    // Submit ticket without files
+                    final newTicket = {
+                      'type': _selectedTicketType,
+                      'contact': _selectedContact,
+                      'subscription': _selectedSubscription,
+                      'description': _descriptionController.text,
+                      'attachments': [],
+                    };
+                    try {
+                      await widget.onConfirm(newTicket);
+                      if (mounted) {
+                        Navigator.of(context).pop(); // Close modal
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error creating ticket: $e'),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Continue'),
+                ),
+              ],
+            );
+          },
+        );
+      } else {
+        // Submit ticket with files
+        final newTicket = {
+          'type': _selectedTicketType,
+          'contact': _selectedContact,
+          'subscription': _selectedSubscription,
+          'description': _descriptionController.text,
+          'attachments': _attachedFiles.map((file) => file.name).toList(),
+        };
+        try {
+          widget.onConfirm(newTicket).then((_) {
+            if (mounted) {
+              Navigator.of(context).pop(); // Close modal
+            }
+          });
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error creating ticket: $e'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in all required fields'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -70,47 +210,50 @@ class _NewTicketModalState extends State<NewTicketModal> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => !_isSubmitting,
-      child: Dialog(
-        shape: RoundedRectangleBorder(
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        child: Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
-            maxWidth: MediaQuery.of(context).size.width * 0.9,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16.0),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Create New Ticket',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Text(
+                  'Create New Ticket',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
-                  const SizedBox(height: 24),
+                ),
+                const SizedBox(height: 24),
 
+                // Loading or Error State
+                if (_isLoading)
+                  const Center(child: CircularProgressIndicator())
+                else if (_errorMessage != null)
+                  Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                  )
+                else ...[
                   // Ticket Type Dropdown
                   DropdownButtonFormField<String>(
                     decoration: InputDecoration(
@@ -123,20 +266,17 @@ class _NewTicketModalState extends State<NewTicketModal> {
                     ),
                     value: _selectedTicketType,
                     items:
-                        _ticketTypes
-                            .map(
-                              (type) => DropdownMenuItem(
-                                value: type,
-                                child: Text(type),
-                              ),
-                            )
-                            .toList(),
-                    onChanged:
-                        _isSubmitting
-                            ? null
-                            : (value) {
-                              setState(() => _selectedTicketType = value);
-                            },
+                        _ticketTypes.map((type) {
+                          return DropdownMenuItem(
+                            value: type,
+                            child: Text(type),
+                          );
+                        }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedTicketType = value;
+                      });
+                    },
                     validator:
                         (value) =>
                             value == null
@@ -157,20 +297,17 @@ class _NewTicketModalState extends State<NewTicketModal> {
                     ),
                     value: _selectedContact,
                     items:
-                        _contacts
-                            .map(
-                              (contact) => DropdownMenuItem(
-                                value: contact,
-                                child: Text(contact),
-                              ),
-                            )
-                            .toList(),
-                    onChanged:
-                        _isSubmitting
-                            ? null
-                            : (value) {
-                              setState(() => _selectedContact = value);
-                            },
+                        _contacts.map((contact) {
+                          return DropdownMenuItem(
+                            value: contact,
+                            child: Text(contact),
+                          );
+                        }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedContact = value;
+                      });
+                    },
                     validator:
                         (value) =>
                             value == null ? 'Please select a contact' : null,
@@ -189,20 +326,17 @@ class _NewTicketModalState extends State<NewTicketModal> {
                     ),
                     value: _selectedSubscription,
                     items:
-                        _subscriptions
-                            .map(
-                              (subscription) => DropdownMenuItem(
-                                value: subscription,
-                                child: Text(subscription),
-                              ),
-                            )
-                            .toList(),
-                    onChanged:
-                        _isSubmitting
-                            ? null
-                            : (value) {
-                              setState(() => _selectedSubscription = value);
-                            },
+                        _subscriptions.map((subscription) {
+                          return DropdownMenuItem(
+                            value: subscription,
+                            child: Text(subscription),
+                          );
+                        }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedSubscription = value;
+                      });
+                    },
                     validator:
                         (value) =>
                             value == null
@@ -214,7 +348,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
                   // Description
                   TextFormField(
                     controller: _descriptionController,
-                    enabled: !_isSubmitting,
                     decoration: InputDecoration(
                       labelText: 'Description',
                       border: OutlineInputBorder(
@@ -226,7 +359,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                     maxLines: 4,
                     validator:
                         (value) =>
-                            value?.isEmpty ?? true
+                            value!.isEmpty
                                 ? 'Please enter a description'
                                 : null,
                   ),
@@ -242,12 +375,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       TextButton.icon(
-                        onPressed:
-                            _isSubmitting
-                                ? null
-                                : () {
-                                  // TODO: Implement file picker functionality
-                                },
+                        onPressed: _pickFiles,
                         icon: const Icon(Icons.attach_file, size: 20),
                         label: const Text('Add File'),
                         style: TextButton.styleFrom(
@@ -258,9 +386,80 @@ class _NewTicketModalState extends State<NewTicketModal> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Only PDF, DOCX, or JPG files allowed',
+                    'Only PDF, DOCX, JPG, JPEG, or PNG files allowed',
                     style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
+                  const SizedBox(height: 8),
+
+                  // Display attached files
+                  if (_attachedFiles.isNotEmpty) ...[
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _attachedFiles.length,
+                        itemBuilder: (context, index) {
+                          final file = _attachedFiles[index];
+                          return ListTile(
+                            leading: Icon(
+                              _getFileIcon(file.extension),
+                              color: Theme.of(context).primaryColor,
+                            ),
+                            title: Text(
+                              file.name,
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            subtitle: Text(
+                              '${(file.size / 1024).toStringAsFixed(1)} KB',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.close, size: 20),
+                              onPressed: () => _removeFile(index),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange[200]!),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.orange[700],
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No files attached. You can add files or continue without them.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange[900],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   const SizedBox(height: 30),
 
@@ -268,7 +467,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      if (widget.onCancel != null && !_isSubmitting)
+                      if (widget.onCancel != null)
                         TextButton(
                           onPressed: widget.onCancel,
                           child: const Text(
@@ -278,7 +477,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                         ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: _isSubmitting ? null : _submitTicket,
+                        onPressed: _submitTicket,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 24,
@@ -288,31 +487,34 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             borderRadius: BorderRadius.circular(8.0),
                           ),
                         ),
-                        child:
-                            _isSubmitting
-                                ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                                : const Text(
-                                  'Create Ticket',
-                                  style: TextStyle(fontSize: 16),
-                                ),
+                        child: const Text(
+                          'Create Ticket',
+                          style: TextStyle(fontSize: 16),
+                        ),
                       ),
                     ],
                   ),
                 ],
-              ),
+              ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  IconData _getFileIcon(String? extension) {
+    switch (extension?.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'docx':
+        return Icons.description;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      default:
+        return Icons.insert_drive_file;
+    }
   }
 }
