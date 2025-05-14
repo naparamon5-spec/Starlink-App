@@ -66,6 +66,7 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
       if (response.statusCode == 200) {
         if (data['status'] == 'success' || data['success'] == true) {
           String? token;
+<<<<<<< HEAD
           
           // Try to get token from different possible locations in the response
           if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
@@ -80,28 +81,66 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
                    data['reset_token']?.toString() ?? 
                    data['resetToken']?.toString();
           
+=======
+
+          // Try to get token from different possible locations in the response
+          if (data.containsKey('data') &&
+              data['data'] is Map<String, dynamic>) {
+            final dataObj = data['data'] as Map<String, dynamic>;
+            token =
+                dataObj['resetToken']?.toString() ??
+                dataObj['reset_token']?.toString() ??
+                dataObj['token']?.toString();
+          }
+
+          // If not found in data object, try top level
+          token ??=
+              data['token']?.toString() ??
+              data['reset_token']?.toString() ??
+              data['resetToken']?.toString();
+
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
           if (token != null) {
             print('Token found: $token'); // Debug print
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
+<<<<<<< HEAD
                 builder: (context) => ResetPasswordScreen(
                   token: token!,
                   email: widget.email,
                   verificationCode: _codeController.text.trim(),
                 ),
+=======
+                builder:
+                    (context) => ResetPasswordScreen(
+                      token: token!,
+                      email: widget.email,
+                      verificationCode: _codeController.text.trim(),
+                    ),
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
               ),
             );
           } else {
             print('No token found in response: $data'); // Debug print
             setState(() {
+<<<<<<< HEAD
               _errorMessage = 'Unable to proceed with password reset. Please try again.';
+=======
+              _errorMessage =
+                  'Unable to proceed with password reset. Please try again.';
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
             });
           }
         } else {
           final error = data['message'] as String? ?? data['error'] as String?;
           setState(() {
             if (error?.toLowerCase().contains('expired') ?? false) {
+<<<<<<< HEAD
               _errorMessage = 'Verification code has expired. Please request a new one.';
+=======
+              _errorMessage =
+                  'Verification code has expired. Please request a new one.';
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
               _codeController.clear();
               _canResend = true;
               _resendCooldown = 0;
@@ -141,23 +180,52 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
       final response = await http.post(
         Uri.parse('${ApiService.baseUrl}/resend_code.php'),
         headers: {'Content-Type': 'application/json'},
+<<<<<<< HEAD
         body: json.encode({
           'email': widget.email,
         }),
+=======
+        body: json.encode({'email': widget.email}),
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
       );
 
       if (!mounted) return;
 
+<<<<<<< HEAD
       final data = json.decode(response.body) as Map<String, dynamic>;
       print('Resend response: $data'); // Debug print
 
       if (response.statusCode == 200 && (data['status'] == 'success' || data['success'] == true)) {
+=======
+      // Check if response is valid JSON
+      Map<String, dynamic> data;
+      try {
+        data = json.decode(response.body) as Map<String, dynamic>;
+      } catch (e) {
+        print('Error parsing response: $e');
+        print('Response status code: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        
+        setState(() {
+          _errorMessage = 'Server error: Unable to send verification code. Please contact support.';
+        });
+        return;
+      }
+
+      // Rest of the response handling
+      if (response.statusCode == 200 &&
+          (data['status'] == 'success' || data['success'] == true)) {
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
         setState(() {
           _resendAttempts++;
           _canResend = false;
           _codeController.clear();
         });
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
         Future.delayed(const Duration(seconds: 1), () {
           if (mounted) {
             setState(() {
@@ -169,7 +237,14 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+<<<<<<< HEAD
             content: Text((data['message'] as String?) ?? 'Verification code resent successfully'),
+=======
+            content: Text(
+              (data['message'] as String?) ??
+                  'Verification code resent successfully',
+            ),
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -238,11 +313,15 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+<<<<<<< HEAD
                 Icon(
                   Icons.verified_user,
                   size: 64,
                   color: primaryColor,
                 ),
+=======
+                Icon(Icons.verified_user, size: 64, color: primaryColor),
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
                 const SizedBox(height: 20),
                 Text(
                   'Enter Verification Code',
@@ -283,6 +362,7 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+<<<<<<< HEAD
                       borderSide: BorderSide(
                         color: primaryColor,
                         width: 2,
@@ -306,6 +386,20 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
                   ],
+=======
+                      borderSide: BorderSide(color: primaryColor, width: 2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                  ),
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
                   onChanged: (value) {
                     if (value.length == 6) {
                       _verifyCode();
@@ -329,10 +423,14 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(
                       _errorMessage!,
+<<<<<<< HEAD
                       style: const TextStyle(
                         color: Colors.red,
                         fontSize: 12,
                       ),
+=======
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -347,6 +445,7 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
+<<<<<<< HEAD
                     child: _isLoading
                         ? const CircularProgressIndicator(
                             color: Colors.white,
@@ -358,6 +457,20 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
                               color: Colors.white,
                             ),
                           ),
+=======
+                    child:
+                        _isLoading
+                            ? const CircularProgressIndicator(
+                              color: Colors.white,
+                            )
+                            : const Text(
+                              'Verify Code',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -379,4 +492,8 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
       ),
     );
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 7a15d5a8f7bdc99af84c2ef6e4854c7fbbfb59f7

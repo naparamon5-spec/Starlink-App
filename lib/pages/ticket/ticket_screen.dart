@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../components/Table.dart';
 import 'ticket_modal.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart';
 
 class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key});
@@ -18,12 +18,34 @@ class _TicketScreenState extends State<TicketScreen> {
   List<Map<String, dynamic>> _filteredTickets = [];
   bool _isLoading = true;
 
+  // Updated filter options to match backend ticket_type values
+  final List<String> _filterOptions = [
+    'All',
+    'Billing',
+    'Connection Issue', // Matches API ticket_type
+    'Request for Off/On',
+    'Request for Reactivate',
+    'Request for Deactivate',
+    'Device/Kit/Router Issue', // Matches API ticket_type
+  ];
+
+  // Mapping frontend filter options to backend ticket_type for accurate filtering
+  final Map<String, String> _filterToTicketType = {
+    'All': 'All',
+    'Billing': 'Billing',
+    'Connection Issue': 'Connection Issue',
+    'Request for Off/On': 'Request for Off/On',
+    'Request for Reactivate': 'Request for Reactivate',
+    'Request for Deactivate': 'Request for Deactivate',
+    'Device/Kit/Router Issue': 'Device/Kit/Router Issue',
+  };
+
   final List<String> _tableHeaders = [
-    'Type',
-    'Contact',
-    'Subscription',
-    'Description',
-    'Attachments',
+    'type', // Matches 'type' in data
+    'contact', // Matches 'contact' in data
+    'subscription', // Matches 'subscription' in data
+    'description', // Matches 'description' in data
+    'attachments', // Matches 'attachments' in data
   ];
 
   @override
@@ -42,18 +64,35 @@ class _TicketScreenState extends State<TicketScreen> {
 
   void _handleSearch() {
     final query = _searchController.text.toLowerCase();
+    final selectedTicketType = _filterToTicketType[_selectedFilter] ?? 'All';
+
+    print(
+      'Search query: $query, Selected filter: $_selectedFilter, Mapped type: $selectedTicketType',
+    ); // Debug log
+
     setState(() {
-      if (query.isEmpty) {
-        _filteredTickets = _tickets;
-      } else {
-        _filteredTickets =
-            _tickets.where((ticket) {
-              return _tableHeaders.any((header) {
+      _filteredTickets =
+          _tickets.where((ticket) {
+            // Filter by ticket type
+            bool matchesFilter = true;
+            if (selectedTicketType != 'All') {
+              final ticketType = ticket['type']?.toString().toLowerCase() ?? '';
+              matchesFilter = ticketType == selectedTicketType.toLowerCase();
+            }
+
+            // Filter by search query
+            bool matchesQuery = true;
+            if (query.isNotEmpty) {
+              matchesQuery = _tableHeaders.any((header) {
                 final value = ticket[header]?.toString().toLowerCase() ?? '';
                 return value.contains(query);
               });
-            }).toList();
-      }
+            }
+
+            return matchesFilter && matchesQuery;
+          }).toList();
+
+      print('Filtered tickets count: ${_filteredTickets.length}'); // Debug log
     });
   }
 
@@ -62,27 +101,20 @@ class _TicketScreenState extends State<TicketScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? ticketsJson = prefs.getString('tickets');
-      if (ticketsJson != null) {
-        final List<dynamic> decoded = jsonDecode(ticketsJson);
-        if (!mounted) return;
+      final response = await ApiService.getTickets();
 
+      if (response['status'] == 'success' && mounted) {
         setState(() {
-          _tickets = List<Map<String, dynamic>>.from(
-            decoded.map((item) => Map<String, dynamic>.from(item)),
-          );
+          _tickets = List<Map<String, dynamic>>.from(response['data']);
           _filteredTickets = _tickets;
           _isLoading = false;
         });
         print('Loaded ${_tickets.length} tickets successfully');
+        print(
+          'First ticket data: ${_tickets.isNotEmpty ? _tickets.first : 'No tickets'}',
+        );
       } else {
-        if (!mounted) return;
-        setState(() {
-          _tickets = [];
-          _filteredTickets = [];
-          _isLoading = false;
-        });
+        throw Exception(response['message'] ?? 'Failed to load tickets');
       }
     } catch (e) {
       print('Error loading tickets: $e');
@@ -101,27 +133,6 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
-  Future<bool> _saveTickets() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String encoded = jsonEncode(_tickets);
-      await prefs.setString('tickets', encoded);
-      _handleSearch(); // Refresh filtered results after saving
-      return true;
-    } catch (e) {
-      print('Error saving tickets: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving ticket: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return false;
-    }
-  }
-
   Future<void> _showNewTicketModal() async {
     try {
       final result = await showDialog<Map<String, dynamic>>(
@@ -131,18 +142,21 @@ class _TicketScreenState extends State<TicketScreen> {
             (BuildContext context) => NewTicketModal(
               onConfirm: (Map<String, dynamic> newTicket) async {
                 try {
-                  if (!mounted) return;
-
-                  setState(() {
-                    _tickets = [
-                      ..._tickets,
-                      Map<String, dynamic>.from(newTicket),
-                    ];
+                  final response = await ApiService.createTicket({
+                    'type': newTicket['type'],
+                    'contact': newTicket['contact'],
+                    'subscription': newTicket['subscription'],
+                    'description': newTicket['description'],
                   });
 
-                  final saved = await _saveTickets();
-                  if (saved) {
+                  if (response['status'] == 'success') {
+                    if (!mounted) return;
+                    await _loadTickets(); // Reload tickets after successful creation
                     Navigator.of(context).pop(newTicket);
+                  } else {
+                    throw Exception(
+                      response['message'] ?? 'Failed to create ticket',
+                    );
                   }
                 } catch (e) {
                   print('Error adding ticket: $e');
@@ -161,9 +175,10 @@ class _TicketScreenState extends State<TicketScreen> {
       );
 
       if (result != null && mounted) {
-        setState(() {}); // Keep the setState to refresh the UI
+        // Show success dialog
         showDialog(
           context: context,
+          barrierDismissible: true,
           builder: (BuildContext context) {
             return Dialog(
               shape: RoundedRectangleBorder(
@@ -214,6 +229,14 @@ class _TicketScreenState extends State<TicketScreen> {
       }
     } catch (e) {
       print('Error showing modal: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error showing modal: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -241,7 +264,6 @@ class _TicketScreenState extends State<TicketScreen> {
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    // ignore: deprecated_member_use
                     color: Colors.black.withOpacity(0.05),
                     offset: const Offset(0, 2),
                     blurRadius: 4,
@@ -302,15 +324,13 @@ class _TicketScreenState extends State<TicketScreen> {
                           onChanged: (String? newValue) {
                             setState(() {
                               _selectedFilter = newValue!;
+                              _handleSearch(); // Trigger filter update
                             });
                           },
                           items:
-                              <String>[
-                                'All',
-                                'Open',
-                                'Closed',
-                                'Pending',
-                              ].map<DropdownMenuItem<String>>((String value) {
+                              _filterOptions.map<DropdownMenuItem<String>>((
+                                String value,
+                              ) {
                                 return DropdownMenuItem<String>(
                                   value: value,
                                   child: Text(value),
