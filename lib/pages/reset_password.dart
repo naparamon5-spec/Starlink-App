@@ -6,8 +6,15 @@ import 'login_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final String token;
+  final String email;
+  final String verificationCode;
 
-  const ResetPasswordScreen({super.key, required this.token});
+  const ResetPasswordScreen({
+    super.key,
+    required this.token,
+    required this.email,
+    required this.verificationCode,
+  });
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -40,42 +47,79 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     });
 
     try {
+      // Print request data for debugging
+      final requestBody = {
+        'email': widget.email,
+        'verification_code': widget.verificationCode,
+        'new_password': _passwordController.text,
+        'confirm_password': _confirmPasswordController.text,
+      };
+      print('Request body: $requestBody'); // Debug print
+
       final response = await http.post(
         Uri.parse('${ApiService.baseUrl}/reset_password.php'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'token': widget.token,
-          'password': _passwordController.text,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode(requestBody),
       );
 
-      final data = json.decode(response.body);
+      print('Response status code: ${response.statusCode}'); // Debug print
+      print('Response body: ${response.body}'); // Debug print
 
       if (!mounted) return;
 
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(data['message'] ?? 'Password reset successful'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-        // Navigate to login screen and clear the stack
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-          (route) => false,
-        );
-      } else {
+      try {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        print('Parsed response data: $data'); // Debug print
+
+        if (response.statusCode == 200) {
+          if (data['status'] == 'success' || data['success'] == true) {
+            // Show success message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(data['message'] ?? 'Password reset successful'),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+
+            // Clear the form
+            _passwordController.clear();
+            _confirmPasswordController.clear();
+
+            // Navigate to login screen and clear the stack
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+              (route) => false,
+            );
+          } else {
+            final error =
+                data['message'] as String? ?? data['error'] as String?;
+            print('Error from server: $error'); // Debug print
+            setState(() {
+              _errorMessage = error ?? 'Failed to reset password';
+            });
+          }
+        } else {
+          print('Server error: ${response.statusCode}'); // Debug print
+          setState(() {
+            _errorMessage = 'Server error. Please try again later.';
+          });
+        }
+      } catch (e) {
+        print('Error parsing response: $e'); // Debug print
         setState(() {
-          _errorMessage = data['error'] ?? 'Failed to reset password';
+          _errorMessage = 'Invalid server response. Please try again.';
         });
       }
     } catch (e) {
+      print('Error during password reset: $e'); // Debug print
       setState(() {
         _errorMessage = 'An error occurred. Please try again.';
       });
