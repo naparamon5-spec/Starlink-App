@@ -154,6 +154,7 @@ class ApiService {
       final formattedData = {
         'type': ticketData['type'],
         'contact': ticketData['contact'],
+        'contact_name': ticketData['contact_name'],
         'subscription': ticketData['subscription'],
         'description': ticketData['description'],
         'user_id':

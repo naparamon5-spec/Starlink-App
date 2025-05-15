@@ -117,6 +117,15 @@ class _TicketScreenState extends State<TicketScreen> {
       final response = await ApiService.getTickets();
 
       if (response['status'] == 'success' && mounted) {
+        // First, get the list of agents to map IDs to names
+        final agentsResponse = await ApiService.getAgents();
+        final agentMap = Map.fromEntries(
+          (agentsResponse['data'] as List).map(
+            (agent) =>
+                MapEntry(agent['id'].toString(), agent['name'] as String),
+          ),
+        );
+
         setState(() {
           _tickets = List<Map<String, dynamic>>.from(
             response['data'].map((ticket) {
@@ -132,9 +141,13 @@ class _TicketScreenState extends State<TicketScreen> {
                 print('Error parsing date: $e');
               }
 
+              // Get agent name from the map using the contact ID
+              final contactId = ticket['contact']?.toString() ?? '';
+              final contactName = agentMap[contactId] ?? 'Not Assigned';
+
               return {
                 'Ticket Type': ticket['type'] ?? 'Uncategorized',
-                'Contact': ticket['contact'] ?? 'Not Assigned',
+                'Contact': contactName,
                 'Subscription': ticket['subscription'] ?? 'N/A',
                 'Description': ticket['description'] ?? 'No description',
                 'Attachments': ticket['attachments'] != null ? 'Yes' : 'None',

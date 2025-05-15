@@ -121,7 +121,8 @@ class _NewTicketModalState extends State<NewTicketModal> {
         _descriptionController.text.isNotEmpty) {
       final newTicket = {
         'type': _selectedTicketType,
-        'contact': _contacts[_selectedContact], // Use agent ID instead of name
+        'contact': _contacts[_selectedContact], // Agent ID for database
+        'contact_name': _selectedContact, // Agent name for display
         'subscription': _selectedSubscription,
         'description': _descriptionController.text,
         'user_id': widget.userId,
