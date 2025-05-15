@@ -160,9 +160,10 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
         print('Error parsing response: $e');
         print('Response status code: ${response.statusCode}');
         print('Response body: ${response.body}');
-        
+
         setState(() {
-          _errorMessage = 'Server error: Unable to send verification code. Please contact support.';
+          _errorMessage =
+              'Server error: Unable to send verification code. Please contact support.';
         });
         return;
       }

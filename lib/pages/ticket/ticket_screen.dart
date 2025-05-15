@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../components/Table.dart';
 import 'ticket_modal.dart';
-import '../services/api_service.dart';
+import '../../services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key});
@@ -17,6 +18,7 @@ class _TicketScreenState extends State<TicketScreen> {
   List<Map<String, dynamic>> _tickets = [];
   List<Map<String, dynamic>> _filteredTickets = [];
   bool _isLoading = true;
+  String? _userId;
 
   // Updated filter options to match backend ticket_type values
   final List<String> _filterOptions = [
@@ -41,16 +43,19 @@ class _TicketScreenState extends State<TicketScreen> {
   };
 
   final List<String> _tableHeaders = [
-    'type', // Matches 'type' in data
-    'contact', // Matches 'contact' in data
-    'subscription', // Matches 'subscription' in data
-    'description', // Matches 'description' in data
-    'attachments', // Matches 'attachments' in data
+    'Ticket Type',
+    'Contact',
+    'Subscription',
+    'Description',
+    'Attachments',
+    'Status',
+    'Created At',
   ];
 
   @override
   void initState() {
     super.initState();
+    _loadUserData();
     _loadTickets();
     _searchController.addListener(_handleSearch);
   }
@@ -62,13 +67,20 @@ class _TicketScreenState extends State<TicketScreen> {
     super.dispose();
   }
 
+  Future<void> _loadUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _userId = prefs.getString('userId');
+    });
+  }
+
   void _handleSearch() {
     final query = _searchController.text.toLowerCase();
     final selectedTicketType = _filterToTicketType[_selectedFilter] ?? 'All';
 
     print(
       'Search query: $query, Selected filter: $_selectedFilter, Mapped type: $selectedTicketType',
-    ); // Debug log
+    );
 
     setState(() {
       _filteredTickets =
@@ -76,7 +88,8 @@ class _TicketScreenState extends State<TicketScreen> {
             // Filter by ticket type
             bool matchesFilter = true;
             if (selectedTicketType != 'All') {
-              final ticketType = ticket['type']?.toString().toLowerCase() ?? '';
+              final ticketType =
+                  ticket['Ticket Type']?.toString().toLowerCase() ?? '';
               matchesFilter = ticketType == selectedTicketType.toLowerCase();
             }
 
@@ -92,7 +105,7 @@ class _TicketScreenState extends State<TicketScreen> {
             return matchesFilter && matchesQuery;
           }).toList();
 
-      print('Filtered tickets count: ${_filteredTickets.length}'); // Debug log
+      print('Filtered tickets count: ${_filteredTickets.length}');
     });
   }
 
@@ -105,14 +118,35 @@ class _TicketScreenState extends State<TicketScreen> {
 
       if (response['status'] == 'success' && mounted) {
         setState(() {
-          _tickets = List<Map<String, dynamic>>.from(response['data']);
+          _tickets = List<Map<String, dynamic>>.from(
+            response['data'].map((ticket) {
+              // Convert timestamps to readable format if needed
+              String createdAt = ticket['created_at'] ?? 'N/A';
+              try {
+                if (createdAt != 'N/A') {
+                  final date = DateTime.parse(createdAt);
+                  createdAt =
+                      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+                }
+              } catch (e) {
+                print('Error parsing date: $e');
+              }
+
+              return {
+                'Ticket Type': ticket['type'] ?? 'Uncategorized',
+                'Contact': ticket['contact'] ?? 'Not Assigned',
+                'Subscription': ticket['subscription'] ?? 'N/A',
+                'Description': ticket['description'] ?? 'No description',
+                'Attachments': ticket['attachments'] != null ? 'Yes' : 'None',
+                'Status': (ticket['status'] ?? 'open').toUpperCase(),
+                'Created At': createdAt,
+              };
+            }),
+          );
           _filteredTickets = _tickets;
           _isLoading = false;
         });
         print('Loaded ${_tickets.length} tickets successfully');
-        print(
-          'First ticket data: ${_tickets.isNotEmpty ? _tickets.first : 'No tickets'}',
-        );
       } else {
         throw Exception(response['message'] ?? 'Failed to load tickets');
       }
@@ -133,111 +167,88 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
-  Future<void> _showNewTicketModal() async {
+  void _showNewTicketModal() {
+    if (_userId == null || _userId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: User not logged in'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Parse user ID with validation
+    int? parsedUserId;
     try {
-      final result = await showDialog<Map<String, dynamic>>(
-        context: context,
-        barrierDismissible: false,
-        builder:
-            (BuildContext context) => NewTicketModal(
-              onConfirm: (Map<String, dynamic> newTicket) async {
+      parsedUserId = int.parse(_userId!);
+    } catch (e) {
+      print('Error parsing user ID: $_userId');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: Invalid user ID'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (BuildContext dialogContext) => WillPopScope(
+            onWillPop: () async => false,
+            child: NewTicketModal(
+              userId: parsedUserId!,
+              onConfirm: (newTicket) async {
                 try {
-                  final response = await ApiService.createTicket({
-                    'type': newTicket['type'],
-                    'contact': newTicket['contact'],
-                    'subscription': newTicket['subscription'],
-                    'description': newTicket['description'],
-                  });
+                  print('Submitting ticket data: $newTicket');
+                  final response = await ApiService.createTicket(newTicket);
+
+                  if (!mounted) return;
 
                   if (response['status'] == 'success') {
-                    if (!mounted) return;
-                    await _loadTickets(); // Reload tickets after successful creation
-                    Navigator.of(context).pop(newTicket);
+                    // First refresh the tickets list
+                    await _loadTickets();
+
+                    // Then close the modal
+                    if (mounted) {
+                      Navigator.of(dialogContext).pop();
+
+                      // Show success message after modal is closed
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Ticket created successfully'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
+                    }
                   } else {
                     throw Exception(
                       response['message'] ?? 'Failed to create ticket',
                     );
                   }
                 } catch (e) {
-                  print('Error adding ticket: $e');
+                  print('Error creating ticket: $e');
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Error creating ticket: ${e.toString()}'),
+                        content: Text('Error creating ticket: $e'),
                         backgroundColor: Colors.red,
+                        duration: const Duration(seconds: 3),
                       ),
                     );
                   }
                 }
               },
-              onCancel: () => Navigator.of(context).pop(null),
+              onCancel: () {
+                Navigator.of(dialogContext).pop();
+              },
             ),
-      );
-
-      if (result != null && mounted) {
-        // Show success dialog
-        showDialog(
-          context: context,
-          barrierDismissible: true,
-          builder: (BuildContext context) {
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: Color(0xFF133343),
-                      size: 48,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Success!',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Ticket created successfully',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text(
-                        'OK',
-                        style: TextStyle(
-                          color: Color(0xFF133343),
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      }
-    } catch (e) {
-      print('Error showing modal: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error showing modal: ${e.toString()}'),
-            backgroundColor: Colors.red,
           ),
-        );
-      }
-    }
+    );
   }
 
   @override

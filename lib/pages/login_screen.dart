@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'home/home_screen.dart';
 import 'forgot_password.dart';
 import '../services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -49,10 +50,26 @@ class _LoginScreenState extends State<LoginScreen> {
           _passwordController.text,
         );
 
-        if (!mounted) return;
-
         if (response['status'] == 'success') {
-          // Navigate to home screen first
+          // Store user data in SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+
+          // Get user ID from the nested user object
+          final user = response['user'] as Map<String, dynamic>?;
+          final userId = user?['id'];
+          if (userId == null) {
+            setState(() {
+              _errorMessage = 'Invalid response: Missing user ID';
+            });
+            return;
+          }
+
+          // Store the user ID as a string
+          await prefs.setString('userId', userId.toString());
+          await prefs.setString('email', _emailController.text);
+
+          // Navigate to home screen
+          if (!mounted) return;
           await Navigator.pushReplacement(
             context,
             MaterialPageRoute(

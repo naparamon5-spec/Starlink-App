@@ -50,12 +50,12 @@ class ApiService {
         'message': 'Connection error: $e',
         'baseUrl': baseUrl,
         'troubleshooting': '''
-Please check:
-1. XAMPP is running (Apache and MySQL services)
-2. Database 'ardent_ticket' exists
-3. Table 'test_connection' exists in the database
-4. Your device/emulator can reach the server
-''',
+  Please check:
+  1. XAMPP is running (Apache and MySQL services)
+  2. Database 'ardent_ticket' exists
+  3. Table 'test_connection' exists in the database
+  4. Your device/emulator can reach the server
+  ''',
       };
     }
   }
@@ -107,174 +107,185 @@ Please check:
     try {
       print('Fetching tickets from: $baseUrl/api.php?action=get_tickets');
 
-      final response = await http
-          .get(Uri.parse('$baseUrl/api.php?action=get_tickets'))
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              return http.Response(
-                json.encode({
-                  'status': 'error',
-                  'message':
-                      'Connection timed out. Please check if XAMPP is running.',
-                }),
-                408,
-              );
-            },
-          );
+      final response = await http.get(
+        Uri.parse('$baseUrl/api.php?action=get_tickets'),
+        headers: {'Accept': 'application/json'},
+      );
 
-      print('Response status code: ${response.statusCode}');
+      print('Response status: ${response.statusCode}');
       print('Response body: ${response.body}');
 
-      final data = json.decode(response.body);
-      return data;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch tickets');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
     } catch (e) {
-      return {
-        'status': 'error',
-        'message': 'Error connecting to server: $e',
-        'baseUrl': baseUrl,
-        'troubleshooting': '''
-Please check:
-1. XAMPP is running (Apache and MySQL services)
-2. Your device/emulator can reach the server
-3. The correct IP address is being used:
-   - Android Emulator: 10.0.2.2
-   - iOS Simulator: localhost
-   - Physical Device: Your computer's IP address
-4. The backend files are in the correct location: /starlink_app/backend/
-''',
-      };
+      print('Error fetching tickets: $e');
+      throw Exception('Error fetching tickets: $e');
     }
   }
 
   // Create a new ticket
-  static Future<Map<String, dynamic>> createTicket({
-    required String type,
-    required String contact,
-    required String subscription,
-    required String description,
-  }) async {
+  static Future<Map<String, dynamic>> createTicket(
+    Map<String, dynamic> ticketData,
+  ) async {
     try {
-      print('Creating ticket at: $baseUrl/api.php?action=create_ticket');
+      // Validate required fields
+      final requiredFields = [
+        'type',
+        'contact',
+        'subscription',
+        'description',
+        'user_id',
+      ];
+      for (final field in requiredFields) {
+        if (ticketData[field] == null || ticketData[field].toString().isEmpty) {
+          throw Exception('Missing required field: $field');
+        }
+      }
+
+      // Format the data for the API
+      final formattedData = {
+        'type': ticketData['type'],
+        'contact': ticketData['contact'],
+        'subscription': ticketData['subscription'],
+        'description': ticketData['description'],
+        'user_id':
+            ticketData['user_id']
+                .toString(), // Ensure user_id is sent as string
+        'assigned_agent': ticketData['contact'], // Add the assigned agent
+        'status': 'open',
+        'attachments': ticketData['attachments'],
+      };
+
+      print('Creating ticket with data: $formattedData');
 
       final response = await http
           .post(
             Uri.parse('$baseUrl/api.php?action=create_ticket'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({
-              'type': type,
-              'contact': contact,
-              'subscription': subscription,
-              'description': description,
-            }),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: json.encode(formattedData),
           )
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () {
-              return http.Response(
-                json.encode({
-                  'status': 'error',
-                  'message':
-                      'Connection timed out. Please check if XAMPP is running.',
-                }),
-                408,
-              );
+              throw TimeoutException('Request timed out. Please try again.');
             },
           );
 
-      print('Response status code: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      print('Server response: ${response.body}');
 
-      final data = json.decode(response.body);
-      return data;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to create ticket');
+        }
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(
+          errorData['message'] ?? 'Server error: ${response.statusCode}',
+        );
+      }
     } catch (e) {
-      return {
-        'status': 'error',
-        'message': 'Error creating ticket: $e',
-        'baseUrl': baseUrl,
-      };
+      print('Error creating ticket: $e');
+      if (e is TimeoutException) {
+        throw Exception(
+          'Connection timed out. Please check your internet connection and try again.',
+        );
+      }
+      throw Exception('Failed to create ticket: $e');
     }
   }
 
   // Get ticket categories
   static Future<Map<String, dynamic>> getCategories() async {
     try {
-      print('Fetching categories from: $baseUrl/api.php?action=get_categories');
+      final response = await http.get(
+        Uri.parse('$baseUrl/api.php?action=get_categories'),
+        headers: {'Accept': 'application/json'},
+      );
 
-      final response = await http
-          .get(Uri.parse('$baseUrl/api.php?action=get_categories'))
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              return http.Response(
-                json.encode({
-                  'status': 'error',
-                  'message':
-                      'Connection timed out. Please check if XAMPP is running.',
-                }),
-                408,
-              );
-            },
-          );
-
-      print('Response status code: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
-      final data = json.decode(response.body);
-      return data;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch categories');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
     } catch (e) {
-      return {
-        'status': 'error',
-        'message': 'Error fetching categories: $e',
-        'baseUrl': baseUrl,
-      };
+      throw Exception('Error fetching categories: $e');
     }
   }
 
   // Get agents
   static Future<Map<String, dynamic>> getAgents() async {
     try {
-      print('Fetching agents from: $baseUrl/api.php?action=get_agents');
+      final response = await http.get(
+        Uri.parse('$baseUrl/api.php?action=get_agents'),
+        headers: {'Accept': 'application/json'},
+      );
 
-      final response = await http
-          .get(Uri.parse('$baseUrl/api.php?action=get_agents'))
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              return http.Response(
-                json.encode({
-                  'status': 'error',
-                  'message':
-                      'Connection timed out. Please check if XAMPP is running.',
-                }),
-                408,
-              );
-            },
-          );
-
-      print('Response status code: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
-      final data = json.decode(response.body);
-      return data;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch agents');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
     } catch (e) {
-      return {
-        'status': 'error',
-        'message': 'Error fetching agents: $e',
-        'baseUrl': baseUrl,
-      };
+      throw Exception('Error fetching agents: $e');
     }
   }
 
   // Get subscriptions
   static Future<Map<String, dynamic>> getSubscriptions() async {
     try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api.php?action=get_subscriptions'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch subscriptions');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching subscriptions: $e');
+    }
+  }
+
+  // Get current user info - Example method to get the logged-in user's ID
+  static Future<Map<String, dynamic>> getCurrentUser() async {
+    try {
       print(
-        'Fetching subscriptions from: $baseUrl/api.php?action=get_subscriptions',
+        'Fetching current user from: $baseUrl/api.php?action=get_current_user',
       );
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api.php?action=get_subscriptions'))
+          .get(Uri.parse('$baseUrl/api.php?action=get_current_user'))
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () {
@@ -297,7 +308,7 @@ Please check:
     } catch (e) {
       return {
         'status': 'error',
-        'message': 'Error fetching subscriptions: $e',
+        'message': 'Error fetching current user: $e',
         'baseUrl': baseUrl,
       };
     }
