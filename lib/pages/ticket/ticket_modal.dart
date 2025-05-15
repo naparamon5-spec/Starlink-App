@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:starlink_app/services/api_service.dart' show ApiService;
-import 'package:starlink_app/services/api_service.dart';
+import '../../services/api_service.dart';
 
 class NewTicketModal extends StatefulWidget {
   final Function(Map<String, dynamic>) onConfirm;
   final VoidCallback? onCancel;
+  final int userId;
 
-  const NewTicketModal({super.key, required this.onConfirm, this.onCancel});
+  const NewTicketModal({
+    super.key,
+    required this.onConfirm,
+    this.onCancel,
+    required this.userId,
+  });
 
   @override
   _NewTicketModalState createState() => _NewTicketModalState();
@@ -21,7 +26,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
   final List<PlatformFile> _attachedFiles = [];
 
   List<String> _ticketTypes = [];
-  List<String> _contacts = [];
+  Map<String, dynamic> _contacts = {};
   List<String> _subscriptions = [];
 
   bool _isLoading = true;
@@ -51,8 +56,10 @@ class _NewTicketModalState extends State<NewTicketModal> {
       // Fetch agents
       final agentsData = await ApiService.getAgents();
       setState(() {
-        _contacts = List<String>.from(
-          agentsData['data'].map((item) => item['name']),
+        _contacts = Map.fromEntries(
+          (agentsData['data'] as List).map(
+            (agent) => MapEntry(agent['name'] as String, agent['id'] as int),
+          ),
         );
       });
 
@@ -107,14 +114,25 @@ class _NewTicketModalState extends State<NewTicketModal> {
     });
   }
 
-  void _submitTicket() {
+  void _submitTicket() async {
     if (_selectedTicketType != null &&
         _selectedContact != null &&
         _selectedSubscription != null &&
         _descriptionController.text.isNotEmpty) {
+      final newTicket = {
+        'type': _selectedTicketType,
+        'contact': _contacts[_selectedContact], // Use agent ID instead of name
+        'subscription': _selectedSubscription,
+        'description': _descriptionController.text,
+        'user_id': widget.userId,
+        'status': 'open',
+        'attachments': null,
+      };
+
       if (_attachedFiles.isEmpty) {
         // Show confirmation dialog if no files are attached
-        showDialog(
+        if (!mounted) return;
+        final shouldContinue = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
           builder: (BuildContext context) {
@@ -126,37 +144,13 @@ class _NewTicketModalState extends State<NewTicketModal> {
               actions: [
                 TextButton(
                   onPressed: () {
-                    Navigator.of(context).pop(); // Close dialog
+                    Navigator.of(context).pop(false); // Don't continue
                   },
                   child: const Text('Go Back'),
                 ),
                 TextButton(
-                  onPressed: () async {
-                    Navigator.of(context).pop(); // Close dialog
-                    // Submit ticket without files
-                    final newTicket = {
-                      'type': _selectedTicketType,
-                      'contact': _selectedContact,
-                      'subscription': _selectedSubscription,
-                      'description': _descriptionController.text,
-                      'attachments': [],
-                    };
-                    try {
-                      await widget.onConfirm(newTicket);
-                      if (mounted) {
-                        Navigator.of(context).pop(); // Close modal
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Error creating ticket: $e'),
-                            backgroundColor: Colors.red,
-                            duration: const Duration(seconds: 3),
-                          ),
-                        );
-                      }
-                    }
+                  onPressed: () {
+                    Navigator.of(context).pop(true); // Continue
                   },
                   child: const Text('Continue'),
                 ),
@@ -164,32 +158,23 @@ class _NewTicketModalState extends State<NewTicketModal> {
             );
           },
         );
-      } else {
-        // Submit ticket with files
-        final newTicket = {
-          'type': _selectedTicketType,
-          'contact': _selectedContact,
-          'subscription': _selectedSubscription,
-          'description': _descriptionController.text,
-          'attachments': _attachedFiles.map((file) => file.name).toList(),
-        };
-        try {
-          widget.onConfirm(newTicket).then((_) {
-            if (mounted) {
-              Navigator.of(context).pop(); // Close modal
-            }
-          });
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error creating ticket: $e'),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
-        }
+
+        if (shouldContinue != true) return;
+      }
+
+      // Submit the ticket
+      print('Submitting ticket data: $newTicket'); // Debug log
+      try {
+        await widget.onConfirm(newTicket);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error creating ticket: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -297,7 +282,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                     ),
                     value: _selectedContact,
                     items:
-                        _contacts.map((contact) {
+                        _contacts.keys.map((contact) {
                           return DropdownMenuItem(
                             value: contact,
                             child: Text(contact),
