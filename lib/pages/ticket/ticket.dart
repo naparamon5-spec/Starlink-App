@@ -815,27 +815,27 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
               ),
               const SizedBox(height: 24),
               // Attachments Section
-              if (_ticket['attachments'] != null &&
-                  _ticket['attachments'] != 'No attachments')
-                Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Attachments',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF133343),
-                          ),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Attachments',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF133343),
                         ),
-                        const SizedBox(height: 16),
+                      ),
+                      const SizedBox(height: 24),
+                      if (_ticket['attachments'] != null &&
+                          _ticket['attachments'].toString().isNotEmpty) ...[
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
@@ -844,16 +844,59 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: Colors.grey[300]!),
                           ),
-                          child: Text(
-                            _ticket['attachments']?.toString() ??
-                                'No attachments',
-                            style: const TextStyle(fontSize: 14),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.attach_file,
+                                color: Theme.of(context).primaryColor,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _ticket['attachments'].toString(),
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.download,
+                                  color: Color(0xFF133343),
+                                ),
+                                onPressed: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Download functionality coming soon',
+                                      ),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                },
+                                tooltip: 'Download file',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: const Text(
+                            'No attachments',
+                            style: TextStyle(fontSize: 14),
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
+              ),
             ],
           ),
         ),
