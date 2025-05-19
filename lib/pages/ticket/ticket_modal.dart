@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/api_service.dart';
+import 'dart:convert';
 
 class NewTicketModal extends StatefulWidget {
   final Function(Map<String, dynamic>) onConfirm;
@@ -88,12 +89,28 @@ class _NewTicketModalState extends State<NewTicketModal> {
         allowedExtensions: ['pdf', 'docx', 'jpg', 'jpeg', 'png'],
         allowMultiple: true,
         withData: true,
+        onFileLoading: (FilePickerStatus status) => print(status),
       );
 
       if (result != null && result.files.isNotEmpty) {
         setState(() {
-          _attachedFiles.addAll(result.files);
+          for (var file in result.files) {
+            if (!_attachedFiles.any((f) => f.name == file.name)) {
+              _attachedFiles.add(file);
+            }
+          }
         });
+
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Added ${result.files.length} file(s)'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -119,59 +136,72 @@ class _NewTicketModalState extends State<NewTicketModal> {
         _selectedContact != null &&
         _selectedSubscription != null &&
         _descriptionController.text.isNotEmpty) {
-      final newTicket = {
-        'type': _selectedTicketType,
-        'contact': _contacts[_selectedContact], // Agent ID for database
-        'contact_name': _selectedContact, // Agent name for display
-        'subscription': _selectedSubscription,
-        'description': _descriptionController.text,
-        'user_id': widget.userId,
-        'status': 'open',
-        'attachments': null,
-      };
-
-      if (_attachedFiles.isEmpty) {
-        // Show confirmation dialog if no files are attached
-        if (!mounted) return;
-        final shouldContinue = await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Text('No Files Attached'),
-              content: const Text(
-                'You haven\'t attached any files. Do you want to continue without attachments?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(false); // Don't continue
-                  },
-                  child: const Text('Go Back'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(true); // Continue
-                  },
-                  child: const Text('Continue'),
-                ),
-              ],
-            );
-          },
-        );
-
-        if (shouldContinue != true) return;
-      }
-
-      // Submit the ticket
-      print('Submitting ticket data: $newTicket'); // Debug log
       try {
-        await widget.onConfirm(newTicket);
-      } catch (e) {
+        // Process attachments
+        List<Map<String, dynamic>> attachmentsData = [];
+        if (_attachedFiles.isNotEmpty) {
+          for (var file in _attachedFiles) {
+            if (file.bytes != null) {
+              attachmentsData.add({
+                'name': file.name,
+                'data': base64Encode(file.bytes!),
+                'type': file.extension ?? '',
+              });
+            }
+          }
+        }
+
+        final newTicket = {
+          'type': _selectedTicketType,
+          'contact': _contacts[_selectedContact], // Agent ID for database
+          'contact_name': _selectedContact, // Agent name for display
+          'subscription': _selectedSubscription,
+          'description': _descriptionController.text,
+          'user_id': widget.userId,
+          'status': 'open',
+          'attachments': attachmentsData,
+        };
+
+        // Show loading indicator
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+                SizedBox(width: 16),
+                Text('Creating ticket...'),
+              ],
+            ),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 30),
+          ),
+        );
+
+        // Submit the ticket
+        await widget.onConfirm(newTicket);
+
+        // Clear the loading snackbar
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).clearSnackBars();
+
+        // Show success message
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket created successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating ticket: $e'),
+            content: Text('Error creating ticket: ${e.toString()}'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -380,44 +410,75 @@ class _NewTicketModalState extends State<NewTicketModal> {
                   // Display attached files
                   if (_attachedFiles.isNotEmpty) ...[
                     Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.grey[50],
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.grey[300]!),
                       ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _attachedFiles.length,
-                        itemBuilder: (context, index) {
-                          final file = _attachedFiles[index];
-                          return ListTile(
-                            leading: Icon(
-                              _getFileIcon(file.extension),
-                              color: Theme.of(context).primaryColor,
-                            ),
-                            title: Text(
-                              file.name,
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                            subtitle: Text(
-                              '${(file.size / 1024).toStringAsFixed(1)} KB',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.close, size: 20),
-                              onPressed: () => _removeFile(index),
-                            ),
-                          );
-                        },
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children:
+                              _attachedFiles.map((file) {
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.grey[300]!,
+                                        width: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                  child: ListTile(
+                                    dense: true,
+                                    leading: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(
+                                          context,
+                                        ).primaryColor.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Icon(
+                                        _getFileIcon(file.extension),
+                                        color: Theme.of(context).primaryColor,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      file.name,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      '${(file.size / 1024).toStringAsFixed(1)} KB',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.close, size: 20),
+                                      onPressed:
+                                          () => _removeFile(
+                                            _attachedFiles.indexOf(file),
+                                          ),
+                                      tooltip: 'Remove file',
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
                   ] else ...[
                     Container(
+                      margin: const EdgeInsets.only(top: 8),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.orange[50],
@@ -444,7 +505,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
                   ],
 
                   const SizedBox(height: 30),

@@ -4,6 +4,7 @@ import '../../components/Table.dart';
 import 'ticket_modal.dart';
 import '../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import './ticket.dart';
 
 class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key});
@@ -20,15 +21,19 @@ class _TicketScreenState extends State<TicketScreen> {
   bool _isLoading = true;
   String? _userId;
 
+  // Pagination variables
+  int _itemsPerPage = 6;
+  int _currentPage = 1;
+
   // Updated filter options to match backend ticket_type values
   final List<String> _filterOptions = [
     'All',
     'Billing',
-    'Connection Issue', // Matches API ticket_type
+    'Connection Issue',
     'Request for Off/On',
     'Request for Reactivate',
     'Request for Deactivate',
-    'Device/Kit/Router Issue', // Matches API ticket_type
+    'Device/Kit/Router Issue',
   ];
 
   // Mapping frontend filter options to backend ticket_type for accurate filtering
@@ -76,11 +81,7 @@ class _TicketScreenState extends State<TicketScreen> {
 
   void _handleSearch() {
     final query = _searchController.text.toLowerCase();
-    final selectedTicketType = _filterToTicketType[_selectedFilter] ?? 'All';
-
-    print(
-      'Search query: $query, Selected filter: $_selectedFilter, Mapped type: $selectedTicketType',
-    );
+    final selectedTicketType = _selectedFilter;
 
     setState(() {
       _filteredTickets =
@@ -88,25 +89,80 @@ class _TicketScreenState extends State<TicketScreen> {
             // Filter by ticket type
             bool matchesFilter = true;
             if (selectedTicketType != 'All') {
-              final ticketType =
-                  ticket['Ticket Type']?.toString().toLowerCase() ?? '';
+              final ticketType = ticket['type']?.toString().toLowerCase() ?? '';
               matchesFilter = ticketType == selectedTicketType.toLowerCase();
             }
 
             // Filter by search query
             bool matchesQuery = true;
             if (query.isNotEmpty) {
-              matchesQuery = _tableHeaders.any((header) {
-                final value = ticket[header]?.toString().toLowerCase() ?? '';
-                return value.contains(query);
-              });
+              matchesQuery =
+                  ticket['type']?.toString().toLowerCase().contains(query) ??
+                  false;
             }
 
             return matchesFilter && matchesQuery;
           }).toList();
 
-      print('Filtered tickets count: ${_filteredTickets.length}');
+      // Reset to first page when search/filter changes
+      _currentPage = 1;
     });
+  }
+
+  List<Map<String, dynamic>> get _paginatedTickets {
+    final startIndex = (_currentPage - 1) * _itemsPerPage;
+    final endIndex = startIndex + _itemsPerPage;
+    if (startIndex >= _filteredTickets.length) {
+      _currentPage = 1;
+      return _filteredTickets.take(_itemsPerPage).toList();
+    }
+    return _filteredTickets.sublist(
+      startIndex,
+      endIndex > _filteredTickets.length ? _filteredTickets.length : endIndex,
+    );
+  }
+
+  int get _totalPages => (_filteredTickets.length / _itemsPerPage).ceil();
+
+  Widget _buildPaginationControls() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            onPressed:
+                _currentPage > 1 ? () => setState(() => _currentPage--) : null,
+            color: const Color(0xFF133343),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Text(
+              'Page $_currentPage of $_totalPages',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF133343),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            onPressed:
+                _currentPage < _totalPages
+                    ? () => setState(() => _currentPage++)
+                    : null,
+            color: const Color(0xFF133343),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadTickets() async {
@@ -145,21 +201,65 @@ class _TicketScreenState extends State<TicketScreen> {
               final contactId = ticket['contact']?.toString() ?? '';
               final contactName = agentMap[contactId] ?? 'Not Assigned';
 
+              // Get attachments and display original file names
+              String displayAttachments = 'No attachments';
+              if (ticket['attachments'] != null &&
+                  ticket['attachments'].toString().isNotEmpty) {
+                try {
+                  if (ticket['attachments'] is List) {
+                    final fileNames =
+                        ticket['attachments']
+                            .where((attachment) => attachment != null)
+                            .map((attachment) {
+                              if (attachment is Map) {
+                                return attachment['name']?.toString() ?? '';
+                              } else if (attachment is String) {
+                                return attachment;
+                              }
+                              return '';
+                            })
+                            .where((name) => name.isNotEmpty)
+                            .toList();
+
+                    displayAttachments =
+                        fileNames.isNotEmpty
+                            ? fileNames.join(', ')
+                            : 'No attachments';
+                  } else if (ticket['attachments'] is String) {
+                    final fileNames =
+                        ticket['attachments']
+                            .split(',')
+                            .map((name) => name.trim())
+                            .where((name) => name.isNotEmpty)
+                            .toList();
+
+                    displayAttachments =
+                        fileNames.isNotEmpty
+                            ? fileNames.join(', ')
+                            : 'No attachments';
+                  }
+                } catch (e) {
+                  print('Error processing attachments: $e');
+                  print('Raw attachments data: ${ticket['attachments']}');
+                  displayAttachments = 'Error displaying attachments';
+                }
+              }
+
               return {
-                'Ticket Type': ticket['type'] ?? 'Uncategorized',
-                'Contact': contactName,
-                'Subscription': ticket['subscription'] ?? 'N/A',
-                'Description': ticket['description'] ?? 'No description',
-                'Attachments': ticket['attachments'] != null ? 'Yes' : 'None',
-                'Status': (ticket['status'] ?? 'open').toUpperCase(),
-                'Created At': createdAt,
+                'id': ticket['id'],
+                'type': ticket['type'] ?? 'N/A',
+                'contact': contactName,
+                'subscription': ticket['subscription'] ?? 'N/A',
+                'description': ticket['description'] ?? 'No description',
+                'attachments': displayAttachments,
+                'status': (ticket['status'] ?? 'open').toUpperCase(),
+                'created_at': createdAt,
               };
             }),
           );
           _filteredTickets = _tickets;
           _isLoading = false;
         });
-        print('Loaded ${_tickets.length} tickets successfully');
       } else {
         throw Exception(response['message'] ?? 'Failed to load tickets');
       }
@@ -264,6 +364,94 @@ class _TicketScreenState extends State<TicketScreen> {
     );
   }
 
+  Widget _buildTicketCard(Map<String, dynamic> ticket) {
+    final String ticketType = ticket['type']?.toString() ?? 'N/A';
+    final String createdAt = ticket['created_at']?.toString() ?? 'N/A';
+    final String status = ticket['status']?.toString().toUpperCase() ?? 'N/A';
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TicketDetailsScreen(ticket: ticket),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF133343).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.confirmation_number_outlined,
+                  color: Color(0xFF133343),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      ticketType,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF133343),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Created: $createdAt',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color:
+                      status == 'OPEN'
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: status == 'OPEN' ? Colors.green : Colors.red,
+                  ),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: status == 'OPEN' ? Colors.green : Colors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -348,7 +536,9 @@ class _TicketScreenState extends State<TicketScreen> {
                           onChanged: (String? newValue) {
                             setState(() {
                               _selectedFilter = newValue!;
-                              _handleSearch(); // Trigger filter update
+                              _currentPage =
+                                  1; // Reset to first page on filter change
+                              _handleSearch();
                             });
                           },
                           items:
@@ -382,38 +572,34 @@ class _TicketScreenState extends State<TicketScreen> {
               ),
             ),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                child:
-                    _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : Stack(
-                          children: [
-                            Card(
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child:
-                                    _filteredTickets.isEmpty
-                                        ? Center(
-                                          child: Text(
-                                            _tickets.isEmpty
-                                                ? 'No tickets found. Create a new ticket to get started.'
-                                                : 'No tickets match your search.',
-                                          ),
-                                        )
-                                        : ReusableTable(
-                                          headers: _tableHeaders,
-                                          data: _filteredTickets,
-                                        ),
-                              ),
-                            ),
-                          ],
+              child:
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _filteredTickets.isEmpty
+                      ? Center(
+                        child: Text(
+                          _tickets.isEmpty
+                              ? 'No tickets found. Create a new ticket to get started.'
+                              : 'No tickets match your search.',
                         ),
-              ),
+                      )
+                      : Column(
+                        children: [
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: _paginatedTickets.length,
+                              padding: const EdgeInsets.only(top: 8),
+                              itemBuilder: (context, index) {
+                                return _buildTicketCard(
+                                  _paginatedTickets[index],
+                                );
+                              },
+                            ),
+                          ),
+                          if (_filteredTickets.length > _itemsPerPage)
+                            _buildPaginationControls(),
+                        ],
+                      ),
             ),
           ],
         ),

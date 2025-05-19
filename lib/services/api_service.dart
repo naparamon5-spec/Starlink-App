@@ -150,6 +150,36 @@ class ApiService {
         }
       }
 
+      // Process attachments if present
+      var processedAttachments = ticketData['attachments'];
+      if (processedAttachments != null) {
+        if (processedAttachments is List) {
+          // Ensure each attachment has the required fields
+          processedAttachments =
+              processedAttachments
+                  .where((attachment) => attachment != null)
+                  .map((attachment) {
+                    if (attachment is Map<String, dynamic>) {
+                      return {
+                        'name': attachment['name'] ?? 'unnamed_file',
+                        'data': attachment['data'],
+                        'type': attachment['type'] ?? '',
+                      };
+                    } else if (attachment is String) {
+                      // If it's just a filename string, keep it as is
+                      return attachment;
+                    }
+                    return null;
+                  })
+                  .where((attachment) => attachment != null)
+                  .toList();
+        } else if (processedAttachments is String &&
+            processedAttachments.isNotEmpty) {
+          // If it's a single string, keep it as is
+          processedAttachments = [processedAttachments];
+        }
+      }
+
       // Format the data for the API
       final formattedData = {
         'type': ticketData['type'],
@@ -157,15 +187,13 @@ class ApiService {
         'contact_name': ticketData['contact_name'],
         'subscription': ticketData['subscription'],
         'description': ticketData['description'],
-        'user_id':
-            ticketData['user_id']
-                .toString(), // Ensure user_id is sent as string
-        'assigned_agent': ticketData['contact'], // Add the assigned agent
+        'user_id': ticketData['user_id'].toString(),
+        'assigned_agent': ticketData['contact'],
         'status': 'open',
-        'attachments': ticketData['attachments'],
+        'attachments': processedAttachments,
       };
 
-      print('Creating ticket with data: $formattedData');
+      print('Creating ticket with data: ${json.encode(formattedData)}');
 
       final response = await http
           .post(
@@ -177,7 +205,7 @@ class ApiService {
             body: json.encode(formattedData),
           )
           .timeout(
-            const Duration(seconds: 10),
+            const Duration(seconds: 30), // Increased timeout for file uploads
             onTimeout: () {
               throw TimeoutException('Request timed out. Please try again.');
             },
@@ -312,6 +340,44 @@ class ApiService {
         'message': 'Error fetching current user: $e',
         'baseUrl': baseUrl,
       };
+    }
+  }
+
+  // Update ticket status
+  static Future<Map<String, dynamic>> updateTicketStatus(
+    String ticketId,
+    String newStatus,
+  ) async {
+    try {
+      print(
+        'Updating ticket status: $baseUrl/api.php?action=update_ticket_status',
+      );
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api.php?action=update_ticket_status'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode({'ticket_id': ticketId, 'status': newStatus}),
+      );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to update ticket status');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error updating ticket status: $e');
+      throw Exception('Failed to update ticket status: $e');
     }
   }
 }

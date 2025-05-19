@@ -4,8 +4,14 @@ import 'package:flutter/material.dart';
 class ReusableTable extends StatefulWidget {
   final List<String> headers;
   final List<Map<String, dynamic>> data;
+  final Function(Map<String, dynamic>)? onRowTap;
 
-  const ReusableTable({super.key, required this.headers, required this.data});
+  const ReusableTable({
+    super.key,
+    required this.headers,
+    required this.data,
+    this.onRowTap,
+  });
 
   @override
   State<ReusableTable> createState() => _ReusableTableState();
@@ -217,36 +223,37 @@ class _ReusableTableState extends State<ReusableTable> {
                 }).toList(),
               ],
               rows:
-                  _paginatedData
-                      .asMap()
-                      .entries
-                      .map(
-                        (entry) => DataRow(
-                          cells: [
-                            DataCell(
-                              Text(
-                                '${(_currentPage * _rowsPerPage) + entry.key + 1}',
-                                style: const TextStyle(
-                                  color: Color(0xFF133343),
-                                  fontWeight: FontWeight.w500,
+                  _paginatedData.asMap().entries.map((entry) {
+                    final rowData = entry.value;
+                    return DataRow(
+                      onSelectChanged:
+                          widget.onRowTap != null
+                              ? (_) => widget.onRowTap!(rowData)
+                              : null,
+                      cells: [
+                        DataCell(
+                          Text(
+                            '${(_currentPage * _rowsPerPage) + entry.key + 1}',
+                            style: const TextStyle(
+                              color: Color(0xFF133343),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        ...widget.headers
+                            .map(
+                              (header) => DataCell(
+                                _buildTableCell(
+                                  rowData[header]?.toString() ?? '',
+                                  header,
+                                  context,
                                 ),
                               ),
-                            ),
-                            ...widget.headers
-                                .map(
-                                  (header) => DataCell(
-                                    _buildTableCell(
-                                      entry.value[header]?.toString() ?? '',
-                                      header,
-                                      context,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ],
-                        ),
-                      )
-                      .toList(),
+                            )
+                            .toList(),
+                      ],
+                    );
+                  }).toList(),
             ),
           ),
         ),
