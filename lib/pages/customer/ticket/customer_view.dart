@@ -1,0 +1,649 @@
+import 'package:flutter/material.dart';
+import '../../../services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class CustomerViewScreen extends StatefulWidget {
+  final Map<String, dynamic> ticket;
+
+  const CustomerViewScreen({super.key, required this.ticket});
+
+  @override
+  _CustomerViewScreenState createState() => _CustomerViewScreenState();
+}
+
+class _CustomerViewScreenState extends State<CustomerViewScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _selectedFilter = 'All';
+  List<Map<String, dynamic>> _tickets = [];
+  List<Map<String, dynamic>> _filteredTickets = [];
+  bool _isLoading = true;
+  int? _userId;
+  bool _isAccepted = false;
+
+  // Updated filter options to match backend ticket_type values
+  final List<String> _filterOptions = [
+    'All',
+    'Billing',
+    'Connection Issue',
+    'Request for Off/On',
+    'Request for Reactivate',
+    'Request for Deactivate',
+    'Device/Kit/Router Issue',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+    _searchController.addListener(_handleSearch);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_handleSearch);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('user_id');
+      if (userId != null) {
+        setState(() {
+          _userId = userId;
+        });
+        _loadTickets();
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
+    }
+  }
+
+  void _handleSearch() {
+    final query = _searchController.text.toLowerCase();
+    final selectedType = _selectedFilter;
+
+    setState(() {
+      _filteredTickets =
+          _tickets.where((ticket) {
+            // Filter by ticket type
+            bool matchesFilter = true;
+            if (selectedType != 'All') {
+              matchesFilter =
+                  ticket['type'].toString().toLowerCase() ==
+                  selectedType.toLowerCase();
+            }
+
+            // Filter by search query
+            bool matchesQuery = true;
+            if (query.isNotEmpty) {
+              matchesQuery = ticket.values.any(
+                (value) => value.toString().toLowerCase().contains(query),
+              );
+            }
+
+            return matchesFilter && matchesQuery;
+          }).toList();
+    });
+  }
+
+  Future<void> _loadTickets() async {
+    if (!mounted || _userId == null) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final response = await ApiService.getTickets();
+
+      if (response['status'] == 'success' && mounted) {
+        setState(() {
+          _tickets = List<Map<String, dynamic>>.from(
+            response['data']
+                .where((ticket) => ticket['contact'] == _userId)
+                .map((ticket) {
+                  String attachmentsDisplay = 'No attachments';
+                  if (ticket['attachments'] != null &&
+                      ticket['attachments'].isNotEmpty) {
+                    if (ticket['attachments'] is List) {
+                      final fileNames =
+                          (ticket['attachments'] as List)
+                              .where((attachment) => attachment != null)
+                              .map((attachment) {
+                                if (attachment is Map) {
+                                  return attachment['name']?.toString() ?? '';
+                                }
+                                return '';
+                              })
+                              .where((name) => name.isNotEmpty)
+                              .toList();
+                      attachmentsDisplay =
+                          fileNames.isNotEmpty
+                              ? fileNames.join(', ')
+                              : 'No attachments';
+                    } else if (ticket['attachments'] is String) {
+                      attachmentsDisplay = ticket['attachments'].toString();
+                    }
+                  }
+
+                  return {
+                    'id': ticket['id'],
+                    'type': ticket['type'] ?? 'N/A',
+                    'status': (ticket['status'] ?? 'open').toUpperCase(),
+                    'subscription': ticket['subscription'] ?? 'N/A',
+                    'description': ticket['description'] ?? 'No description',
+                    'created_at': _formatDate(ticket['created_at']),
+                    'attachments': attachmentsDisplay,
+                    'full_data': {
+                      ...ticket,
+                      'created_at': _formatDate(ticket['created_at']),
+                      'attachments': ticket['attachments'] ?? [],
+                    },
+                  };
+                }),
+          );
+          _filteredTickets = _tickets;
+          _isLoading = false;
+        });
+      } else {
+        throw Exception(response['message'] ?? 'Failed to load tickets');
+      }
+    } catch (e) {
+      print('Error loading tickets: $e');
+      if (!mounted) return;
+      setState(() {
+        _tickets = [];
+        _filteredTickets = [];
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading tickets: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return 'N/A';
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} '
+          '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  Future<void> _acceptTicket() async {
+    try {
+      final response = await ApiService.updateTicketStatus(
+        widget.ticket['id'],
+        'accepted',
+      );
+
+      if (response['status'] == 'success') {
+        setState(() {
+          _isAccepted = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket accepted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception(response['message'] ?? 'Failed to accept ticket');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error accepting ticket: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _resolveTicket() async {
+    try {
+      final response = await ApiService.updateTicketStatus(
+        widget.ticket['id'],
+        'resolved',
+      );
+
+      if (response['status'] == 'success') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket resolved successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(
+          context,
+          true,
+        ); // Return true to indicate ticket was resolved
+      } else {
+        throw Exception(response['message'] ?? 'Failed to resolve ticket');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error resolving ticket: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _closeTicket() async {
+    try {
+      final response = await ApiService.updateTicketStatus(
+        widget.ticket['id'],
+        'closed',
+      );
+
+      if (response['status'] == 'success') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket closed successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(
+          context,
+          true,
+        ); // Return true to indicate ticket was closed
+      } else {
+        throw Exception(response['message'] ?? 'Failed to close ticket');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error closing ticket: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ticket = widget.ticket;
+    final fullData = ticket['full_data'] as Map<String, dynamic>;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Ticket Details'),
+        centerTitle: true,
+        elevation: 2,
+        backgroundColor: const Color(0xFF133343),
+        foregroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _buildDetailItem(
+                    'Ticket Type',
+                    fullData['type'] ?? 'N/A',
+                  ),
+                ),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: _buildDetailItem(
+                    'Subscription',
+                    fullData['subscription'] ?? 'N/A',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Status',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF133343),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              fullData['status']?.toString().toUpperCase() ==
+                                      'OPEN'
+                                  ? Colors.green.withOpacity(0.1)
+                                  : Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color:
+                                fullData['status']?.toString().toUpperCase() ==
+                                        'OPEN'
+                                    ? Colors.green
+                                    : Colors.red,
+                          ),
+                        ),
+                        child: Text(
+                          fullData['status']?.toString().toUpperCase() ??
+                              'OPEN',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color:
+                                fullData['status']?.toString().toUpperCase() ==
+                                        'OPEN'
+                                    ? Colors.green
+                                    : Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: _buildDetailItem(
+                    'Created At',
+                    fullData['created_at'] ?? 'N/A',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Description',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF133343),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Text(
+                fullData['description'] ?? 'No description',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+            if (fullData['attachments'] != null &&
+                fullData['attachments'].toString().isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Text(
+                'Attachments',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF133343),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (fullData['attachments'] is List) ...[
+                      ...(fullData['attachments'] as List).map((attachment) {
+                        if (attachment is Map) {
+                          final fileName =
+                              attachment['name']?.toString() ?? 'Unknown file';
+                          final fileType = attachment['type']?.toString() ?? '';
+                          final fileSize = _formatFileSize(
+                            attachment['size'] as int?,
+                          );
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _getFileIcon(fileType),
+                                  color: Theme.of(context).primaryColor,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        fileName,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      if (fileSize.isNotEmpty)
+                                        Text(
+                                          fileSize,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.download,
+                                    color: Color(0xFF133343),
+                                  ),
+                                  onPressed: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Download functionality coming soon',
+                                        ),
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  },
+                                  tooltip: 'Download file',
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }).toList(),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.attach_file,
+                            color: Theme.of(context).primaryColor,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              fullData['attachments'].toString(),
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.download,
+                              color: Color(0xFF133343),
+                            ),
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Download functionality coming soon',
+                                  ),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            tooltip: 'Download file',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+            if (!_isAccepted &&
+                fullData['status']?.toString().toUpperCase() == 'OPEN')
+              Center(
+                child: ElevatedButton(
+                  onPressed: _acceptTicket,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF133343),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Accept Ticket',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            if (_isAccepted) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: _resolveTicket,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Resolve Ticket',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton(
+                    onPressed: _closeTicket,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Close Ticket',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailItem(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF133343),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey[300]!),
+          ),
+          child: Text(value, style: const TextStyle(fontSize: 14)),
+        ),
+      ],
+    );
+  }
+
+  String _formatFileSize(int? size) {
+    if (size == null) return '';
+    return '${(size / 1024).toStringAsFixed(1)} KB';
+  }
+
+  IconData _getFileIcon(String? extension) {
+    switch (extension?.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'docx':
+        return Icons.description;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+}

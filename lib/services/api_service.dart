@@ -476,6 +476,35 @@ class ApiService {
       throw Exception('Failed to update password: $e');
     }
   }
+
+  // Get all customers
+  static Future<Map<String, dynamic>> getCustomers() async {
+    try {
+      print('Fetching customers from: $baseUrl/api.php?action=get_customers');
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/api.php?action=get_customers'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch customers');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching customers: $e');
+      throw Exception('Error fetching customers: $e');
+    }
+  }
 }
 
 class TimeoutException implements Exception {

@@ -54,12 +54,13 @@ class _NewTicketModalState extends State<NewTicketModal> {
         );
       });
 
-      // Fetch agents
-      final agentsData = await ApiService.getAgents();
+      // Fetch customers instead of agents
+      final customersData = await ApiService.getCustomers();
       setState(() {
         _contacts = Map.fromEntries(
-          (agentsData['data'] as List).map(
-            (agent) => MapEntry(agent['name'] as String, agent['id'] as int),
+          (customersData['data'] as List).map(
+            (customer) =>
+                MapEntry(customer['name'] as String, customer['id'] as int),
           ),
         );
       });
@@ -152,13 +153,17 @@ class _NewTicketModalState extends State<NewTicketModal> {
           }
         }
 
+        // Get the selected contact's ID and name
+        final selectedContactId = _contacts[_selectedContact];
+        final selectedContactName = _selectedContact;
+
         final newTicket = {
           'type': _selectedTicketType,
-          'contact': _contacts[_selectedContact], // Agent ID for database
-          'contact_name': _selectedContact, // Agent name for display
+          'contact': selectedContactId, // Customer ID for database
+          'contact_name': selectedContactName, // Customer name for display
           'subscription': _selectedSubscription,
           'description': _descriptionController.text,
-          'user_id': widget.userId,
+          'user_id': widget.userId, // ID of the end-user creating the ticket
           'status': 'open',
           'attachments': attachmentsData,
           'attachments_display': _attachedFiles

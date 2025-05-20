@@ -3,6 +3,7 @@ import '../../../components/Table.dart';
 import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'customer_ticket_modal.dart';
+import 'customer_view.dart';
 
 class CustomerTicketScreen extends StatefulWidget {
   final bool showAppBar;
@@ -25,12 +26,33 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
   int _itemsPerPage = 6;
   int _currentPage = 1;
 
-  // Filter options for customer view
-  final List<String> _filterOptions = ['All', 'Open', 'Closed'];
+  // Updated filter options to match backend ticket_type values
+  final List<String> _filterOptions = [
+    'All',
+    'Billing',
+    'Connection Issue',
+    'Request for Off/On',
+    'Request for Reactivate',
+    'Request for Deactivate',
+    'Device/Kit/Router Issue',
+  ];
+
+  // Mapping frontend filter options to backend ticket_type for accurate filtering
+  final Map<String, String> _filterToTicketType = {
+    'All': 'All',
+    'Billing': 'Billing',
+    'Connection Issue': 'Connection Issue',
+    'Request for Off/On': 'Request for Off/On',
+    'Request for Reactivate': 'Request for Reactivate',
+    'Request for Deactivate': 'Request for Deactivate',
+    'Device/Kit/Router Issue': 'Device/Kit/Router Issue',
+  };
 
   final List<String> _tableHeaders = [
     'Status',
     'Ticket Type',
+    'Contact',
+    'Subscription',
     'Description',
     'Created At',
     'Attachments',
@@ -167,7 +189,11 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
         setState(() {
           _tickets = List<Map<String, dynamic>>.from(
             response['data']
-                .where((ticket) => ticket['user_id'] == _userId)
+                .where(
+                  (ticket) =>
+                      // Show tickets where this user is the contact
+                      ticket['contact'] == _userId,
+                )
                 .map((ticket) {
                   // Format attachments for display
                   String attachmentsDisplay = 'No attachments';
@@ -198,6 +224,8 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                     'id': ticket['id'],
                     'Status': (ticket['status'] ?? 'open').toUpperCase(),
                     'Ticket Type': ticket['type'] ?? 'N/A',
+                    'Contact': ticket['contact'] ?? 'N/A',
+                    'Subscription': ticket['subscription'] ?? 'N/A',
                     'Description': ticket['description'] ?? 'No description',
                     'Created At': _formatDate(ticket['created_at']),
                     'Attachments': attachmentsDisplay,
@@ -296,11 +324,78 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                               const SizedBox(width: 24),
                               Expanded(
                                 child: _buildDetailItem(
-                                  'Status',
-                                  fullData['status']
-                                          ?.toString()
-                                          .toUpperCase() ??
-                                      'N/A',
+                                  'Subscription',
+                                  fullData['subscription'] ?? 'N/A',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Status',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF133343),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            fullData['status']
+                                                        ?.toString()
+                                                        .toUpperCase() ==
+                                                    'OPEN'
+                                                ? Colors.green.withOpacity(0.1)
+                                                : Colors.red.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color:
+                                              fullData['status']
+                                                          ?.toString()
+                                                          .toUpperCase() ==
+                                                      'OPEN'
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        fullData['status']
+                                                ?.toString()
+                                                .toUpperCase() ??
+                                            'OPEN',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color:
+                                              fullData['status']
+                                                          ?.toString()
+                                                          .toUpperCase() ==
+                                                      'OPEN'
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+                              Expanded(
+                                child: _buildDetailItem(
+                                  'Created At',
+                                  fullData['created_at'] ?? 'N/A',
                                 ),
                               ),
                             ],
@@ -598,7 +693,6 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                     bottom: Radius.circular(15),
                   ),
                 ),
-                actions: null,
               )
               : null,
       body: Column(
@@ -713,29 +807,202 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                             : 'No tickets match your search.',
                       ),
                     )
-                    : Column(
-                      children: [
-                        Expanded(
-                          child: Card(
-                            margin: const EdgeInsets.all(16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: ReusableTable(
-                                headers: _tableHeaders,
-                                data: _paginatedTickets,
-                                onRowTap: _showTicketDetails,
-                              ),
-                            ),
-                          ),
-                        ),
-                        _buildPaginationControls(),
-                      ],
+                    : ListView.builder(
+                      itemCount: _paginatedTickets.length,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      itemBuilder: (context, index) {
+                        return _buildTicketCard(_paginatedTickets[index]);
+                      },
                     ),
           ),
+          if (_filteredTickets.length > _itemsPerPage)
+            _buildPaginationControls(),
         ],
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 16.0, right: 16.0),
+        child: FloatingActionButton(
+          onPressed: showNewTicketModal,
+          backgroundColor: const Color(0xFF133343),
+          child: const Icon(Icons.add, color: Colors.white),
+          tooltip: 'Create new ticket',
+          elevation: 10,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTicketCard(Map<String, dynamic> ticket) {
+    final String ticketType = ticket['Ticket Type']?.toString() ?? 'N/A';
+    final String createdAt = ticket['Created At']?.toString() ?? 'N/A';
+    final String status = ticket['Status']?.toString().toUpperCase() ?? 'N/A';
+    final String description =
+        ticket['Description']?.toString() ?? 'No description';
+    final String contact = ticket['Contact']?.toString() ?? 'N/A';
+    final String subscription = ticket['Subscription']?.toString() ?? 'N/A';
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () {
+          final Map<String, dynamic> ticketData = {
+            'id': ticket['id'],
+            'type': ticket['Ticket Type'],
+            'status': ticket['Status'],
+            'subscription': ticket['Subscription'],
+            'description': ticket['Description'],
+            'created_at': ticket['Created At'],
+            'attachments': ticket['Attachments'],
+            'full_data': Map<String, dynamic>.from(ticket['full_data'] as Map),
+          };
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CustomerViewScreen(ticket: ticketData),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF133343).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: const Icon(
+                      Icons.confirmation_number_outlined,
+                      color: Color(0xFF133343),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          ticketType,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF133343),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Created: $createdAt',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          status == 'OPEN'
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: status == 'OPEN' ? Colors.green : Colors.red,
+                      ),
+                    ),
+                    child: Text(
+                      status,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: status == 'OPEN' ? Colors.green : Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Contact',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          contact,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Subscription',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subscription,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Description',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: const TextStyle(fontSize: 14),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
