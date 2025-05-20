@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'home/home_screen.dart';
+import 'end-user/home/home_screen.dart';
+import 'customer/home/customer_home_screen.dart';
 import 'forgot_password.dart';
 import '../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,9 +55,12 @@ class _LoginScreenState extends State<LoginScreen> {
           // Store user data in SharedPreferences
           final prefs = await SharedPreferences.getInstance();
 
-          // Get user ID from the nested user object
+          // Get user data from the nested user object
           final user = response['user'] as Map<String, dynamic>?;
           final userId = user?['id'];
+          final userType =
+              (user?['type'] ?? user?['role'])?.toString().toLowerCase();
+
           if (userId == null) {
             setState(() {
               _errorMessage = 'Invalid response: Missing user ID';
@@ -64,21 +68,64 @@ class _LoginScreenState extends State<LoginScreen> {
             return;
           }
 
-          // Store the user ID as a string
-          await prefs.setString('userId', userId.toString());
-          await prefs.setString('email', _emailController.text);
+          if (userType != 'end_user' && userType != 'customer') {
+            setState(() {
+              _errorMessage =
+                  'Invalid user type. Only end users and customers can access this app.';
+            });
+            return;
+          }
 
-          // Navigate to home screen
+          // Store the user data
+          await prefs.setInt('user_id', userId);
+          await prefs.setString('email', _emailController.text);
+          await prefs.setString('userType', userType!);
+
+          // Store user data based on type
+          if (userType == 'end_user') {
+            await prefs.setString(
+              'name',
+              user?['full_name'] ?? user?['name'] ?? '',
+            );
+            await prefs.setString('firstName', user?['first_name'] ?? '');
+            await prefs.setString('lastName', user?['last_name'] ?? '');
+            await prefs.setString('phone', user?['phone'] ?? '');
+            await prefs.setString('address', user?['address'] ?? '');
+          } else if (userType == 'customer') {
+            await prefs.setString(
+              'name',
+              user?['company_name'] ?? user?['name'] ?? '',
+            );
+            await prefs.setString('companyName', user?['company_name'] ?? '');
+            await prefs.setString('jobTitle', user?['job_title'] ?? '');
+            await prefs.setString('phone', user?['phone'] ?? '');
+            await prefs.setString('address', user?['address'] ?? '');
+          }
+
+          // Navigate to appropriate home screen based on user type
           if (!mounted) return;
-          await Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => HomeScreen(
-                    loginMessage: response['message'] ?? 'Login successful',
-                  ),
-            ),
-          );
+
+          if (userType == 'end_user') {
+            await Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder:
+                    (context) => HomeScreen(
+                      loginMessage: response['message'] ?? 'Login successful',
+                    ),
+              ),
+            );
+          } else {
+            await Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder:
+                    (context) => CustomerHomeScreen(
+                      loginMessage: response['message'] ?? 'Login successful',
+                    ),
+              ),
+            );
+          }
         } else {
           setState(() {
             _errorMessage = response['message'];

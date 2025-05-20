@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../ticket/ticket_screen.dart';
 import '../profile/profile_screen.dart';
-import '../../components/BottomNavigatorBar.dart';
+import '../../../components/BottomNavigatorBar.dart';
 
 class HomeScreen extends StatefulWidget {
   final String? loginMessage;

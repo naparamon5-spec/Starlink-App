@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../components/Table.dart';
-import '../../services/api_service.dart';
+import '../../../components/Table.dart';
+import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TicketScreen extends StatefulWidget {
@@ -29,7 +29,12 @@ class _TicketScreenState extends State<TicketScreen> {
     'Device/Kit/Router Issue',
   ];
 
-  final List<String> _tableHeaders = ['Status', 'Subscription', 'Ticket Type'];
+  final List<String> _tableHeaders = [
+    'Status',
+    'Subscription',
+    'Ticket Type',
+    'Attachments',
+  ];
 
   @override
   void initState() {
@@ -85,15 +90,42 @@ class _TicketScreenState extends State<TicketScreen> {
         setState(() {
           _tickets = List<Map<String, dynamic>>.from(
             response['data'].map((ticket) {
+              // Format attachments for display
+              String attachmentsDisplay = 'No attachments';
+              if (ticket['attachments'] != null &&
+                  ticket['attachments'].isNotEmpty) {
+                if (ticket['attachments'] is List) {
+                  final fileNames =
+                      (ticket['attachments'] as List)
+                          .where((attachment) => attachment != null)
+                          .map((attachment) {
+                            if (attachment is Map) {
+                              return attachment['name']?.toString() ?? '';
+                            }
+                            return '';
+                          })
+                          .where((name) => name.isNotEmpty)
+                          .toList();
+                  attachmentsDisplay =
+                      fileNames.isNotEmpty
+                          ? fileNames.join(', ')
+                          : 'No attachments';
+                } else if (ticket['attachments'] is String) {
+                  attachmentsDisplay = ticket['attachments'].toString();
+                }
+              }
+
               return {
                 'id': ticket['id'],
                 'Status': (ticket['status'] ?? 'open').toUpperCase(),
                 'Subscription': ticket['subscription'] ?? 'N/A',
                 'Ticket Type': ticket['type'] ?? 'N/A',
+                'Attachments': attachmentsDisplay,
                 // Store all data for detailed view
                 'full_data': {
                   ...ticket,
                   'created_at': _formatDate(ticket['created_at']),
+                  'attachments': ticket['attachments'] ?? [],
                 },
               };
             }),
@@ -130,6 +162,11 @@ class _TicketScreenState extends State<TicketScreen> {
     } catch (e) {
       return dateStr;
     }
+  }
+
+  String _formatFileSize(int? size) {
+    if (size == null) return '';
+    return '${(size / 1024).toStringAsFixed(1)} KB';
   }
 
   Future<void> _updateTicketStatus(String ticketId, String newStatus) async {
@@ -369,7 +406,10 @@ class _TicketScreenState extends State<TicketScreen> {
                               style: const TextStyle(fontSize: 14),
                             ),
                           ),
-                          if (fullData['attachments'] != null) ...[
+                          if (fullData['attachments'] != null &&
+                              fullData['attachments']
+                                  .toString()
+                                  .isNotEmpty) ...[
                             const SizedBox(height: 24),
                             const Text(
                               'Attachments',
@@ -388,9 +428,131 @@ class _TicketScreenState extends State<TicketScreen> {
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: Colors.grey[300]!),
                               ),
-                              child: Text(
-                                fullData['attachments'].toString(),
-                                style: const TextStyle(fontSize: 14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (fullData['attachments'] is List) ...[
+                                    ...(fullData['attachments'] as List).map((
+                                      attachment,
+                                    ) {
+                                      if (attachment is Map) {
+                                        final fileName =
+                                            attachment['name']?.toString() ??
+                                            'Unknown file';
+                                        final fileType =
+                                            attachment['type']?.toString() ??
+                                            '';
+                                        final fileSize = _formatFileSize(
+                                          attachment['size'] as int?,
+                                        );
+
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 8.0,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                _getFileIcon(fileType),
+                                                color:
+                                                    Theme.of(
+                                                      context,
+                                                    ).primaryColor,
+                                                size: 20,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      fileName,
+                                                      style: const TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                    if (fileSize.isNotEmpty)
+                                                      Text(
+                                                        fileSize,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color:
+                                                              Colors.grey[600],
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.download,
+                                                  color: Color(0xFF133343),
+                                                ),
+                                                onPressed: () {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Download functionality coming soon',
+                                                      ),
+                                                      duration: Duration(
+                                                        seconds: 2,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                tooltip: 'Download file',
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+                                      return const SizedBox.shrink();
+                                    }).toList(),
+                                  ] else ...[
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.attach_file,
+                                          color: Theme.of(context).primaryColor,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            fullData['attachments'].toString(),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.download,
+                                            color: Color(0xFF133343),
+                                          ),
+                                          onPressed: () {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Download functionality coming soon',
+                                                ),
+                                                duration: Duration(seconds: 2),
+                                              ),
+                                            );
+                                          },
+                                          tooltip: 'Download file',
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                           ],
@@ -429,6 +591,21 @@ class _TicketScreenState extends State<TicketScreen> {
         ),
       ],
     );
+  }
+
+  IconData _getFileIcon(String? extension) {
+    switch (extension?.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'docx':
+        return Icons.description;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      default:
+        return Icons.insert_drive_file;
+    }
   }
 
   @override
@@ -629,6 +806,11 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
         ),
       ],
     );
+  }
+
+  String _formatFileSize(int? size) {
+    if (size == null) return '';
+    return '${(size / 1024).toStringAsFixed(1)} KB';
   }
 
   @override
@@ -844,37 +1026,123 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: Colors.grey[300]!),
                           ),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(
-                                Icons.attach_file,
-                                color: Theme.of(context).primaryColor,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _ticket['attachments'].toString(),
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.download,
-                                  color: Color(0xFF133343),
-                                ),
-                                onPressed: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Download functionality coming soon',
+                              if (_ticket['attachments'] is List) ...[
+                                ...(_ticket['attachments'] as List).map((
+                                  attachment,
+                                ) {
+                                  if (attachment is Map) {
+                                    final fileName =
+                                        attachment['name']?.toString() ??
+                                        'Unknown file';
+                                    final fileType =
+                                        attachment['type']?.toString() ?? '';
+                                    final fileSize = _formatFileSize(
+                                      attachment['size'] as int?,
+                                    );
+
+                                    return Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 8.0,
                                       ),
-                                      duration: Duration(seconds: 2),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            _getFileIcon(fileType),
+                                            color:
+                                                Theme.of(context).primaryColor,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  fileName,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                                if (fileSize.isNotEmpty)
+                                                  Text(
+                                                    fileSize,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.download,
+                                              color: Color(0xFF133343),
+                                            ),
+                                            onPressed: () {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Download functionality coming soon',
+                                                  ),
+                                                  duration: Duration(
+                                                    seconds: 2,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            tooltip: 'Download file',
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                }).toList(),
+                              ] else ...[
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.attach_file,
+                                      color: Theme.of(context).primaryColor,
+                                      size: 20,
                                     ),
-                                  );
-                                },
-                                tooltip: 'Download file',
-                              ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _ticket['attachments'].toString(),
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.download,
+                                        color: Color(0xFF133343),
+                                      ),
+                                      onPressed: () {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Download functionality coming soon',
+                                            ),
+                                            duration: Duration(seconds: 2),
+                                          ),
+                                        );
+                                      },
+                                      tooltip: 'Download file',
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -902,5 +1170,20 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
         ),
       ),
     );
+  }
+
+  IconData _getFileIcon(String? extension) {
+    switch (extension?.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'docx':
+        return Icons.description;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      default:
+        return Icons.insert_drive_file;
+    }
   }
 }

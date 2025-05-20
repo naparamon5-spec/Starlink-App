@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import '../../services/api_service.dart';
+import '../../../services/api_service.dart';
 import 'dart:convert';
 
 class NewTicketModal extends StatefulWidget {
@@ -146,6 +146,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                 'name': file.name,
                 'data': base64Encode(file.bytes!),
                 'type': file.extension ?? '',
+                'size': file.size,
               });
             }
           }
@@ -160,6 +161,9 @@ class _NewTicketModalState extends State<NewTicketModal> {
           'user_id': widget.userId,
           'status': 'open',
           'attachments': attachmentsData,
+          'attachments_display': _attachedFiles
+              .map((file) => file.name)
+              .join(', '),
         };
 
         // Show loading indicator

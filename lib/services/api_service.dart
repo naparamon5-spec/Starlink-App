@@ -92,8 +92,27 @@ class ApiService {
       print('Response body: ${response.body}');
 
       final data = json.decode(response.body);
+
+      // Validate response structure
+      if (data['status'] == 'success') {
+        if (data['user'] == null) {
+          throw Exception('Invalid response: Missing user data');
+        }
+
+        final user = data['user'] as Map<String, dynamic>;
+        if (user['id'] == null) {
+          throw Exception('Invalid response: Missing user ID');
+        }
+
+        // Check for either type or role
+        if (user['type'] == null && user['role'] == null) {
+          throw Exception('Invalid response: Missing user type/role');
+        }
+      }
+
       return data;
     } catch (e) {
+      print('Login error: $e');
       return {
         'status': 'error',
         'message': e.toString().replaceAll('Exception: ', ''),
@@ -307,14 +326,18 @@ class ApiService {
   }
 
   // Get current user info - Example method to get the logged-in user's ID
-  static Future<Map<String, dynamic>> getCurrentUser() async {
+  static Future<Map<String, dynamic>> getCurrentUser(int userId) async {
     try {
       print(
-        'Fetching current user from: $baseUrl/api.php?action=get_current_user',
+        'Fetching current user from: $baseUrl/api.php?action=get_current_user&user_id=$userId',
       );
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api.php?action=get_current_user'))
+          .get(
+            Uri.parse(
+              '$baseUrl/api.php?action=get_current_user&user_id=$userId',
+            ),
+          )
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () {
@@ -378,6 +401,79 @@ class ApiService {
     } catch (e) {
       print('Error updating ticket status: $e');
       throw Exception('Failed to update ticket status: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getTicketCategories() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/ticket-categories'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to load ticket categories');
+      }
+    } catch (e) {
+      throw Exception('Error: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> updatePassword({
+    required int userId,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      print('Updating password for user: $userId');
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api.php?action=update_password'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: json.encode({
+              'user_id': userId,
+              'current_password': currentPassword,
+              'new_password': newPassword,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              return http.Response(
+                json.encode({
+                  'status': 'error',
+                  'message': 'Connection timed out. Please try again.',
+                }),
+                408,
+              );
+            },
+          );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success' || data['success'] == true) {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to update password');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error updating password: $e');
+      throw Exception('Failed to update password: $e');
     }
   }
 }

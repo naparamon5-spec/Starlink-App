@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../../components/Table.dart';
+import '../../../components/Table.dart';
 import 'ticket_modal.dart';
-import '../../services/api_service.dart';
+import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import './ticket.dart';
+import 'ticket.dart';
 
 class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key});

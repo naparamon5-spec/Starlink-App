@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 
 class BottomNavigatorBar extends StatelessWidget {
   final int currentIndex;
-  final ValueChanged<int>
-  onTap; // Callback to notify parent widget of tab changes
+  final ValueChanged<int> onTap;
 
   const BottomNavigatorBar({
     super.key,
@@ -14,19 +13,24 @@ class BottomNavigatorBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BottomNavigationBar(
-      currentIndex: currentIndex,
-      onTap: onTap, // Notify parent widget when a tab is tapped
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: Color(0XFFFF5969),
-      unselectedItemColor: Colors.grey,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+      items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(
-          icon: Icon(Icons.confirmation_num),
-          label: 'Ticket',
+          icon: Icon(Icons.dashboard),
+          label: 'Dashboard',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.confirmation_number),
+          label: 'Tickets',
         ),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
+      currentIndex: currentIndex,
+      selectedItemColor: const Color(0xFF133343),
+      unselectedItemColor: Colors.grey,
+      onTap: onTap,
+      type: BottomNavigationBarType.fixed,
+      elevation: 8,
+      backgroundColor: Colors.white,
     );
   }
 }
