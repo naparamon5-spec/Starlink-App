@@ -19,6 +19,7 @@ class CustomerHomeScreen extends StatefulWidget {
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   int _selectedIndex = 0;
   String? _userName;
+  String? _userFirstName;
   String? _userEmail;
   String? _userRole;
   bool _isLoading = true;
@@ -33,16 +34,48 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   Future<void> _loadUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('user_id');
+
+      if (userId == null) {
+        throw Exception('User ID not found');
+      }
+
+      // Get data from API
+      final response = await ApiService.getCurrentUser(userId);
+
+      if (response['success'] == true && response['data'] != null) {
+        final userData = response['data'];
+
+        setState(() {
+          _userId = userId; // Keep the original int userId
+          _userName = userData['name'];
+          _userFirstName = userData['first_name'];
+          _userEmail = userData['email'];
+          _userRole = userData['role'];
+          _isLoading = false;
+        });
+
+        // Save to SharedPreferences for offline access
+        await prefs.setInt('user_id', userId); // Save as int
+        await prefs.setString('name', _userName ?? '');
+        await prefs.setString('first_name', _userFirstName ?? '');
+        await prefs.setString('email', _userEmail ?? '');
+        await prefs.setString('role', _userRole ?? '');
+      } else {
+        throw Exception(response['message'] ?? 'Failed to fetch user data');
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
+      // Fallback to SharedPreferences if there's an error
+      final prefs = await SharedPreferences.getInstance();
       setState(() {
-        _userName = prefs.getString('name') ?? 'User';
+        _userId = prefs.getInt('user_id'); // Get as int
+        _userName = prefs.getString('name');
+        _userFirstName = prefs.getString('first_name');
         _userEmail = prefs.getString('email');
-        _userId = prefs.getInt('user_id');
         _userRole = prefs.getString('role');
         _isLoading = false;
       });
-    } catch (e) {
-      print('Error loading user data: $e');
-      setState(() => _isLoading = false);
     }
   }
 
@@ -141,7 +174,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Welcome back, ${_userName ?? 'User'}!',
+                  'Welcome back, ${_userFirstName ?? 'User'}!',
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -346,16 +379,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
         ),
-        actions:
-            _selectedIndex == 1
-                ? [
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    onPressed: _showNewTicketModal,
-                    tooltip: 'Create New Ticket',
-                  ),
-                ]
-                : null,
       ),
       body:
           _isLoading

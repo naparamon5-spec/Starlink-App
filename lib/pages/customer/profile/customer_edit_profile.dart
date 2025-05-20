@@ -19,16 +19,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _lastNameController = TextEditingController();
   final _middleNameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _companyNameController = TextEditingController();
-  final _jobTitleController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadSavedData();
-    // Add listeners to text controllers
-    _jobTitleController.addListener(_onFieldChanged);
-    _companyNameController.addListener(_onFieldChanged);
   }
 
   Future<void> _loadSavedData() async {
@@ -39,31 +34,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _middleNameController.text = _prefs.getString('middleName') ?? '';
       _emailController.text =
           _prefs.getString('email') ?? 'johndoe@example.com';
-      _companyNameController.text = _prefs.getString('companyName') ?? '';
-      _jobTitleController.text = _prefs.getString('jobTitle') ?? '';
     });
-  }
-
-  void _onFieldChanged() {
-    if (widget.onProfileUpdated != null) {
-      widget.onProfileUpdated!({
-        'jobTitle': _jobTitleController.text,
-        'companyName': _companyNameController.text,
-      });
-    }
   }
 
   @override
   void dispose() {
-    // Remove listeners before disposing
-    _jobTitleController.removeListener(_onFieldChanged);
-    _companyNameController.removeListener(_onFieldChanged);
     _firstNameController.dispose();
     _lastNameController.dispose();
     _middleNameController.dispose();
     _emailController.dispose();
-    _companyNameController.dispose();
-    _jobTitleController.dispose();
     super.dispose();
   }
 
@@ -74,14 +53,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       await _prefs.setString('lastName', _lastNameController.text);
       await _prefs.setString('middleName', _middleNameController.text);
       await _prefs.setString('email', _emailController.text);
-      await _prefs.setString('companyName', _companyNameController.text);
-      await _prefs.setString('jobTitle', _jobTitleController.text);
 
       if (mounted) {
         // Return the updated profile data to the previous screen
         Navigator.pop(context, {
-          'jobTitle': _jobTitleController.text,
-          'companyName': _companyNameController.text,
           'firstName': _firstNameController.text,
           'lastName': _lastNameController.text,
           'email': _emailController.text,
@@ -227,26 +202,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     }
                     return null;
                   },
-                ),
-
-                const SizedBox(height: 32),
-                // Company Information Section
-                _buildSectionTitle('Company Information'),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _companyNameController,
-                  label: 'Company Name',
-                  icon: Icons.business_outlined,
-                  validator:
-                      (value) => value?.isEmpty ?? true ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _jobTitleController,
-                  label: 'Job Title',
-                  icon: Icons.work_outline,
-                  validator:
-                      (value) => value?.isEmpty ?? true ? 'Required' : null,
                 ),
 
                 const SizedBox(height: 32),

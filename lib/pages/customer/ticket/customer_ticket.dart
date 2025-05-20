@@ -598,6 +598,7 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                     bottom: Radius.circular(15),
                   ),
                 ),
+                actions: null,
               )
               : null,
       body: Column(
@@ -735,11 +736,6 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                     ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: showNewTicketModal,
-        backgroundColor: const Color(0xFF133343),
-        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
