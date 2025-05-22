@@ -505,6 +505,34 @@ class ApiService {
       throw Exception('Error fetching customers: $e');
     }
   }
+
+  static Future<Map<String, dynamic>> getBillingCycles(
+    String subscriptionId,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$baseUrl/api.php?action=get_billing_cycles&subscription_id=$subscriptionId',
+        ),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch billing cycles');
+        }
+      } else {
+        throw Exception(
+          'Failed to fetch billing cycles: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      throw Exception('Error fetching billing cycles: $e');
+    }
+  }
 }
 
 class TimeoutException implements Exception {

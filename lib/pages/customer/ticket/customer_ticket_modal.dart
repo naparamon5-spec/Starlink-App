@@ -250,7 +250,10 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
         ),
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 16.0,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -263,7 +266,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                     color: Colors.black87,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
                 // Loading or Error State
                 if (_isLoading)
@@ -271,7 +274,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                 else if (_errorMessage != null)
                   Text(
                     _errorMessage!,
-                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
                   )
                 else ...[
                   // Ticket Type Dropdown
@@ -279,10 +282,14 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                     decoration: InputDecoration(
                       labelText: 'Ticket Type',
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
+                        borderRadius: BorderRadius.circular(6.0),
                       ),
                       filled: true,
                       fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                     value: _selectedTicketType,
                     items:
@@ -303,17 +310,21 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                                 ? 'Please select a ticket type'
                                 : null,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // Contact Dropdown
                   DropdownButtonFormField<String>(
                     decoration: InputDecoration(
                       labelText: 'Contact',
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
+                        borderRadius: BorderRadius.circular(6.0),
                       ),
                       filled: true,
                       fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                     value: _selectedContact,
                     items:
@@ -332,24 +343,32 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                         (value) =>
                             value == null ? 'Please select a contact' : null,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // Subscription Dropdown
                   DropdownButtonFormField<String>(
                     decoration: InputDecoration(
                       labelText: 'Subscription',
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
+                        borderRadius: BorderRadius.circular(6.0),
                       ),
                       filled: true,
                       fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      isDense: true,
                     ),
                     value: _selectedSubscription,
                     items:
                         _subscriptions.map((subscription) {
                           return DropdownMenuItem(
                             value: subscription,
-                            child: Text(subscription),
+                            child: Text(
+                              subscription,
+                              style: const TextStyle(fontSize: 13),
+                            ),
                           );
                         }).toList(),
                     onChanged: (value) {
@@ -362,8 +381,11 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                             value == null
                                 ? 'Please select a subscription'
                                 : null,
+                    isExpanded: true,
+                    icon: const Icon(Icons.arrow_drop_down, size: 20),
+                    dropdownColor: Colors.white,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // Description
                   TextFormField(
@@ -371,10 +393,14 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                     decoration: InputDecoration(
                       labelText: 'Description',
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
+                        borderRadius: BorderRadius.circular(6.0),
                       ),
                       filled: true,
                       fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
                     ),
                     maxLines: 4,
                     validator:
@@ -383,7 +409,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                                 ? 'Please enter a description'
                                 : null,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // Attachments
                   Row(
@@ -391,15 +417,26 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                     children: [
                       Text(
                         'Attachments',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
                       ),
                       TextButton.icon(
                         onPressed: _pickFiles,
-                        icon: const Icon(Icons.attach_file, size: 20),
-                        label: const Text('Add File'),
+                        icon: const Icon(Icons.attach_file, size: 18),
+                        label: const Text(
+                          'Add File',
+                          style: TextStyle(fontSize: 13),
+                        ),
                         style: TextButton.styleFrom(
                           foregroundColor: Theme.of(context).primaryColor,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                         ),
                       ),
                     ],
@@ -407,20 +444,20 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                   const SizedBox(height: 2),
                   Text(
                     'Only PDF, DOCX, JPG, JPEG, or PNG files allowed',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
 
                   // Display attached files
                   if (_attachedFiles.isNotEmpty) ...[
                     Container(
-                      margin: const EdgeInsets.only(top: 8),
+                      margin: const EdgeInsets.only(top: 6),
                       constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.2,
+                        maxHeight: MediaQuery.of(context).size.height * 0.15,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: Colors.grey[300]!),
                       ),
                       child: SingleChildScrollView(
@@ -511,7 +548,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                     ),
                   ],
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 24),
 
                   // Actions
                   Row(
@@ -520,9 +557,15 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                       if (widget.onCancel != null)
                         TextButton(
                           onPressed: widget.onCancel,
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
                           child: const Text(
                             'Cancel',
-                            style: TextStyle(color: Colors.grey),
+                            style: TextStyle(color: Colors.grey, fontSize: 13),
                           ),
                         ),
                       const SizedBox(width: 8),
@@ -530,16 +573,16 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                         onPressed: _submitTicket,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
+                            horizontal: 20,
+                            vertical: 10,
                           ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8.0),
+                            borderRadius: BorderRadius.circular(6.0),
                           ),
                         ),
                         child: const Text(
                           'Create Ticket',
-                          style: TextStyle(fontSize: 16),
+                          style: TextStyle(fontSize: 14),
                         ),
                       ),
                     ],

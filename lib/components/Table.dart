@@ -145,53 +145,6 @@ class _ReusableTableState extends State<ReusableTable> {
     );
   }
 
-  Widget _buildSortableHeader(String text, int columnIndex) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Flexible(
-          child: Text(
-            text,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ),
-        if (_sortColumnIndex == columnIndex)
-          Icon(
-            _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-            size: 16,
-            color: Colors.blue,
-          )
-        else
-          const Icon(Icons.swap_vert, size: 16, color: Colors.grey),
-      ],
-    );
-  }
-
-  Widget _buildTableCell(String value, String header, BuildContext context) {
-    if (header == 'Description') {
-      final isLongText = value.length > 100;
-      return Container(
-        constraints: const BoxConstraints(maxWidth: 200, minWidth: 200),
-        child: InkWell(
-          onTap: () => _showDescriptionDialog(context, value),
-          child: Text(
-            isLongText ? '${value.substring(0, 100)}...' : value,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.black87, // Changed to regular text color
-            ),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 2,
-          ),
-        ),
-      );
-    }
-
-    // For other columns
-    return Text(value, style: const TextStyle(fontSize: 14));
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -199,67 +152,113 @@ class _ReusableTableState extends State<ReusableTable> {
         Expanded(
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columnSpacing: 20,
-              horizontalMargin: 12,
-              sortColumnIndex:
-                  _sortColumnIndex != null ? _sortColumnIndex! + 1 : null,
-              sortAscending: _sortAscending,
-              headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-              columns: [
-                const DataColumn(
-                  label: Text(
-                    'No.',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: MediaQuery.of(context).size.width - 32,
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  dividerTheme: const DividerThemeData(
+                    color: Color(0xFFE0E0E0),
+                    thickness: 1,
                   ),
                 ),
-                ...widget.headers.asMap().entries.map((entry) {
-                  return DataColumn(
-                    label: _buildSortableHeader(entry.value, entry.key),
-                    onSort:
-                        (columnIndex, ascending) =>
-                            _sort(columnIndex - 1, ascending),
-                  );
-                }).toList(),
-              ],
-              rows:
-                  _paginatedData.asMap().entries.map((entry) {
-                    final rowData = entry.value;
-                    return DataRow(
-                      onSelectChanged:
-                          widget.onRowTap != null
-                              ? (_) => widget.onRowTap!(rowData)
-                              : null,
-                      cells: [
-                        DataCell(
-                          Text(
-                            '${(_currentPage * _rowsPerPage) + entry.key + 1}',
-                            style: const TextStyle(
-                              color: Color(0xFF133343),
-                              fontWeight: FontWeight.w500,
-                            ),
+                child: DataTable(
+                  columnSpacing: 24,
+                  horizontalMargin: 16,
+                  headingRowHeight: 56,
+                  dataRowHeight: 64,
+                  sortColumnIndex:
+                      _sortColumnIndex != null ? _sortColumnIndex! + 1 : null,
+                  sortAscending: _sortAscending,
+                  headingRowColor: MaterialStateProperty.all(
+                    const Color(0xFFF5F7FA),
+                  ),
+                  dataRowColor: MaterialStateProperty.resolveWith<Color?>((
+                    Set<MaterialState> states,
+                  ) {
+                    if (states.contains(MaterialState.selected)) {
+                      return const Color(0xFFE3F2FD);
+                    }
+                    return null;
+                  }),
+                  columns: [
+                    const DataColumn(
+                      label: SizedBox(
+                        width: 50,
+                        child: Text(
+                          'No.',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF133343),
+                            fontSize: 14,
                           ),
                         ),
-                        ...widget.headers
-                            .map(
-                              (header) => DataCell(
-                                _buildTableCell(
-                                  rowData[header]?.toString() ?? '',
-                                  header,
-                                  context,
+                      ),
+                    ),
+                    ...widget.headers.asMap().entries.map((entry) {
+                      return DataColumn(
+                        label: SizedBox(
+                          width: 150,
+                          child: _buildSortableHeader(entry.value, entry.key),
+                        ),
+                        onSort:
+                            (columnIndex, ascending) =>
+                                _sort(columnIndex - 1, ascending),
+                      );
+                    }).toList(),
+                  ],
+                  rows:
+                      _paginatedData.asMap().entries.map((entry) {
+                        final rowData = entry.value;
+                        return DataRow(
+                          onSelectChanged:
+                              widget.onRowTap != null
+                                  ? (_) => widget.onRowTap!(rowData)
+                                  : null,
+                          cells: [
+                            DataCell(
+                              SizedBox(
+                                width: 50,
+                                child: Text(
+                                  '${(_currentPage * _rowsPerPage) + entry.key + 1}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF133343),
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
-                            )
-                            .toList(),
-                      ],
-                    );
-                  }).toList(),
+                            ),
+                            ...widget.headers
+                                .map(
+                                  (header) => DataCell(
+                                    SizedBox(
+                                      width: 150,
+                                      child: _buildTableCell(
+                                        rowData[header]?.toString() ?? '',
+                                        header,
+                                        context,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ],
+                        );
+                      }).toList(),
+                ),
+              ),
             ),
           ),
         ),
         if (_sortedData.length > _rowsPerPage)
-          Padding(
+          Container(
             padding: const EdgeInsets.symmetric(vertical: 16.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Colors.grey[200]!)),
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -267,7 +266,9 @@ class _ReusableTableState extends State<ReusableTable> {
                   icon: const Icon(Icons.chevron_left),
                   onPressed: _currentPage > 0 ? _previousPage : null,
                   color:
-                      _currentPage > 0 ? const Color(0xFF133343) : Colors.grey,
+                      _currentPage > 0
+                          ? const Color(0xFF133343)
+                          : Colors.grey[400],
                   tooltip: 'Previous page',
                 ),
                 Container(
@@ -287,13 +288,82 @@ class _ReusableTableState extends State<ReusableTable> {
                   color:
                       _currentPage < _pageCount - 1
                           ? const Color(0xFF133343)
-                          : Colors.grey,
+                          : Colors.grey[400],
                   tooltip: 'Next page',
                 ),
               ],
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildSortableHeader(String text, int columnIndex) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF133343),
+              fontSize: 14,
+            ),
+          ),
+        ),
+        if (_sortColumnIndex == columnIndex)
+          Icon(
+            _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+            size: 16,
+            color: const Color(0xFF133343),
+          )
+        else
+          Icon(Icons.swap_vert, size: 16, color: Colors.grey[400]),
+      ],
+    );
+  }
+
+  Widget _buildTableCell(String value, String header, BuildContext context) {
+    if (header == 'Description') {
+      final isLongText = value.length > 100;
+      return Container(
+        constraints: const BoxConstraints(maxWidth: 200, minWidth: 200),
+        child: InkWell(
+          onTap: () => _showDescriptionDialog(context, value),
+          child: Text(
+            isLongText ? '${value.substring(0, 100)}...' : value,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF424242)),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+          ),
+        ),
+      );
+    }
+
+    if (header == 'Status') {
+      final isActive = value.toLowerCase() == 'active';
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: isActive ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+          ),
+        ),
+      );
+    }
+
+    return Text(
+      value,
+      style: const TextStyle(fontSize: 14, color: Color(0xFF424242)),
     );
   }
 }

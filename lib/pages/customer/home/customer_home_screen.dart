@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../ticket/customer_ticket.dart';
 import '../profile/customer_profile.dart';
 import '../ticket/customer_ticket_modal.dart';
+import 'customer_details.dart';
 
 class CustomerHomeScreen extends StatefulWidget {
   final String loginMessage;
@@ -24,6 +25,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   String? _userRole;
   bool _isLoading = true;
   int? _userId;
+  List<Map<String, dynamic>> _subscriptions = [];
+  List<Map<String, dynamic>> _billingCycles = [];
 
   @override
   void initState() {
@@ -61,6 +64,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         await prefs.setString('first_name', _userFirstName ?? '');
         await prefs.setString('email', _userEmail ?? '');
         await prefs.setString('role', _userRole ?? '');
+
+        // Load subscriptions after user data is loaded
+        await _loadSubscriptions();
       } else {
         throw Exception(response['message'] ?? 'Failed to fetch user data');
       }
@@ -76,6 +82,39 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         _userRole = prefs.getString('role');
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadSubscriptions() async {
+    try {
+      final response = await ApiService.getSubscriptions();
+      if (response['status'] == 'success' && response['data'] != null) {
+        setState(() {
+          _subscriptions = List<Map<String, dynamic>>.from(response['data']);
+        });
+
+        // Load billing cycles for each subscription
+        for (var subscription in _subscriptions) {
+          await _loadBillingCycles(subscription['id'].toString());
+        }
+      }
+    } catch (e) {
+      print('Error loading subscriptions: $e');
+    }
+  }
+
+  Future<void> _loadBillingCycles(String subscriptionId) async {
+    try {
+      final response = await ApiService.getBillingCycles(subscriptionId);
+      if (response['status'] == 'success' && response['data'] != null) {
+        setState(() {
+          _billingCycles.addAll(
+            List<Map<String, dynamic>>.from(response['data']),
+          );
+        });
+      }
+    } catch (e) {
+      print('Error loading billing cycles: $e');
     }
   }
 
@@ -229,9 +268,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Recent Activity
+          // Subscriptions Table
           const Text(
-            'Recent Activity',
+            'My Subscriptions',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -239,47 +278,270 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+          _subscriptions.isEmpty
+              ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.subscriptions_outlined,
+                      size: 64,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No subscriptions found',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Your subscriptions will appear here',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                _buildActivityItem(
-                  icon: Icons.check_circle,
-                  title: 'Ticket #1234',
-                  subtitle: 'Resolved - Technical Support',
-                  time: '2 hours ago',
-                  color: Colors.green,
+              )
+              : SizedBox(
+                height: 360,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _subscriptions.length,
+                  itemBuilder: (context, index) {
+                    final subscription = _subscriptions[index];
+                    final isActive = subscription['active'] == true;
+
+                    return Container(
+                      width: 340,
+                      margin: EdgeInsets.only(
+                        left: index == 0 ? 0 : 12,
+                        right: index == _subscriptions.length - 1 ? 12 : 0,
+                      ),
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => CustomerDetailsScreen(
+                                    subscription: subscription,
+                                  ),
+                            ),
+                          );
+                        },
+                        child: Stack(
+                          children: [
+                            // Background Card
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.06),
+                                    blurRadius: 15,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Content
+                            Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Status Bar
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          isActive
+                                              ? const Color(0xFFE8F5E9)
+                                              : const Color(0xFFFFEBEE),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isActive
+                                              ? Icons.check_circle
+                                              : Icons.cancel,
+                                          size: 16,
+                                          color:
+                                              isActive
+                                                  ? const Color(0xFF2E7D32)
+                                                  : const Color(0xFFC62828),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          isActive ? 'Active' : 'Inactive',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                            color:
+                                                isActive
+                                                    ? const Color(0xFF2E7D32)
+                                                    : const Color(0xFFC62828),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  // Subscription Name
+                                  Text(
+                                    subscription['nickname'] ?? 'N/A',
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF133343),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // Service Line
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFF133343,
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.router_outlined,
+                                          color: Color(0xFF133343),
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Service Line',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              subscription['serviceLineNumber'] ??
+                                                  'N/A',
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w500,
+                                                color: Color(0xFF133343),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // Address
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFF133343,
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.location_on_outlined,
+                                          color: Color(0xFF133343),
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Address',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              subscription['address'] ?? 'N/A',
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w500,
+                                                color: Color(0xFF133343),
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const Spacer(),
+                                  // Action Button
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _showNewTicketModal(),
+                                      icon: const Icon(
+                                        Icons.add_circle_outline,
+                                        size: 18,
+                                      ),
+                                      label: const Text(
+                                        'Create Ticket',
+                                        style: TextStyle(fontSize: 14),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFF133343,
+                                        ),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                const Divider(),
-                _buildActivityItem(
-                  icon: Icons.pending,
-                  title: 'Ticket #1235',
-                  subtitle: 'In Progress - Billing',
-                  time: '1 day ago',
-                  color: Colors.orange,
-                ),
-                const Divider(),
-                _buildActivityItem(
-                  icon: Icons.add_circle,
-                  title: 'New Ticket Created',
-                  subtitle: 'General Inquiry',
-                  time: '2 days ago',
-                  color: Colors.blue,
-                ),
-              ],
-            ),
-          ),
+              ),
         ],
       ),
     );
@@ -319,50 +581,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildActivityItem({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required String time,
-    required Color color,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          Text(time, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-        ],
       ),
     );
   }
