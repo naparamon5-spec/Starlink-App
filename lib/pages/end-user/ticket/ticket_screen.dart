@@ -75,7 +75,7 @@ class _TicketScreenState extends State<TicketScreen> {
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _userId = prefs.getString('userId');
+      _userId = prefs.getInt('user_id')?.toString();
     });
   }
 
@@ -249,11 +249,13 @@ class _TicketScreenState extends State<TicketScreen> {
                 'id': ticket['id'],
                 'type': ticket['type'] ?? 'N/A',
                 'contact': contactName,
+                'contact_id': ticket['contact'],
                 'subscription': ticket['subscription'] ?? 'N/A',
                 'description': ticket['description'] ?? 'No description',
                 'attachments': displayAttachments,
                 'status': (ticket['status'] ?? 'open').toUpperCase(),
                 'created_at': createdAt,
+                'user_id': ticket['user_id'],
               };
             }),
           );

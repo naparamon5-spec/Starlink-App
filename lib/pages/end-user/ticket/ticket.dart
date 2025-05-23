@@ -31,6 +31,7 @@ class _TicketScreenState extends State<TicketScreen> {
 
   final List<String> _tableHeaders = [
     'Status',
+    'Contact',
     'Subscription',
     'Ticket Type',
     'Attachments',
@@ -115,9 +116,15 @@ class _TicketScreenState extends State<TicketScreen> {
                 }
               }
 
+              // Debug print to verify contact data
+              print(
+                'Processing ticket contact data: ${ticket['contact_name']} (ID: ${ticket['contact']})',
+              );
+
               return {
                 'id': ticket['id'],
                 'Status': (ticket['status'] ?? 'open').toUpperCase(),
+                'Contact': ticket['contact_name'] ?? 'Not Assigned',
                 'Subscription': ticket['subscription'] ?? 'N/A',
                 'Ticket Type': ticket['type'] ?? 'N/A',
                 'Attachments': attachmentsDisplay,
@@ -126,6 +133,8 @@ class _TicketScreenState extends State<TicketScreen> {
                   ...ticket,
                   'created_at': _formatDate(ticket['created_at']),
                   'attachments': ticket['attachments'] ?? [],
+                  'contact': ticket['contact'] ?? null,
+                  'contact_name': ticket['contact_name'] ?? 'Not Assigned',
                 },
               };
             }),
@@ -210,6 +219,12 @@ class _TicketScreenState extends State<TicketScreen> {
 
   void _showTicketDetails(Map<String, dynamic> ticket) {
     final fullData = ticket['full_data'] as Map<String, dynamic>;
+
+    // Debug print to verify contact data in details
+    print(
+      'Showing ticket details - Contact: ${fullData['contact_name']} (ID: ${fullData['contact']})',
+    );
+
     showDialog(
       context: context,
       builder:
@@ -253,8 +268,10 @@ class _TicketScreenState extends State<TicketScreen> {
                             children: [
                               Expanded(
                                 child: _buildDetailItem(
-                                  'Ticket Type',
-                                  fullData['type'] ?? 'N/A',
+                                  'Contact',
+                                  fullData['contact_name'] != null
+                                      ? '${fullData['contact_name']} (ID: ${fullData['contact']})'
+                                      : 'Not Assigned',
                                 ),
                               ),
                               const SizedBox(width: 24),
@@ -955,7 +972,9 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                           Expanded(
                             child: _buildDetailItem(
                               'Contact',
-                              _ticket['contact']?.toString(),
+                              _ticket['contact_name'] != null
+                                  ? '${_ticket['contact_name']} (ID: ${_ticket['contact']})'
+                                  : 'Not Assigned',
                             ),
                           ),
                           const SizedBox(width: 24),

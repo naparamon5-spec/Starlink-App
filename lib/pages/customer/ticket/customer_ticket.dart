@@ -191,8 +191,9 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
             response['data']
                 .where(
                   (ticket) =>
-                      // Show tickets where this user is the contact
-                      ticket['contact'] == _userId,
+                      // Show tickets where this user is either the contact or the creator
+                      ticket['contact']?.toString() == _userId.toString() ||
+                      ticket['user_id']?.toString() == _userId.toString(),
                 )
                 .map((ticket) {
                   // Format attachments for display
