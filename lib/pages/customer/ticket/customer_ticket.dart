@@ -11,10 +11,10 @@ class CustomerTicketScreen extends StatefulWidget {
   const CustomerTicketScreen({super.key, this.showAppBar = true});
 
   @override
-  _CustomerTicketScreenState createState() => _CustomerTicketScreenState();
+  _CustomerTicketState createState() => _CustomerTicketState();
 }
 
-class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
+class _CustomerTicketState extends State<CustomerTicketScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedFilter = 'All';
   List<Map<String, dynamic>> _tickets = [];

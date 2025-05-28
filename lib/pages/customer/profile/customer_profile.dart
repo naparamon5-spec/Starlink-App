@@ -121,7 +121,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   void _navigateToTickets() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const CustomerTicketScreen()),
+      MaterialPageRoute(
+        builder: (context) => const CustomerTicketScreen(showAppBar: true),
+      ),
     );
   }
 
