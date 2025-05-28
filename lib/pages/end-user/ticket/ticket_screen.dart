@@ -201,47 +201,27 @@ class _TicketScreenState extends State<TicketScreen> {
               final contactId = ticket['contact']?.toString() ?? '';
               final contactName = agentMap[contactId] ?? 'Not Assigned';
 
-              // Get attachments and display original file names
-              String displayAttachments = 'No attachments';
-              if (ticket['attachments'] != null &&
-                  ticket['attachments'].toString().isNotEmpty) {
-                try {
-                  if (ticket['attachments'] is List) {
-                    final fileNames =
-                        ticket['attachments']
-                            .where((attachment) => attachment != null)
-                            .map((attachment) {
-                              if (attachment is Map) {
-                                return attachment['name']?.toString() ?? '';
-                              } else if (attachment is String) {
-                                return attachment;
-                              }
-                              return '';
-                            })
-                            .where((name) => name.isNotEmpty)
-                            .toList();
-
-                    displayAttachments =
-                        fileNames.isNotEmpty
-                            ? fileNames.join(', ')
-                            : 'No attachments';
-                  } else if (ticket['attachments'] is String) {
-                    final fileNames =
-                        ticket['attachments']
-                            .split(',')
-                            .map((name) => name.trim())
-                            .where((name) => name.isNotEmpty)
-                            .toList();
-
-                    displayAttachments =
-                        fileNames.isNotEmpty
-                            ? fileNames.join(', ')
-                            : 'No attachments';
+              // Process attachments
+              String attachmentsDisplay = 'No attachments';
+              if (ticket['attachments'] != null) {
+                if (ticket['attachments'] is List) {
+                  final attachments = List<dynamic>.from(ticket['attachments']);
+                  if (attachments.isNotEmpty) {
+                    attachmentsDisplay = attachments
+                        .map((attachment) {
+                          if (attachment is Map) {
+                            return attachment['original_name']?.toString() ??
+                                '';
+                          } else if (attachment is String) {
+                            return attachment;
+                          }
+                          return '';
+                        })
+                        .where((name) => name.isNotEmpty)
+                        .join(', ');
                   }
-                } catch (e) {
-                  print('Error processing attachments: $e');
-                  print('Raw attachments data: ${ticket['attachments']}');
-                  displayAttachments = 'Error displaying attachments';
+                } else if (ticket['attachments'] is String) {
+                  attachmentsDisplay = ticket['attachments'];
                 }
               }
 
@@ -254,7 +234,7 @@ class _TicketScreenState extends State<TicketScreen> {
                 'contact_id': ticket['contact'],
                 'subscription': ticket['subscription'] ?? 'N/A',
                 'description': ticket['description'] ?? 'No description',
-                'attachments': displayAttachments,
+                'attachments': attachmentsDisplay,
                 'status': status,
                 'created_at': createdAt,
                 'user_id': ticket['user_id'],

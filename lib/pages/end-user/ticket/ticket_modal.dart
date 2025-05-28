@@ -94,6 +94,27 @@ class _NewTicketModalState extends State<NewTicketModal> {
       );
 
       if (result != null && result.files.isNotEmpty) {
+        // Validate file sizes (e.g., max 5MB per file)
+        const maxFileSize = 5 * 1024 * 1024; // 5MB in bytes
+        final oversizedFiles = result.files.where(
+          (file) => file.size > maxFileSize,
+        );
+
+        if (oversizedFiles.isNotEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Some files exceed the 5MB limit: ${oversizedFiles.map((f) => f.name).join(', ')}',
+                ),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+
         setState(() {
           for (var file in result.files) {
             if (!_attachedFiles.any((f) => f.name == file.name)) {
@@ -143,12 +164,18 @@ class _NewTicketModalState extends State<NewTicketModal> {
         if (_attachedFiles.isNotEmpty) {
           for (var file in _attachedFiles) {
             if (file.bytes != null) {
-              attachmentsData.add({
-                'name': file.name,
-                'data': base64Encode(file.bytes!),
-                'type': file.extension ?? '',
-                'size': file.size,
-              });
+              // Create a unique filename with proper extension
+              final timestamp = DateTime.now().millisecondsSinceEpoch;
+              final fileExtension = file.extension?.toLowerCase() ?? '';
+              final uniqueFileName = '${timestamp}_${file.name}';
+              final filePath = 'uploads/$uniqueFileName';
+
+              // Validate file path
+              if (filePath.isEmpty) {
+                throw Exception('Invalid file path generated');
+              }
+
+              attachmentsData.add({'name': file.name, 'path': filePath});
             }
           }
         }
@@ -157,19 +184,19 @@ class _NewTicketModalState extends State<NewTicketModal> {
         final selectedContactId = _contacts[_selectedContact];
         final selectedContactName = _selectedContact;
 
+        // Match exactly what the API expects in create_ticket endpoint
         final newTicket = {
-          'type': _selectedTicketType,
-          'contact': selectedContactId, // Customer ID for database
-          'contact_name': selectedContactName, // Customer name for display
-          'subscription': _selectedSubscription,
+          'user_id': widget.userId,
+          'type': _selectedTicketType, // API expects 'type' not 'ticket_type'
+          'contact':
+              selectedContactId, // API expects 'contact' not 'assigned_agent'
+          'subscription':
+              _selectedSubscription, // API expects 'subscription' not 'subscription_id'
           'description': _descriptionController.text,
-          'user_id': widget.userId, // ID of the end-user creating the ticket
-          'status': 'open',
           'attachments': attachmentsData,
-          'attachments_display': _attachedFiles
-              .map((file) => file.name)
-              .join(', '),
         };
+
+        print('Submitting ticket with data: $newTicket'); // Debug print
 
         // Show loading indicator
         if (!mounted) return;
@@ -190,11 +217,27 @@ class _NewTicketModalState extends State<NewTicketModal> {
         );
 
         // Submit the ticket
-        await widget.onConfirm(newTicket);
+        final response = await widget.onConfirm(newTicket);
 
         // Clear the loading snackbar
         if (!mounted) return;
         ScaffoldMessenger.of(context).clearSnackBars();
+
+        // Parse the response
+        if (response is String) {
+          try {
+            // Try to parse the response as JSON
+            final jsonResponse = jsonDecode(response);
+            if (jsonResponse['status'] == 'error') {
+              throw Exception(
+                jsonResponse['message'] ?? 'Unknown error occurred',
+              );
+            }
+          } catch (e) {
+            // If parsing fails, throw the original response
+            throw Exception(response);
+          }
+        }
 
         // Show success message
         if (!mounted) return;
@@ -208,9 +251,23 @@ class _NewTicketModalState extends State<NewTicketModal> {
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).clearSnackBars();
+
+        // Format the error message
+        String errorMessage = e.toString();
+        if (errorMessage.contains('Integrity constraint violation')) {
+          errorMessage = 'Error saving file information. Please try again.';
+        } else if (errorMessage.contains('FormatException')) {
+          errorMessage =
+              'Server returned an invalid response. Please try again.';
+        } else if (errorMessage.contains('<br />')) {
+          errorMessage = 'Server error. Please try again later.';
+        }
+
+        print('Error details: $errorMessage'); // Debug print
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating ticket: ${e.toString()}'),
+            content: Text('Error creating ticket: $errorMessage'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),

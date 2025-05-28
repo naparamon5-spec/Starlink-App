@@ -627,35 +627,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                                     ],
                                   ),
                                   const Spacer(),
-                                  // Action Button
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton.icon(
-                                      onPressed: () => _showNewTicketModal(),
-                                      icon: const Icon(
-                                        Icons.add_circle_outline,
-                                        size: 18,
-                                      ),
-                                      label: const Text(
-                                        'Create Ticket',
-                                        style: TextStyle(fontSize: 14),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFF133343,
-                                        ),
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),

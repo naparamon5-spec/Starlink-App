@@ -91,28 +91,27 @@ class _TicketScreenState extends State<TicketScreen> {
         setState(() {
           _tickets = List<Map<String, dynamic>>.from(
             response['data'].map((ticket) {
-              // Format attachments for display
+              // Process attachments
               String attachmentsDisplay = 'No attachments';
-              if (ticket['attachments'] != null &&
-                  ticket['attachments'].isNotEmpty) {
+              if (ticket['attachments'] != null) {
                 if (ticket['attachments'] is List) {
-                  final fileNames =
-                      (ticket['attachments'] as List)
-                          .where((attachment) => attachment != null)
-                          .map((attachment) {
-                            if (attachment is Map) {
-                              return attachment['name']?.toString() ?? '';
-                            }
-                            return '';
-                          })
-                          .where((name) => name.isNotEmpty)
-                          .toList();
-                  attachmentsDisplay =
-                      fileNames.isNotEmpty
-                          ? fileNames.join(', ')
-                          : 'No attachments';
+                  final attachments = List<dynamic>.from(ticket['attachments']);
+                  if (attachments.isNotEmpty) {
+                    attachmentsDisplay = attachments
+                        .map((attachment) {
+                          if (attachment is Map) {
+                            return attachment['original_name']?.toString() ??
+                                '';
+                          } else if (attachment is String) {
+                            return attachment;
+                          }
+                          return '';
+                        })
+                        .where((name) => name.isNotEmpty)
+                        .join(', ');
+                  }
                 } else if (ticket['attachments'] is String) {
-                  attachmentsDisplay = ticket['attachments'].toString();
+                  attachmentsDisplay = ticket['attachments'];
                 }
               }
 
@@ -421,10 +420,14 @@ class _TicketScreenState extends State<TicketScreen> {
                                     ) {
                                       if (attachment is Map) {
                                         final fileName =
-                                            attachment['name']?.toString() ??
+                                            attachment['original_name']
+                                                ?.toString() ??
                                             'Unknown file';
                                         final fileType =
-                                            attachment['type']?.toString() ??
+                                            attachment['file_path']
+                                                ?.toString()
+                                                .split('.')
+                                                .last ??
                                             '';
                                         final fileSize = _formatFileSize(
                                           attachment['size'] as int?,
@@ -997,10 +1000,15 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                                 ) {
                                   if (attachment is Map) {
                                     final fileName =
-                                        attachment['name']?.toString() ??
+                                        attachment['original_name']
+                                            ?.toString() ??
                                         'Unknown file';
                                     final fileType =
-                                        attachment['type']?.toString() ?? '';
+                                        attachment['file_path']
+                                            ?.toString()
+                                            .split('.')
+                                            .last ??
+                                        '';
                                     final fileSize = _formatFileSize(
                                       attachment['size'] as int?,
                                     );
