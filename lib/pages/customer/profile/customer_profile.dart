@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:starlink_app/pages/customer/ticket/customer_ticket_screen.dart';
 import '../../../services/api_service.dart';
 import 'customer_edit_profile.dart';
 import 'customer_security_settings.dart';
 import 'customer_notification.dart';
 import '../../login_screen.dart';
-import '../ticket/customer_ticket_screen.dart';
+import '../ticket/customer_ticket.dart';
 
 class CustomerProfileScreen extends StatefulWidget {
   final bool showAppBar;
@@ -122,7 +123,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const CustomerTicketScreen(showAppBar: true),
+        builder: (context) => const CustomerTicketHistory(showAppBar: true),
       ),
     );
   }

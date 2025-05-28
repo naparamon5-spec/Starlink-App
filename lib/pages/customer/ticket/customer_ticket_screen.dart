@@ -3,16 +3,16 @@ import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'customer_view.dart';
 
-class CustomerTicketScreen extends StatefulWidget {
+class CustomerTicketHistory extends StatefulWidget {
   final bool showAppBar;
 
-  const CustomerTicketScreen({super.key, this.showAppBar = true});
+  const CustomerTicketHistory({super.key, this.showAppBar = true});
 
   @override
   _CustomerTicketScreenState createState() => _CustomerTicketScreenState();
 }
 
-class _CustomerTicketScreenState extends State<CustomerTicketScreen>
+class _CustomerTicketScreenState extends State<CustomerTicketHistory>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   String _selectedFilter = 'All';

@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../components/Table.dart';
 import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../ticket/customer_ticket_screen.dart';
 import '../ticket/customer_ticket.dart';
 import '../profile/customer_profile.dart';
 import '../ticket/customer_ticket_modal.dart';
@@ -381,7 +382,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       MaterialPageRoute(
                         builder:
                             (context) =>
-                                const CustomerTicketScreen(showAppBar: true),
+                                const CustomerTicketHistory(showAppBar: true),
                       ),
                     );
                   },
