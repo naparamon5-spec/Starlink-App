@@ -3,7 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../services/api_service.dart';
 import 'customer_edit_profile.dart';
 import 'customer_security_settings.dart';
+import 'customer_notification.dart';
 import '../../login_screen.dart';
+import '../ticket/customer_ticket_screen.dart';
 
 class CustomerProfileScreen extends StatefulWidget {
   final bool showAppBar;
@@ -113,6 +115,13 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SecuritySettingsScreen()),
+    );
+  }
+
+  void _navigateToTickets() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CustomerTicketScreen()),
     );
   }
 
@@ -292,10 +301,28 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                           const SizedBox(height: 12),
 
                           _ActionButton(
+                            icon: Icons.confirmation_number,
+                            label: 'Tickets',
+                            onPressed: _navigateToTickets,
+                            backgroundColor: Colors.grey[300] ?? Colors.grey,
+                            iconColor: Colors.black87,
+                            textColor: Colors.black87,
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          _ActionButton(
                             icon: Icons.notifications_active,
                             label: 'Notification',
                             onPressed: () {
-                              // Handle notifications
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) =>
+                                          const CustomerNotificationScreen(),
+                                ),
+                              );
                             },
                             backgroundColor: Colors.grey[300] ?? Colors.grey,
                             iconColor: Colors.black87,

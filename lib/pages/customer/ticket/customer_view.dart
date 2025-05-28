@@ -99,7 +99,12 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         setState(() {
           _tickets = List<Map<String, dynamic>>.from(
             response['data']
-                .where((ticket) => ticket['contact'] == _userId)
+                .where((ticket) {
+                  // Show tickets where this user is the contact and status is not DONE or CLOSED
+                  return ticket['contact'] == _userId &&
+                      ticket['status']?.toString().toLowerCase() != 'done' &&
+                      ticket['status']?.toString().toLowerCase() != 'closed';
+                })
                 .map((ticket) {
                   String attachmentsDisplay = 'No attachments';
                   if (ticket['attachments'] != null &&
@@ -125,10 +130,28 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                     }
                   }
 
+                  // Map backend status to display status
+                  String displayStatus = 'OPEN';
+                  String backendStatus =
+                      (ticket['status'] ?? 'open')
+                          .toString()
+                          .toLowerCase()
+                          .trim();
+
+                  if (backendStatus == 'open' || backendStatus == 'opened') {
+                    displayStatus = 'OPEN';
+                  } else if (backendStatus == 'in progress' ||
+                      backendStatus == 'in_progress' ||
+                      backendStatus == 'inprogress') {
+                    displayStatus = 'IN PROGRESS';
+                  } else {
+                    displayStatus = backendStatus.toUpperCase();
+                  }
+
                   return {
                     'id': ticket['id'],
                     'type': ticket['type'] ?? 'N/A',
-                    'status': (ticket['status'] ?? 'open').toUpperCase(),
+                    'status': displayStatus,
                     'subscription': ticket['subscription'] ?? 'N/A',
                     'description': ticket['description'] ?? 'No description',
                     'created_at': _formatDate(ticket['created_at']),
@@ -137,6 +160,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                       ...ticket,
                       'created_at': _formatDate(ticket['created_at']),
                       'attachments': ticket['attachments'] ?? [],
+                      'status': displayStatus,
                     },
                   };
                 }),
@@ -178,92 +202,166 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   Future<void> _acceptTicket() async {
     try {
       final response = await ApiService.updateTicketStatus(
-        widget.ticket['id'],
-        'accepted',
+        widget.ticket['id'].toString(),
+        'in progress',
       );
 
       if (response['status'] == 'success') {
         setState(() {
           _isAccepted = true;
+          widget.ticket['status'] = 'IN PROGRESS';
+          if (widget.ticket['full_data'] != null) {
+            widget.ticket['full_data']['status'] = 'IN PROGRESS';
+          }
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket accepted successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ticket accepted successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Pop back to the ticket screen and trigger a refresh with the new status
+          Navigator.pop(context, {
+            'status': 'IN PROGRESS',
+            'id': widget.ticket['id'].toString(),
+          });
+        }
       } else {
         throw Exception(response['message'] ?? 'Failed to accept ticket');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error accepting ticket: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error accepting ticket: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _resolveTicket() async {
     try {
       final response = await ApiService.updateTicketStatus(
-        widget.ticket['id'],
-        'resolved',
+        widget.ticket['id'].toString(),
+        'done',
       );
 
       if (response['status'] == 'success') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket resolved successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(
-          context,
-          true,
-        ); // Return true to indicate ticket was resolved
+        setState(() {
+          widget.ticket['status'] = 'DONE';
+          if (widget.ticket['full_data'] != null) {
+            widget.ticket['full_data']['status'] = 'DONE';
+          }
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ticket marked as done successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Pop back to the ticket screen with updated status and force refresh
+          Navigator.pop(context, {
+            'status': 'DONE',
+            'id': widget.ticket['id'].toString(),
+            'shouldRefresh': true,
+            'forceRefresh': true,
+          });
+        }
       } else {
         throw Exception(response['message'] ?? 'Failed to resolve ticket');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error resolving ticket: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error resolving ticket: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _closeTicket() async {
     try {
       final response = await ApiService.updateTicketStatus(
-        widget.ticket['id'],
+        widget.ticket['id'].toString(),
         'closed',
       );
 
       if (response['status'] == 'success') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket closed successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(
-          context,
-          true,
-        ); // Return true to indicate ticket was closed
+        setState(() {
+          widget.ticket['status'] = 'CLOSED';
+          if (widget.ticket['full_data'] != null) {
+            widget.ticket['full_data']['status'] = 'closed';
+          }
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ticket closed successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Pop back to the ticket screen and trigger a refresh
+          Navigator.pop(context, {
+            'status': 'CLOSED',
+            'id': widget.ticket['id'].toString(),
+          });
+        }
       } else {
         throw Exception(response['message'] ?? 'Failed to close ticket');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error closing ticket: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error closing ticket: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateTicketStatus(String ticketId, String newStatus) async {
+    try {
+      final response = await ApiService.updateTicketStatus(ticketId, newStatus);
+      if (response['status'] == 'success') {
+        setState(() {
+          widget.ticket['status'] = newStatus.toUpperCase();
+          if (widget.ticket['full_data'] != null) {
+            widget.ticket['full_data']['status'] = newStatus;
+          }
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ticket status updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating ticket status: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -271,6 +369,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   Widget build(BuildContext context) {
     final ticket = widget.ticket;
     final fullData = ticket['full_data'] as Map<String, dynamic>;
+    final status = fullData['status']?.toString().toUpperCase() ?? 'OPEN';
 
     return Scaffold(
       appBar: AppBar(
@@ -327,31 +426,15 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color:
-                              fullData['status']?.toString().toUpperCase() ==
-                                      'OPEN'
-                                  ? Colors.green.withOpacity(0.1)
-                                  : Colors.red.withOpacity(0.1),
+                          color: _getStatusColor(status).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color:
-                                fullData['status']?.toString().toUpperCase() ==
-                                        'OPEN'
-                                    ? Colors.green
-                                    : Colors.red,
-                          ),
+                          border: Border.all(color: _getStatusColor(status)),
                         ),
                         child: Text(
-                          fullData['status']?.toString().toUpperCase() ??
-                              'OPEN',
+                          status,
                           style: TextStyle(
-                            fontSize: 14,
+                            color: _getStatusColor(status),
                             fontWeight: FontWeight.bold,
-                            color:
-                                fullData['status']?.toString().toUpperCase() ==
-                                        'OPEN'
-                                    ? Colors.green
-                                    : Colors.red,
                           ),
                         ),
                       ),
@@ -519,8 +602,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
               ),
             ],
             const SizedBox(height: 24),
-            if (!_isAccepted &&
-                fullData['status']?.toString().toUpperCase() == 'OPEN')
+            if (!_isAccepted && status == 'OPEN')
               Center(
                 child: ElevatedButton(
                   onPressed: _acceptTicket,
@@ -544,7 +626,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                   ),
                 ),
               ),
-            if (_isAccepted) ...[
+            if ((_isAccepted || status == 'IN PROGRESS') &&
+                status != 'DONE') ...[
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -644,6 +727,21 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         return Icons.image;
       default:
         return Icons.insert_drive_file;
+    }
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'OPEN':
+        return Colors.green;
+      case 'IN PROGRESS':
+        return Colors.orange;
+      case 'DONE':
+        return Colors.blue;
+      case 'CLOSED':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 }

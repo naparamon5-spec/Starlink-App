@@ -184,16 +184,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   Widget _buildBody() {
-    switch (_selectedIndex) {
-      case 0:
-        return _buildDashboard();
-      case 1:
-        return const CustomerTicketScreen(showAppBar: false);
-      case 2:
-        return const CustomerProfileScreen(showAppBar: false);
-      default:
-        return _buildDashboard();
-    }
+    return IndexedStack(
+      index: _selectedIndex,
+      children: [
+        _buildDashboard(),
+        const CustomerTicketScreen(showAppBar: false),
+        const CustomerProfileScreen(showAppBar: false),
+      ],
+    );
   }
 
   Widget _buildDashboard() {

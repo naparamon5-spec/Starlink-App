@@ -245,6 +245,8 @@ class _TicketScreenState extends State<TicketScreen> {
                 }
               }
 
+              final status = (ticket['status'] ?? 'open').toUpperCase();
+
               return {
                 'id': ticket['id'],
                 'type': ticket['type'] ?? 'N/A',
@@ -253,9 +255,15 @@ class _TicketScreenState extends State<TicketScreen> {
                 'subscription': ticket['subscription'] ?? 'N/A',
                 'description': ticket['description'] ?? 'No description',
                 'attachments': displayAttachments,
-                'status': (ticket['status'] ?? 'open').toUpperCase(),
+                'status': status,
                 'created_at': createdAt,
                 'user_id': ticket['user_id'],
+                'full_data': {
+                  ...ticket,
+                  'status': status,
+                  'created_at': createdAt,
+                  'attachments': ticket['attachments'] ?? [],
+                },
               };
             }),
           );
@@ -276,6 +284,47 @@ class _TicketScreenState extends State<TicketScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error loading tickets: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _updateTicketStatus(String ticketId, String newStatus) async {
+    try {
+      final response = await ApiService.updateTicketStatus(ticketId, newStatus);
+      if (response['status'] == 'success') {
+        setState(() {
+          // Update the ticket status in both lists
+          for (var ticket in _tickets) {
+            if (ticket['id'].toString() == ticketId) {
+              ticket['status'] = newStatus.toUpperCase();
+              if (ticket['full_data'] != null) {
+                ticket['full_data']['status'] = newStatus.toUpperCase();
+              }
+            }
+          }
+          for (var ticket in _filteredTickets) {
+            if (ticket['id'].toString() == ticketId) {
+              ticket['status'] = newStatus.toUpperCase();
+              if (ticket['full_data'] != null) {
+                ticket['full_data']['status'] = newStatus.toUpperCase();
+              }
+            }
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket status updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating ticket status: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -369,7 +418,6 @@ class _TicketScreenState extends State<TicketScreen> {
   Widget _buildTicketCard(Map<String, dynamic> ticket) {
     final String ticketType = ticket['type']?.toString() ?? 'N/A';
     final String createdAt = ticket['created_at']?.toString() ?? 'N/A';
-    final String status = ticket['status']?.toString().toUpperCase() ?? 'N/A';
 
     return Card(
       elevation: 2,
@@ -421,30 +469,6 @@ class _TicketScreenState extends State<TicketScreen> {
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color:
-                      status == 'OPEN'
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: status == 'OPEN' ? Colors.green : Colors.red,
-                  ),
-                ),
-                child: Text(
-                  status,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: status == 'OPEN' ? Colors.green : Colors.red,
-                  ),
                 ),
               ),
             ],

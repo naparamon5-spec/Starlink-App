@@ -94,14 +94,6 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
     setState(() {
       _filteredTickets =
           _tickets.where((ticket) {
-            // Filter by status
-            bool matchesFilter = true;
-            if (selectedStatus != 'All') {
-              matchesFilter =
-                  ticket['Status'].toString().toLowerCase() ==
-                  selectedStatus.toLowerCase();
-            }
-
             // Filter by search query
             bool matchesQuery = true;
             if (query.isNotEmpty) {
@@ -111,7 +103,7 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
               });
             }
 
-            return matchesFilter && matchesQuery;
+            return matchesQuery;
           }).toList();
 
       // Reset to first page when search/filter changes
@@ -184,6 +176,7 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
     setState(() => _isLoading = true);
     try {
       final response = await ApiService.getTickets();
+      print('Raw ticket data from API: ${response['data']}'); // Debug log
 
       if (response['status'] == 'success' && mounted) {
         setState(() {
@@ -192,10 +185,19 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                 .where(
                   (ticket) =>
                       // Show tickets where this user is either the contact or the creator
-                      ticket['contact']?.toString() == _userId.toString() ||
-                      ticket['user_id']?.toString() == _userId.toString(),
+                      (ticket['contact']?.toString() == _userId.toString() ||
+                          ticket['user_id']?.toString() ==
+                              _userId.toString()) &&
+                      // Exclude CLOSED and DONE tickets
+                      ticket['status']?.toString().toLowerCase() != 'closed' &&
+                      ticket['status']?.toString().toLowerCase() != 'done',
                 )
                 .map((ticket) {
+                  // Debug log for each ticket's status
+                  print(
+                    'Processing ticket ID: ${ticket['id']}, Raw status: ${ticket['status']}',
+                  );
+
                   // Format attachments for display
                   String attachmentsDisplay = 'No attachments';
                   if (ticket['attachments'] != null &&
@@ -221,9 +223,40 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                     }
                   }
 
+                  // Map backend status to display status
+                  String displayStatus;
+                  String backendStatus =
+                      (ticket['status'] ?? '').toString().toLowerCase().trim();
+
+                  // Debug log for status processing
+                  print('Processing status for ticket ${ticket['id']}:');
+                  print('Backend status: $backendStatus');
+
+                  // Strict status mapping based on backend values
+                  if (backendStatus.isEmpty) {
+                    print('Warning: Empty status for ticket ${ticket['id']}');
+                    displayStatus = 'OPEN';
+                  } else {
+                    switch (backendStatus) {
+                      case 'open':
+                        displayStatus = 'OPEN';
+                        break;
+                      case 'in progress':
+                        displayStatus = 'IN PROGRESS';
+                        break;
+                      default:
+                        print(
+                          'Warning: Unknown status "$backendStatus" for ticket ${ticket['id']}',
+                        );
+                        displayStatus = backendStatus.toUpperCase();
+                    }
+                  }
+
+                  print('Final display status: $displayStatus');
+
                   return {
                     'id': ticket['id'],
-                    'Status': (ticket['status'] ?? 'open').toUpperCase(),
+                    'Status': displayStatus,
                     'Ticket Type': ticket['type'] ?? 'N/A',
                     'Contact': ticket['contact'] ?? 'N/A',
                     'Subscription': ticket['subscription'] ?? 'N/A',
@@ -235,6 +268,9 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                       ...ticket,
                       'created_at': _formatDate(ticket['created_at']),
                       'attachments': ticket['attachments'] ?? [],
+                      'status': displayStatus,
+                      'raw_status':
+                          backendStatus, // Store the raw status for debugging
                     },
                   };
                 }),
@@ -839,11 +875,11 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
   Widget _buildTicketCard(Map<String, dynamic> ticket) {
     final String ticketType = ticket['Ticket Type']?.toString() ?? 'N/A';
     final String createdAt = ticket['Created At']?.toString() ?? 'N/A';
-    final String status = ticket['Status']?.toString().toUpperCase() ?? 'N/A';
     final String description =
         ticket['Description']?.toString() ?? 'No description';
     final String contact = ticket['Contact']?.toString() ?? 'N/A';
     final String subscription = ticket['Subscription']?.toString() ?? 'N/A';
+    final String status = ticket['Status']?.toString() ?? 'OPEN';
 
     return Card(
       elevation: 2,
@@ -867,7 +903,36 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
             MaterialPageRoute(
               builder: (context) => CustomerViewScreen(ticket: ticketData),
             ),
-          );
+          ).then((result) {
+            if (result != null && result is Map<String, dynamic>) {
+              // If the ticket was closed or done, remove it from this list
+              if (result['status']?.toString().toUpperCase() == 'CLOSED' ||
+                  result['status']?.toString().toUpperCase() == 'DONE') {
+                setState(() {
+                  _tickets.removeWhere(
+                    (t) => t['id'].toString() == result['id'].toString(),
+                  );
+                  _filteredTickets = List.from(_tickets);
+                });
+              } else {
+                // Update the ticket status in the list
+                setState(() {
+                  final ticketIndex = _tickets.indexWhere(
+                    (t) => t['id'].toString() == result['id'].toString(),
+                  );
+                  if (ticketIndex != -1) {
+                    _tickets[ticketIndex]['Status'] = result['status'];
+                    if (_tickets[ticketIndex]['full_data'] != null) {
+                      _tickets[ticketIndex]['full_data']['status'] =
+                          result['status'];
+                    }
+                    // Update filtered tickets as well
+                    _filteredTickets = List.from(_tickets);
+                  }
+                });
+              }
+            }
+          });
         },
         borderRadius: BorderRadius.circular(12),
         child: Container(
@@ -895,13 +960,20 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          ticketType,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF133343),
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                ticketType,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF133343),
+                                ),
+                              ),
+                            ),
+                            _buildStatusChip(status),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -912,30 +984,6 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          status == 'OPEN'
-                              ? Colors.green.withOpacity(0.1)
-                              : Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: status == 'OPEN' ? Colors.green : Colors.red,
-                      ),
-                    ),
-                    child: Text(
-                      status,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: status == 'OPEN' ? Colors.green : Colors.red,
-                      ),
                     ),
                   ),
                 ],
@@ -1006,5 +1054,54 @@ class _CustomerTicketScreenState extends State<CustomerTicketScreen> {
         ),
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'OPEN':
+        return Colors.green;
+      case 'IN PROGRESS':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildStatusChip(String status) {
+    final Color statusColor = _getStatusColor(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: statusColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_getStatusIcon(status), color: statusColor, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            status,
+            style: TextStyle(
+              color: statusColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status.toUpperCase()) {
+      case 'OPEN':
+        return Icons.radio_button_unchecked;
+      case 'IN PROGRESS':
+        return Icons.hourglass_empty;
+      default:
+        return Icons.help_outline;
+    }
   }
 }

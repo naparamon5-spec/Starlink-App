@@ -116,14 +116,32 @@ class _TicketScreenState extends State<TicketScreen> {
                 }
               }
 
-              // Debug print to verify contact data
+              // Map backend status to display status
+              String displayStatus = 'OPEN';
+              String backendStatus =
+                  (ticket['status'] ?? 'open').toString().toLowerCase().trim();
+
+              if (backendStatus == 'open' || backendStatus == 'opened') {
+                displayStatus = 'OPEN';
+              } else if (backendStatus == 'in progress' ||
+                  backendStatus == 'in_progress' ||
+                  backendStatus == 'inprogress') {
+                displayStatus = 'IN PROGRESS';
+              } else if (backendStatus == 'done') {
+                displayStatus = 'DONE';
+              } else if (backendStatus == 'closed') {
+                displayStatus = 'CLOSED';
+              } else {
+                displayStatus = backendStatus.toUpperCase();
+              }
+
               print(
-                'Processing ticket contact data: ${ticket['contact_name']} (ID: ${ticket['contact']})',
-              );
+                'Processing ticket status: $backendStatus -> $displayStatus',
+              ); // Debug print
 
               return {
                 'id': ticket['id'],
-                'Status': (ticket['status'] ?? 'open').toUpperCase(),
+                'Status': displayStatus,
                 'Contact': ticket['contact_name'] ?? 'Not Assigned',
                 'Subscription': ticket['subscription'] ?? 'N/A',
                 'Ticket Type': ticket['type'] ?? 'N/A',
@@ -135,6 +153,7 @@ class _TicketScreenState extends State<TicketScreen> {
                   'attachments': ticket['attachments'] ?? [],
                   'contact': ticket['contact'] ?? null,
                   'contact_name': ticket['contact_name'] ?? 'Not Assigned',
+                  'status': displayStatus,
                 },
               };
             }),
@@ -183,37 +202,36 @@ class _TicketScreenState extends State<TicketScreen> {
       final response = await ApiService.updateTicketStatus(ticketId, newStatus);
       if (response['status'] == 'success') {
         setState(() {
-          for (var ticket in _tickets) {
-            if (ticket['id'].toString() == ticketId) {
-              ticket['Status'] = newStatus.toUpperCase();
-              if (ticket['full_data'] != null) {
-                ticket['full_data']['status'] = newStatus;
-              }
-            }
-          }
-          for (var ticket in _filteredTickets) {
-            if (ticket['id'].toString() == ticketId) {
-              ticket['Status'] = newStatus.toUpperCase();
-              if (ticket['full_data'] != null) {
-                ticket['full_data']['status'] = newStatus;
-              }
-            }
+          _selectedTicket!['status'] = newStatus.toUpperCase();
+          if (_selectedTicket!['full_data'] != null) {
+            _selectedTicket!['full_data']['status'] = newStatus.toUpperCase();
           }
         });
+
+        // Pop back to ticket list screen with updated status
+        Navigator.pop(context, {
+          'status': newStatus.toUpperCase(),
+          'id': ticketId,
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ticket status updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket status updated successfully'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text('Error updating ticket status: ${e.toString()}'),
+            backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating ticket status: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -305,86 +323,35 @@ class _TicketScreenState extends State<TicketScreen> {
                                         vertical: 6,
                                       ),
                                       decoration: BoxDecoration(
-                                        color:
-                                            fullData['status']
-                                                        ?.toString()
-                                                        .toUpperCase() ==
-                                                    'OPEN'
-                                                ? Colors.green.withOpacity(0.1)
-                                                : Colors.red.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color:
-                                              fullData['status']
-                                                          ?.toString()
-                                                          .toUpperCase() ==
-                                                      'OPEN'
-                                                  ? Colors.green
-                                                  : Colors.red,
-                                        ),
-                                      ),
-                                      child: DropdownButtonHideUnderline(
-                                        child: DropdownButton<String>(
-                                          value:
-                                              fullData['status']
+                                        color: _getStatusColor(
+                                          fullData['status']
                                                   ?.toString()
                                                   .toUpperCase() ??
                                               'OPEN',
-                                          items:
-                                              ['OPEN', 'CLOSED'].map((
-                                                String value,
-                                              ) {
-                                                return DropdownMenuItem<String>(
-                                                  value: value,
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Icon(
-                                                        value == 'OPEN'
-                                                            ? Icons
-                                                                .radio_button_unchecked
-                                                            : Icons
-                                                                .check_circle_outline,
-                                                        color:
-                                                            value == 'OPEN'
-                                                                ? Colors.green
-                                                                : Colors.red,
-                                                        size: 16,
-                                                      ),
-                                                      const SizedBox(width: 8),
-                                                      Text(
-                                                        value,
-                                                        style: TextStyle(
-                                                          color:
-                                                              value == 'OPEN'
-                                                                  ? Colors.green
-                                                                  : Colors.red,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              }).toList(),
-                                          onChanged: (String? newValue) {
-                                            if (newValue != null) {
-                                              _updateTicketStatus(
-                                                ticket['id'].toString(),
-                                                newValue.toLowerCase(),
-                                              );
-                                              Navigator.of(context).pop();
-                                            }
-                                          },
-                                          isDense: true,
-                                          icon: const Icon(
-                                            Icons.arrow_drop_down,
+                                        ).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: _getStatusColor(
+                                            fullData['status']
+                                                    ?.toString()
+                                                    .toUpperCase() ??
+                                                'OPEN',
                                           ),
-                                          iconSize: 24,
-                                          elevation: 4,
-                                          style: const TextStyle(fontSize: 14),
-                                          dropdownColor: Colors.white,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        fullData['status']
+                                                ?.toString()
+                                                .toUpperCase() ??
+                                            'OPEN',
+                                        style: TextStyle(
+                                          color: _getStatusColor(
+                                            fullData['status']
+                                                    ?.toString()
+                                                    .toUpperCase() ??
+                                                'OPEN',
+                                          ),
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                     ),
@@ -581,7 +548,45 @@ class _TicketScreenState extends State<TicketScreen> {
               ),
             ),
           ),
-    );
+    ).then((result) async {
+      if (result != null && result is Map<String, dynamic>) {
+        print('Received status update: ${result['status']}'); // Debug print
+
+        // Update the ticket status in the list
+        setState(() {
+          final ticketIndex = _tickets.indexWhere(
+            (t) => t['id'].toString() == result['id'].toString(),
+          );
+          if (ticketIndex != -1) {
+            // Update both the display status and full data status
+            _tickets[ticketIndex]['Status'] = result['status'];
+            if (_tickets[ticketIndex]['full_data'] != null) {
+              _tickets[ticketIndex]['full_data']['status'] = result['status'];
+            }
+            // Update filtered tickets as well
+            _filteredTickets = List.from(_tickets);
+          }
+        });
+
+        // Always reload tickets after a status update
+        await _loadTickets();
+      }
+    });
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'OPEN':
+        return Colors.green;
+      case 'IN PROGRESS':
+        return Colors.orange;
+      case 'DONE':
+        return Colors.blue;
+      case 'CLOSED':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 
   Widget _buildDetailItem(String label, String value) {
@@ -770,31 +775,18 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
     _ticket = widget.ticket;
   }
 
-  Future<void> _updateTicketStatus(String ticketId, String newStatus) async {
-    try {
-      final response = await ApiService.updateTicketStatus(ticketId, newStatus);
-      if (response['status'] == 'success') {
-        setState(() {
-          _ticket['status'] = newStatus.toUpperCase();
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ticket status updated successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating ticket status: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+  Color _getStatusColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'OPEN':
+        return Colors.green;
+      case 'IN PROGRESS':
+        return Colors.orange;
+      case 'DONE':
+        return Colors.blue;
+      case 'CLOSED':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -883,64 +875,15 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color:
-                          status == 'OPEN'
-                              ? Colors.green.withOpacity(0.1)
-                              : Colors.red.withOpacity(0.1),
+                      color: _getStatusColor(status).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: status == 'OPEN' ? Colors.green : Colors.red,
-                      ),
+                      border: Border.all(color: _getStatusColor(status)),
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: status,
-                        items:
-                            ['OPEN', 'CLOSED'].map((String value) {
-                              return DropdownMenuItem<String>(
-                                value: value,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      value == 'OPEN'
-                                          ? Icons.radio_button_unchecked
-                                          : Icons.check_circle_outline,
-                                      color:
-                                          value == 'OPEN'
-                                              ? Colors.green
-                                              : Colors.red,
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      value,
-                                      style: TextStyle(
-                                        color:
-                                            value == 'OPEN'
-                                                ? Colors.green
-                                                : Colors.red,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                        onChanged: (String? newValue) {
-                          if (newValue != null) {
-                            _updateTicketStatus(
-                              _ticket['id'].toString(),
-                              newValue.toLowerCase(),
-                            );
-                          }
-                        },
-                        isDense: true,
-                        icon: const Icon(Icons.arrow_drop_down),
-                        iconSize: 24,
-                        elevation: 4,
-                        style: const TextStyle(fontSize: 14),
-                        dropdownColor: Colors.white,
+                    child: Text(
+                      status,
+                      style: TextStyle(
+                        color: _getStatusColor(status),
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),

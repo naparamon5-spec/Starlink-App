@@ -40,6 +40,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   file_picker: ^10.1.4
   flutter_secure_storage: ^9.2.4
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +63,7 @@ flutter:
   assets:
     - assets/images/logo.svg
     - assets/images/logo_full.svg
+    - assets/images/
 
   #   - images/a_dot_ham.jpeg
 

@@ -4,6 +4,7 @@ import '../../../services/api_service.dart';
 import 'edit_profile.dart';
 import '../../login_screen.dart';
 import 'security_settings.dart';
+import 'notifications.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -256,7 +257,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _ActionButton(
                             icon: Icons.notifications_active,
                             label: 'Notification',
-                            onPressed: () {},
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => const NotificationsPage(),
+                                ),
+                              );
+                            },
                             backgroundColor: Colors.grey[300] ?? Colors.grey,
                             iconColor: Colors.black87,
                             textColor: Colors.black87,
