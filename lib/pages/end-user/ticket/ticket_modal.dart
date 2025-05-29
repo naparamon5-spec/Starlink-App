@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../services/api_service.dart';
 import 'dart:convert';
+import 'package:dio/dio.dart';
 
 class NewTicketModal extends StatefulWidget {
   final Function(Map<String, dynamic>) onConfirm;
@@ -164,39 +165,30 @@ class _NewTicketModalState extends State<NewTicketModal> {
         if (_attachedFiles.isNotEmpty) {
           for (var file in _attachedFiles) {
             if (file.bytes != null) {
-              // Create a unique filename with proper extension
-              final timestamp = DateTime.now().millisecondsSinceEpoch;
-              final fileExtension = file.extension?.toLowerCase() ?? '';
-              final uniqueFileName = '${timestamp}_${file.name}';
-              final filePath = 'uploads/$uniqueFileName';
-
-              // Validate file path
-              if (filePath.isEmpty) {
-                throw Exception('Invalid file path generated');
-              }
-
-              attachmentsData.add({'name': file.name, 'path': filePath});
+              attachmentsData.add({
+                'name': file.name,
+                'data': base64Encode(file.bytes!),
+                'type': file.extension ?? '',
+                'size': file.size,
+              });
             }
           }
         }
 
-        // Get the selected contact's ID and name
-        final selectedContactId = _contacts[_selectedContact];
-        final selectedContactName = _selectedContact;
-
-        // Match exactly what the API expects in create_ticket endpoint
+        // Create the ticket with attachments
         final newTicket = {
           'user_id': widget.userId,
-          'type': _selectedTicketType, // API expects 'type' not 'ticket_type'
-          'contact':
-              selectedContactId, // API expects 'contact' not 'assigned_agent'
-          'subscription':
-              _selectedSubscription, // API expects 'subscription' not 'subscription_id'
+          'type': _selectedTicketType,
+          'contact': _contacts[_selectedContact],
+          'contact_name': _selectedContact,
+          'subscription': _selectedSubscription,
           'description': _descriptionController.text,
+          'status': 'open',
           'attachments': attachmentsData,
+          'attachments_display': _attachedFiles
+              .map((file) => file.name)
+              .join(', '),
         };
-
-        print('Submitting ticket with data: $newTicket'); // Debug print
 
         // Show loading indicator
         if (!mounted) return;
@@ -222,22 +214,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
         // Clear the loading snackbar
         if (!mounted) return;
         ScaffoldMessenger.of(context).clearSnackBars();
-
-        // Parse the response
-        if (response is String) {
-          try {
-            // Try to parse the response as JSON
-            final jsonResponse = jsonDecode(response);
-            if (jsonResponse['status'] == 'error') {
-              throw Exception(
-                jsonResponse['message'] ?? 'Unknown error occurred',
-              );
-            }
-          } catch (e) {
-            // If parsing fails, throw the original response
-            throw Exception(response);
-          }
-        }
 
         // Show success message
         if (!mounted) return;

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../components/Table.dart';
 import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key});
@@ -93,15 +96,28 @@ class _TicketScreenState extends State<TicketScreen> {
             response['data'].map((ticket) {
               // Process attachments
               String attachmentsDisplay = 'No attachments';
+              List<dynamic> attachments = [];
+
               if (ticket['attachments'] != null) {
+                print(
+                  'Raw attachments data: ${ticket['attachments']}',
+                ); // Debug log
+
                 if (ticket['attachments'] is List) {
-                  final attachments = List<dynamic>.from(ticket['attachments']);
+                  attachments = List<dynamic>.from(ticket['attachments']);
                   if (attachments.isNotEmpty) {
                     attachmentsDisplay = attachments
                         .map((attachment) {
                           if (attachment is Map) {
-                            return attachment['original_name']?.toString() ??
-                                '';
+                            final fileName =
+                                attachment['original_name']?.toString() ??
+                                attachment['file_name']?.toString() ??
+                                attachment['name']?.toString() ??
+                                'Unknown file';
+                            print(
+                              'Processing attachment: $fileName',
+                            ); // Debug log
+                            return fileName;
                           } else if (attachment is String) {
                             return attachment;
                           }
@@ -112,6 +128,9 @@ class _TicketScreenState extends State<TicketScreen> {
                   }
                 } else if (ticket['attachments'] is String) {
                   attachmentsDisplay = ticket['attachments'];
+                  attachments = [
+                    {'original_name': ticket['attachments']},
+                  ];
                 }
               }
 
@@ -134,27 +153,27 @@ class _TicketScreenState extends State<TicketScreen> {
                 displayStatus = backendStatus.toUpperCase();
               }
 
-              print(
-                'Processing ticket status: $backendStatus -> $displayStatus',
-              ); // Debug print
-
-              return {
+              final processedTicket = {
                 'id': ticket['id'],
                 'Status': displayStatus,
                 'Contact': ticket['contact_name'] ?? 'Not Assigned',
                 'Subscription': ticket['subscription'] ?? 'N/A',
                 'Ticket Type': ticket['type'] ?? 'N/A',
                 'Attachments': attachmentsDisplay,
-                // Store all data for detailed view
                 'full_data': {
                   ...ticket,
                   'created_at': _formatDate(ticket['created_at']),
-                  'attachments': ticket['attachments'] ?? [],
+                  'attachments': attachments,
                   'contact': ticket['contact'] ?? null,
                   'contact_name': ticket['contact_name'] ?? 'Not Assigned',
                   'status': displayStatus,
                 },
               };
+
+              print(
+                'Processed ticket attachments: ${processedTicket['Attachments']}',
+              ); // Debug log
+              return processedTicket;
             }),
           );
           _filteredTickets = _tickets;
@@ -191,9 +210,16 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
-  String _formatFileSize(int? size) {
+  String _formatFileSize(dynamic size) {
     if (size == null) return '';
-    return '${(size / 1024).toStringAsFixed(1)} KB';
+    final double sizeInBytes = size is int ? size.toDouble() : size as double;
+    if (sizeInBytes < 1024) {
+      return '${sizeInBytes.toStringAsFixed(1)} B';
+    } else if (sizeInBytes < 1024 * 1024) {
+      return '${(sizeInBytes / 1024).toStringAsFixed(1)} KB';
+    } else {
+      return '${(sizeInBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
   }
 
   Future<void> _updateTicketStatus(String ticketId, String newStatus) async {
@@ -827,9 +853,16 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
     );
   }
 
-  String _formatFileSize(int? size) {
+  String _formatFileSize(dynamic size) {
     if (size == null) return '';
-    return '${(size / 1024).toStringAsFixed(1)} KB';
+    final double sizeInBytes = size is int ? size.toDouble() : size as double;
+    if (sizeInBytes < 1024) {
+      return '${sizeInBytes.toStringAsFixed(1)} B';
+    } else if (sizeInBytes < 1024 * 1024) {
+      return '${(sizeInBytes / 1024).toStringAsFixed(1)} KB';
+    } else {
+      return '${(sizeInBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
   }
 
   @override
@@ -976,181 +1009,244 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
               ),
               const SizedBox(height: 24),
               // Attachments Section
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Attachments',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF133343),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      if (_ticket['attachments'] != null &&
-                          _ticket['attachments'].toString().isNotEmpty) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey[300]!),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (_ticket['attachments'] is List) ...[
-                                ...(_ticket['attachments'] as List).map((
-                                  attachment,
-                                ) {
-                                  if (attachment is Map) {
-                                    final fileName =
-                                        attachment['original_name']
-                                            ?.toString() ??
-                                        'Unknown file';
-                                    final fileType =
-                                        attachment['file_path']
-                                            ?.toString()
-                                            .split('.')
-                                            .last ??
-                                        '';
-                                    final fileSize = _formatFileSize(
-                                      attachment['size'] as int?,
-                                    );
+              _buildAttachmentsSection(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-                                    return Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 8.0,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            _getFileIcon(fileType),
-                                            color:
-                                                Theme.of(context).primaryColor,
-                                            size: 20,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  fileName,
-                                                  style: const TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                                if (fileSize.isNotEmpty)
-                                                  Text(
-                                                    fileSize,
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.grey[600],
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.download,
-                                              color: Color(0xFF133343),
-                                            ),
-                                            onPressed: () {
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Download functionality coming soon',
-                                                  ),
-                                                  duration: Duration(
-                                                    seconds: 2,
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                            tooltip: 'Download file',
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }
-                                  return const SizedBox.shrink();
-                                }).toList(),
-                              ] else ...[
-                                Row(
+  Widget _buildAttachmentsSection() {
+    final attachments = _ticket['attachments'];
+    print('Building attachments section with data: $attachments'); // Debug log
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Attachments',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF133343),
+              ),
+            ),
+            const SizedBox(height: 24),
+            if (attachments != null && attachments.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (attachments is List) ...[
+                      ...(attachments as List).map((attachment) {
+                        print(
+                          'Processing attachment in UI: $attachment',
+                        ); // Debug log
+
+                        String fileName;
+                        String fileType = '';
+                        String fileSize = '';
+                        String? fileId;
+
+                        if (attachment is Map) {
+                          fileName =
+                              attachment['original_name']?.toString() ??
+                              attachment['file_name']?.toString() ??
+                              attachment['name']?.toString() ??
+                              'Unknown file';
+                          fileType =
+                              attachment['file_type']?.toString() ??
+                              attachment['type']?.toString() ??
+                              fileName.split('.').last;
+                          fileSize = _formatFileSize(
+                            attachment['size'] ?? attachment['file_size'],
+                          );
+                          fileId = attachment['id']?.toString();
+                        } else if (attachment is String) {
+                          fileName = attachment;
+                          fileType = attachment.split('.').last;
+                        } else {
+                          fileName = 'Unknown file';
+                        }
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _getFileIcon(fileType),
+                                color: Theme.of(context).primaryColor,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(
-                                      Icons.attach_file,
-                                      color: Theme.of(context).primaryColor,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _ticket['attachments'].toString(),
-                                        style: const TextStyle(fontSize: 14),
+                                    Text(
+                                      fileName,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.download,
-                                        color: Color(0xFF133343),
+                                    if (fileSize.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '$fileType • $fileSize',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
                                       ),
-                                      onPressed: () {
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.download,
+                                  color: Color(0xFF133343),
+                                ),
+                                onPressed: () async {
+                                  if (fileId != null) {
+                                    try {
+                                      final response = await http.get(
+                                        Uri.parse(
+                                          '${ApiService.baseUrl}/api.php?action=download_attachment&attachment_id=$fileId',
+                                        ),
+                                      );
+
+                                      if (response.statusCode == 200) {
+                                        String? contentDisposition =
+                                            response
+                                                .headers['content-disposition'];
+                                        String fileName = 'downloaded_file';
+                                        if (contentDisposition != null) {
+                                          final matches = RegExp(
+                                            r'filename="(.+?)"',
+                                          ).firstMatch(contentDisposition);
+                                          if (matches != null &&
+                                              matches.groupCount >= 1) {
+                                            fileName = matches.group(1)!;
+                                          }
+                                        }
+
+                                        final directory =
+                                            await getApplicationDocumentsDirectory();
+                                        final file = File(
+                                          '${directory.path}/$fileName',
+                                        );
+                                        await file.writeAsBytes(
+                                          response.bodyBytes,
+                                        );
+
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'File downloaded to: ${file.path}',
+                                              ),
+                                              duration: const Duration(
+                                                seconds: 3,
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      } else {
+                                        throw Exception(
+                                          'Failed to download file',
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
                                         ScaffoldMessenger.of(
                                           context,
                                         ).showSnackBar(
-                                          const SnackBar(
+                                          SnackBar(
                                             content: Text(
-                                              'Download functionality coming soon',
+                                              'Error downloading file: $e',
                                             ),
-                                            duration: Duration(seconds: 2),
+                                            backgroundColor: Colors.red,
+                                            duration: const Duration(
+                                              seconds: 3,
+                                            ),
                                           ),
                                         );
-                                      },
-                                      tooltip: 'Download file',
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                      }
+                                    }
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Download not available for this file',
+                                        ),
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                },
+                                tooltip: 'Download file',
+                              ),
                             ],
                           ),
-                        ),
-                      ] else ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey[300]!),
+                        );
+                      }).toList(),
+                    ] else if (attachments is String) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            _getFileIcon(attachments.split('.').last),
+                            color: Theme.of(context).primaryColor,
+                            size: 24,
                           ),
-                          child: const Text(
-                            'No attachments',
-                            style: TextStyle(fontSize: 14),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              attachments,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ],
-                  ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: const Text(
+                  'No attachments',
+                  style: TextStyle(fontSize: 14),
                 ),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -1160,12 +1256,22 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
     switch (extension?.toLowerCase()) {
       case 'pdf':
         return Icons.picture_as_pdf;
+      case 'doc':
       case 'docx':
         return Icons.description;
       case 'jpg':
       case 'jpeg':
       case 'png':
+      case 'gif':
         return Icons.image;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart;
+      case 'txt':
+        return Icons.text_snippet;
+      case 'zip':
+      case 'rar':
+        return Icons.archive;
       default:
         return Icons.insert_drive_file;
     }

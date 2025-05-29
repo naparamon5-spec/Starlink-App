@@ -170,32 +170,20 @@ class ApiService {
       }
 
       // Process attachments if present
-      var processedAttachments = ticketData['attachments'];
-      if (processedAttachments != null) {
-        if (processedAttachments is List) {
-          // Ensure each attachment has the required fields
-          processedAttachments =
-              processedAttachments
-                  .where((attachment) => attachment != null)
-                  .map((attachment) {
-                    if (attachment is Map<String, dynamic>) {
-                      return {
-                        'name': attachment['name'] ?? 'unnamed_file',
-                        'data': attachment['data'],
-                        'type': attachment['type'] ?? '',
-                      };
-                    } else if (attachment is String) {
-                      // If it's just a filename string, keep it as is
-                      return attachment;
-                    }
-                    return null;
-                  })
-                  .where((attachment) => attachment != null)
-                  .toList();
-        } else if (processedAttachments is String &&
-            processedAttachments.isNotEmpty) {
-          // If it's a single string, keep it as is
-          processedAttachments = [processedAttachments];
+      List<Map<String, dynamic>> processedAttachments = [];
+      if (ticketData['attachments'] != null &&
+          ticketData['attachments'] is List) {
+        for (var attachment in ticketData['attachments']) {
+          if (attachment is Map<String, dynamic>) {
+            processedAttachments.add({
+              'file_name': attachment['name'],
+              'original_name': attachment['name'],
+              'file_type': attachment['type'] ?? 'application/octet-stream',
+              'file_size': attachment['size'],
+              'file_data': attachment['data'],
+              'uploaded_by': ticketData['user_id'],
+            });
+          }
         }
       }
 
@@ -224,13 +212,20 @@ class ApiService {
             body: json.encode(formattedData),
           )
           .timeout(
-            const Duration(seconds: 30), // Increased timeout for file uploads
+            const Duration(seconds: 30),
             onTimeout: () {
-              throw TimeoutException('Request timed out. Please try again.');
+              return http.Response(
+                json.encode({
+                  'status': 'error',
+                  'message': 'Connection timed out. Please try again.',
+                }),
+                408,
+              );
             },
           );
 
-      print('Server response: ${response.body}');
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -240,18 +235,10 @@ class ApiService {
           throw Exception(data['message'] ?? 'Failed to create ticket');
         }
       } else {
-        final errorData = json.decode(response.body);
-        throw Exception(
-          errorData['message'] ?? 'Server error: ${response.statusCode}',
-        );
+        throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
       print('Error creating ticket: $e');
-      if (e is TimeoutException) {
-        throw Exception(
-          'Connection timed out. Please check your internet connection and try again.',
-        );
-      }
       throw Exception('Failed to create ticket: $e');
     }
   }
