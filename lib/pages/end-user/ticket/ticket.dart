@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:convert';
 
 class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key});
@@ -99,39 +100,20 @@ class _TicketScreenState extends State<TicketScreen> {
               List<dynamic> attachments = [];
 
               if (ticket['attachments'] != null) {
+                print('DEBUG: Raw attachments data: ${ticket['attachments']}');
                 print(
-                  'Raw attachments data: ${ticket['attachments']}',
-                ); // Debug log
+                  'DEBUG: Attachments type: ${ticket['attachments'].runtimeType}',
+                );
 
-                if (ticket['attachments'] is List) {
-                  attachments = List<dynamic>.from(ticket['attachments']);
-                  if (attachments.isNotEmpty) {
-                    attachmentsDisplay = attachments
-                        .map((attachment) {
-                          if (attachment is Map) {
-                            final fileName =
-                                attachment['original_name']?.toString() ??
-                                attachment['file_name']?.toString() ??
-                                attachment['name']?.toString() ??
-                                'Unknown file';
-                            print(
-                              'Processing attachment: $fileName',
-                            ); // Debug log
-                            return fileName;
-                          } else if (attachment is String) {
-                            return attachment;
-                          }
-                          return '';
-                        })
-                        .where((name) => name.isNotEmpty)
-                        .join(', ');
-                  }
-                } else if (ticket['attachments'] is String) {
-                  attachmentsDisplay = ticket['attachments'];
-                  attachments = [
-                    {'original_name': ticket['attachments']},
-                  ];
-                }
+                // Simply use the original_name directly
+                attachmentsDisplay = ticket['attachments'].toString();
+                attachments = [
+                  {'original_name': ticket['attachments']},
+                ];
+                print('DEBUG: Using attachment name: $attachmentsDisplay');
+              } else {
+                print('DEBUG: No attachments found in ticket');
+                attachmentsDisplay = 'No attachments';
               }
 
               // Map backend status to display status
@@ -444,19 +426,43 @@ class _TicketScreenState extends State<TicketScreen> {
                                     ...(fullData['attachments'] as List).map((
                                       attachment,
                                     ) {
+                                      print(
+                                        'DEBUG: Processing attachment in details: $attachment',
+                                      );
                                       if (attachment is Map) {
+                                        print(
+                                          'DEBUG: Attachment map keys in details: ${attachment.keys.toList()}',
+                                        );
+                                        // Get the original_name from the attachment
                                         final fileName =
                                             attachment['original_name']
                                                 ?.toString() ??
+                                            attachment['file_name']
+                                                ?.toString() ??
                                             'Unknown file';
+                                        print(
+                                          'DEBUG: Extracted filename in details: $fileName',
+                                        );
+
                                         final fileType =
-                                            attachment['file_path']
-                                                ?.toString()
-                                                .split('.')
-                                                .last ??
-                                            '';
+                                            attachment['file_type']
+                                                ?.toString() ??
+                                            fileName.split('.').last;
+                                        print(
+                                          'DEBUG: Extracted file type in details: $fileType',
+                                        );
+
                                         final fileSize = _formatFileSize(
-                                          attachment['size'] as int?,
+                                          attachment['file_size'] as int?,
+                                        );
+                                        print(
+                                          'DEBUG: Extracted file size in details: $fileSize',
+                                        );
+
+                                        final fileId =
+                                            attachment['id']?.toString();
+                                        print(
+                                          'DEBUG: Extracted file ID in details: $fileId',
                                         );
 
                                         return Padding(
@@ -489,7 +495,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                                     ),
                                                     if (fileSize.isNotEmpty)
                                                       Text(
-                                                        fileSize,
+                                                        '$fileType • $fileSize',
                                                         style: TextStyle(
                                                           fontSize: 12,
                                                           color:
@@ -504,19 +510,103 @@ class _TicketScreenState extends State<TicketScreen> {
                                                   Icons.download,
                                                   color: Color(0xFF133343),
                                                 ),
-                                                onPressed: () {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'Download functionality coming soon',
+                                                onPressed: () async {
+                                                  if (fileId != null) {
+                                                    try {
+                                                      final response =
+                                                          await http.get(
+                                                            Uri.parse(
+                                                              '${ApiService.baseUrl}/api.php?action=download_attachment&attachment_id=$fileId',
+                                                            ),
+                                                          );
+
+                                                      if (response.statusCode ==
+                                                          200) {
+                                                        String?
+                                                        contentDisposition =
+                                                            response
+                                                                .headers['content-disposition'];
+                                                        String fileName =
+                                                            'downloaded_file';
+                                                        if (contentDisposition !=
+                                                            null) {
+                                                          final matches = RegExp(
+                                                            r'filename="(.+?)"',
+                                                          ).firstMatch(
+                                                            contentDisposition,
+                                                          );
+                                                          if (matches != null &&
+                                                              matches.groupCount >=
+                                                                  1) {
+                                                            fileName =
+                                                                matches.group(
+                                                                  1,
+                                                                )!;
+                                                          }
+                                                        }
+
+                                                        final directory =
+                                                            await getApplicationDocumentsDirectory();
+                                                        final file = File(
+                                                          '${directory.path}/$fileName',
+                                                        );
+                                                        await file.writeAsBytes(
+                                                          response.bodyBytes,
+                                                        );
+
+                                                        if (mounted) {
+                                                          ScaffoldMessenger.of(
+                                                            context,
+                                                          ).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text(
+                                                                'File downloaded to: ${file.path}',
+                                                              ),
+                                                              duration:
+                                                                  const Duration(
+                                                                    seconds: 3,
+                                                                  ),
+                                                            ),
+                                                          );
+                                                        }
+                                                      } else {
+                                                        throw Exception(
+                                                          'Failed to download file',
+                                                        );
+                                                      }
+                                                    } catch (e) {
+                                                      if (mounted) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              'Error downloading file: $e',
+                                                            ),
+                                                            backgroundColor:
+                                                                Colors.red,
+                                                            duration:
+                                                                const Duration(
+                                                                  seconds: 3,
+                                                                ),
+                                                          ),
+                                                        );
+                                                      }
+                                                    }
+                                                  } else {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'Download not available for this file',
+                                                        ),
+                                                        duration: Duration(
+                                                          seconds: 2,
+                                                        ),
                                                       ),
-                                                      duration: Duration(
-                                                        seconds: 2,
-                                                      ),
-                                                    ),
-                                                  );
+                                                    );
+                                                  }
                                                 },
                                                 tooltip: 'Download file',
                                               ),
