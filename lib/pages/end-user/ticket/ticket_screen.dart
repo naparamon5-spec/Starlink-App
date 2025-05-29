@@ -398,11 +398,28 @@ class _TicketScreenState extends State<TicketScreen> {
   Widget _buildTicketCard(Map<String, dynamic> ticket) {
     final String ticketType = ticket['type']?.toString() ?? 'N/A';
     final String createdAt = ticket['created_at']?.toString() ?? 'N/A';
+    final String status = ticket['status']?.toString() ?? 'OPEN';
+
+    Color statusColor;
+    switch (status.toUpperCase()) {
+      case 'OPEN':
+        statusColor = Colors.green;
+        break;
+      case 'CLOSED':
+        statusColor = Colors.red;
+        break;
+      case 'IN PROGRESS':
+        statusColor = Colors.orange;
+        break;
+      default:
+        statusColor = Colors.grey;
+    }
 
     return Card(
       elevation: 2,
+      shadowColor: const Color(0xFF133343).withOpacity(0.1),
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () {
           Navigator.push(
@@ -412,7 +429,7 @@ class _TicketScreenState extends State<TicketScreen> {
             ),
           );
         },
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -435,18 +452,48 @@ class _TicketScreenState extends State<TicketScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      ticketType,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF133343),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            ticketType,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF133343),
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            status,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: statusColor,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Created: $createdAt',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        letterSpacing: 0.2,
+                      ),
                     ),
                   ],
                 ),
@@ -462,20 +509,41 @@ class _TicketScreenState extends State<TicketScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tickets'),
+        title: const Text(
+          'Tickets',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
         centerTitle: true,
-        elevation: 2,
+        elevation: 0,
         backgroundColor: const Color(0xFF133343),
         foregroundColor: Colors.white,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () {
+              // TODO: Implement notifications
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Container(
-        decoration: BoxDecoration(color: Colors.grey[50]),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.white, Colors.grey[50]!],
+          ),
+        ),
         child: Column(
           children: [
-            // Search and filter bar
             Container(
               padding: const EdgeInsets.all(16.0),
               decoration: BoxDecoration(
@@ -493,16 +561,24 @@ class _TicketScreenState extends State<TicketScreen> {
                   Expanded(
                     flex: 3,
                     child: Container(
-                      height: 40,
+                      height: 44,
                       decoration: BoxDecoration(
                         color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey[300]!, width: 1),
                       ),
                       child: TextField(
                         controller: _searchController,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          letterSpacing: 0.3,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Search tickets...',
+                          hintStyle: TextStyle(
+                            color: Colors.grey[500],
+                            letterSpacing: 0.3,
+                          ),
                           prefixIcon: Icon(
                             Icons.search,
                             color: Theme.of(context).primaryColor,
@@ -510,8 +586,8 @@ class _TicketScreenState extends State<TicketScreen> {
                           ),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                            horizontal: 10,
+                            vertical: 12,
+                            horizontal: 12,
                           ),
                         ),
                       ),
@@ -521,11 +597,11 @@ class _TicketScreenState extends State<TicketScreen> {
                   Expanded(
                     flex: 1,
                     child: Container(
-                      height: 40,
+                      height: 44,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       decoration: BoxDecoration(
                         color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey[300]!, width: 1),
                       ),
                       child: DropdownButtonHideUnderline(
@@ -538,12 +614,12 @@ class _TicketScreenState extends State<TicketScreen> {
                           style: TextStyle(
                             color: Colors.grey[800],
                             fontSize: 14,
+                            letterSpacing: 0.3,
                           ),
                           onChanged: (String? newValue) {
                             setState(() {
                               _selectedFilter = newValue!;
-                              _currentPage =
-                                  1; // Reset to first page on filter change
+                              _currentPage = 1;
                               _handleSearch();
                             });
                           },
@@ -570,8 +646,11 @@ class _TicketScreenState extends State<TicketScreen> {
                 children: [
                   Text(
                     'All Tickets (${_filteredTickets.length})',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF133343),
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ],
@@ -580,13 +659,46 @@ class _TicketScreenState extends State<TicketScreen> {
             Expanded(
               child:
                   _isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF133343),
+                          ),
+                          strokeWidth: 3,
+                        ),
+                      )
                       : _filteredTickets.isEmpty
                       ? Center(
-                        child: Text(
-                          _tickets.isEmpty
-                              ? 'No tickets found. Create a new ticket to get started.'
-                              : 'No tickets match your search.',
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _tickets.isEmpty
+                                    ? Icons.confirmation_number_outlined
+                                    : Icons.search_off_outlined,
+                                color: Colors.grey,
+                                size: 48,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _tickets.isEmpty
+                                  ? 'No tickets found. Create a new ticket to get started.'
+                                  : 'No tickets match your search.',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[600],
+                                letterSpacing: 0.3,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
                       )
                       : Column(
@@ -610,15 +722,13 @@ class _TicketScreenState extends State<TicketScreen> {
           ],
         ),
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 16.0, right: 16.0),
-        child: FloatingActionButton(
-          onPressed: _showNewTicketModal,
-          backgroundColor: const Color(0xFF133343),
-          child: const Icon(Icons.add, color: Colors.white),
-          tooltip: 'Create new ticket',
-          elevation: 10,
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showNewTicketModal,
+        backgroundColor: const Color(0xFF133343),
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: const Icon(Icons.add, color: Colors.white),
+        tooltip: 'Create new ticket',
       ),
     );
   }

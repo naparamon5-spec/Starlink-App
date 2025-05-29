@@ -105,7 +105,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHomeContent() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF133343)),
+        ),
+      );
     }
 
     if (_errorMessage != null) {
@@ -113,12 +117,31 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
-            const SizedBox(height: 16),
+            const Icon(Icons.error_outline, color: Color(0xFFE57373), size: 48),
+            const SizedBox(height: 12),
             Text(
               _errorMessage!,
-              style: const TextStyle(color: Colors.red, fontSize: 16),
+              style: const TextStyle(
+                color: Color(0xFFE57373),
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: _loadSubscriptionData,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF133343),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Retry'),
             ),
           ],
         ),
@@ -126,32 +149,84 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (_subscriptionData == null) {
-      return const Center(
-        child: Text(
-          'No subscription data available',
-          style: TextStyle(fontSize: 16, color: Colors.grey),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.subscriptions_outlined,
+              color: Colors.grey,
+              size: 48,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'No subscription data available',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SubscriptionHeader(
-            serviceLineNumber: _subscriptionData!['serviceLineNumber'] ?? 'N/A',
-            nickname: _subscriptionData!['nickname'] ?? 'N/A',
-            address: _subscriptionData!['address'] ?? 'N/A',
-            active:
-                _subscriptionData!['active'] == '1' ||
-                _subscriptionData!['active'] == 'true',
-          ),
-          const SizedBox(height: 24),
-          BillingCycleChart(billingCycles: _billingCycles),
-          const SizedBox(height: 24),
-          // Add more home screen content here
-        ],
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.white, Colors.grey[50]!],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: SubscriptionHeader(
+                  serviceLineNumber:
+                      _subscriptionData!['serviceLineNumber'] ?? 'N/A',
+                  nickname: _subscriptionData!['nickname'] ?? 'N/A',
+                  address: _subscriptionData!['address'] ?? 'N/A',
+                  active:
+                      _subscriptionData!['active'] == '1' ||
+                      _subscriptionData!['active'] == 'true',
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Billing History',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF133343),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: BillingCycleChart(billingCycles: _billingCycles),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -161,13 +236,16 @@ class _HomeScreenState extends State<HomeScreen> {
     // Update the home screen content
     _screens[0] = Scaffold(
       appBar: AppBar(
-        title: const Text('Home'),
+        title: const Text(
+          'Home',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
-        elevation: 2,
+        elevation: 0,
         backgroundColor: const Color(0xFF133343),
         foregroundColor: Colors.white,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
         ),
       ),
       body: _buildHomeContent(),
