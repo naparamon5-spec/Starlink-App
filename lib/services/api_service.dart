@@ -1,21 +1,34 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, HttpClient, X509Certificate;
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 
 class ApiService {
   // Get the appropriate base URL based on the platform
   static String get baseUrl {
     if (Platform.isAndroid) {
       // For Android emulator
-      return 'http://10.0.2.2/starlink_app/backend';
+      return 'https://api.lamco.com.ph/starlinkAPI';
     } else if (Platform.isIOS) {
       // For iOS simulator
-      return 'http://localhost/starlink_app/backend';
+      return 'https://api.lamco.com.ph/starlinkAPI';
     } else {
       // For physical devices, you'll need to replace this with your computer's IP address
       // For example: return 'http://192.168.1.100/starlink_app/backend';
-      return 'http://localhost/starlink_app/backend';
+      return 'https://api.lamco.com.ph/starlinkAPI';
     }
+  }
+
+  // Create a custom HTTP client that bypasses certificate verification
+  static http.Client get _client {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final httpClient =
+          HttpClient()
+            ..badCertificateCallback =
+                (X509Certificate cert, String host, int port) => true;
+      return IOClient(httpClient);
+    }
+    return http.Client();
   }
 
   // Test database connection
@@ -23,7 +36,7 @@ class ApiService {
     try {
       print('Attempting to connect to: $baseUrl/test_connection.php');
 
-      final response = await http
+      final response = await _client
           .get(Uri.parse('$baseUrl/test_connection.php'))
           .timeout(
             const Duration(seconds: 10),
@@ -68,7 +81,7 @@ class ApiService {
     try {
       print('Attempting to login: $baseUrl/login.php');
 
-      final response = await http
+      final response = await _client
           .post(
             Uri.parse('$baseUrl/login.php'),
             headers: {'Content-Type': 'application/json'},
@@ -126,7 +139,7 @@ class ApiService {
     try {
       print('Fetching tickets from: $baseUrl/api.php?action=get_tickets');
 
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_tickets'),
         headers: {'Accept': 'application/json'},
       );
@@ -202,7 +215,7 @@ class ApiService {
 
       print('Creating ticket with data: ${json.encode(formattedData)}');
 
-      final response = await http
+      final response = await _client
           .post(
             Uri.parse('$baseUrl/api.php?action=create_ticket'),
             headers: {
@@ -246,7 +259,7 @@ class ApiService {
   // Get ticket categories
   static Future<Map<String, dynamic>> getCategories() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_categories'),
         headers: {'Accept': 'application/json'},
       );
@@ -269,7 +282,7 @@ class ApiService {
   // Get agents
   static Future<Map<String, dynamic>> getAgents() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_agents'),
         headers: {'Accept': 'application/json'},
       );
@@ -292,7 +305,7 @@ class ApiService {
   // Get subscriptions
   static Future<Map<String, dynamic>> getSubscriptions() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_subscriptions'),
         headers: {'Accept': 'application/json'},
       );
@@ -319,7 +332,7 @@ class ApiService {
         'Fetching current user from: $baseUrl/api.php?action=get_current_user&user_id=$userId',
       );
 
-      final response = await http
+      final response = await _client
           .get(
             Uri.parse(
               '$baseUrl/api.php?action=get_current_user&user_id=$userId',
@@ -363,7 +376,7 @@ class ApiService {
         'Updating ticket status: $baseUrl/api.php?action=update_ticket_status',
       );
 
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/api.php?action=update_ticket_status'),
         headers: {
           'Content-Type': 'application/json',
@@ -393,7 +406,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> getTicketCategories() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/ticket-categories'),
         headers: {
           'Content-Type': 'application/json',
@@ -419,7 +432,7 @@ class ApiService {
     try {
       print('Updating password for user: $userId');
 
-      final response = await http
+      final response = await _client
           .post(
             Uri.parse('$baseUrl/api.php?action=update_password'),
             headers: {
@@ -469,7 +482,7 @@ class ApiService {
     try {
       print('Fetching customers from: $baseUrl/api.php?action=get_customers');
 
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_customers'),
         headers: {'Accept': 'application/json'},
       );
@@ -497,7 +510,7 @@ class ApiService {
     String subscriptionId,
   ) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse(
           '$baseUrl/api.php?action=get_billing_cycles&subscription_id=$subscriptionId',
         ),
