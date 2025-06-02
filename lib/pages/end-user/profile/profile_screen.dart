@@ -18,7 +18,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _jobTitle = 'Loading...';
   String _userId = 'Loading...';
   String _fullName = 'Loading...';
-  String _email = 'Loading...';
   bool _isLoading = true;
 
   @override
@@ -39,7 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Get data from API
       final response = await ApiService.getCurrentUser(userId);
 
-      if (response['success'] == true && response['data'] != null) {
+      if (response['status'] == 'success' && response['data'] != null) {
         final userData = response['data'];
 
         setState(() {
@@ -83,7 +82,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (data['name'] != null) {
         _fullName = data['name']!;
       }
-      _email = data['email'] ?? _email;
     });
   }
 

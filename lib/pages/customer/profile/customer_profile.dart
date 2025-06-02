@@ -46,12 +46,17 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       // Get data from API
       final response = await ApiService.getCurrentUser(userId);
 
-      if (response['success'] == true && response['data'] != null) {
+      if (response['status'] == 'success' && response['data'] != null) {
         final userData = response['data'];
 
         setState(() {
           _userId = userData['id']?.toString() ?? 'N/A';
           _userName = userData['name'] ?? 'N/A';
+          _userEmail = userData['email'] ?? 'N/A';
+          _userPhone = userData['phone'] ?? 'N/A';
+          _userAddress = userData['address'] ?? 'N/A';
+          _jobTitle = userData['job_title'] ?? 'N/A';
+          _companyName = userData['company_name'] ?? 'N/A';
           _userType = userData['role'] ?? 'customer';
           _isLoading = false;
         });
@@ -59,21 +64,17 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         // Save to SharedPreferences for offline access
         await prefs.setString('userId', _userId!);
         await prefs.setString('name', _userName!);
+        await prefs.setString('email', _userEmail!);
+        await prefs.setString('phone', _userPhone!);
+        await prefs.setString('address', _userAddress!);
+        await prefs.setString('jobTitle', _jobTitle!);
+        await prefs.setString('companyName', _companyName!);
         await prefs.setString('userType', _userType!);
       } else {
         throw Exception(response['message'] ?? 'Failed to fetch user data');
       }
     } catch (e) {
-      print('Error loading profile data: $e');
-      // Fallback to SharedPreferences if there's an error
-      final prefs = await SharedPreferences.getInstance();
-      setState(() {
-        _userId = prefs.getString('userId') ?? 'N/A';
-        _userName = prefs.getString('name') ?? 'N/A';
-        _userType = prefs.getString('userType') ?? 'customer';
-        _isLoading = false;
-      });
-
+      print('Error loading user data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -82,6 +83,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           ),
         );
       }
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 

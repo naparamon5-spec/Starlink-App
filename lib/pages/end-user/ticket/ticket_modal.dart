@@ -166,29 +166,31 @@ class _NewTicketModalState extends State<NewTicketModal> {
           for (var file in _attachedFiles) {
             if (file.bytes != null) {
               attachmentsData.add({
-                'name': file.name,
-                'data': base64Encode(file.bytes!),
-                'type': file.extension ?? '',
-                'size': file.size,
+                'file_name': file.name,
+                'original_name': file.name,
+                'file_type': file.extension ?? '',
+                'file_size': file.size,
+                'file_data': base64Encode(file.bytes!),
+                'uploaded_by': widget.userId,
               });
             }
           }
         }
 
-        // Create the ticket with attachments
+        // Create the ticket with the correct field names
         final newTicket = {
           'user_id': widget.userId,
-          'type': _selectedTicketType,
-          'contact': _contacts[_selectedContact],
+          'ticket_type': _selectedTicketType,
+          'assigned_agent': _contacts[_selectedContact],
           'contact_name': _selectedContact,
-          'subscription': _selectedSubscription,
+          'subscription_id': _selectedSubscription,
           'description': _descriptionController.text,
           'status': 'open',
+          'subject': _selectedTicketType,
           'attachments': attachmentsData,
-          'attachments_display': _attachedFiles
-              .map((file) => file.name)
-              .join(', '),
         };
+
+        print('Submitting ticket with data: $newTicket'); // Debug log
 
         // Show loading indicator
         if (!mounted) return;
@@ -209,11 +211,15 @@ class _NewTicketModalState extends State<NewTicketModal> {
         );
 
         // Submit the ticket
-        final response = await widget.onConfirm(newTicket);
+        await widget.onConfirm(newTicket);
 
         // Clear the loading snackbar
         if (!mounted) return;
         ScaffoldMessenger.of(context).clearSnackBars();
+
+        // Close the modal
+        if (!mounted) return;
+        Navigator.of(context).pop();
 
         // Show success message
         if (!mounted) return;
@@ -240,7 +246,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
         }
 
         print('Error details: $errorMessage'); // Debug print
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error creating ticket: $errorMessage'),

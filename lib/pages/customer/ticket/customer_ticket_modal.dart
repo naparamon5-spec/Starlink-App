@@ -48,30 +48,49 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
     try {
       // Fetch ticket categories
       final categoriesData = await ApiService.getCategories();
-      setState(() {
-        _ticketTypes = List<String>.from(
-          categoriesData['data'].map((item) => item['name']),
-        );
-      });
+      if (categoriesData['status'] == 'success' &&
+          categoriesData['data'] != null) {
+        setState(() {
+          _ticketTypes = List<String>.from(
+            categoriesData['data'].map((item) => item['name']),
+          );
+        });
+      } else {
+        throw Exception('Failed to load ticket categories');
+      }
 
-      // Fetch agents
-      final agentsData = await ApiService.getAgents();
-      setState(() {
-        _contacts = Map.fromEntries(
-          (agentsData['data'] as List).map(
-            (agent) => MapEntry(agent['name'] as String, agent['id'] as int),
-          ),
-        );
-      });
+      // Fetch customers
+      final customersData = await ApiService.getCustomers();
+      if (customersData['status'] == 'success' &&
+          customersData['data'] != null) {
+        setState(() {
+          _contacts = Map.fromEntries(
+            (customersData['data'] as List).map(
+              (customer) => MapEntry(
+                customer['name'] as String,
+                int.parse(customer['id'].toString()),
+              ),
+            ),
+          );
+        });
+      } else {
+        throw Exception('Failed to load customers');
+      }
 
       // Fetch subscriptions
       final subscriptionsData = await ApiService.getSubscriptions();
-      setState(() {
-        _subscriptions = List<String>.from(
-          subscriptionsData['data'].map((item) => item['nickname']),
-        );
-      });
+      if (subscriptionsData['status'] == 'success' &&
+          subscriptionsData['data'] != null) {
+        setState(() {
+          _subscriptions = List<String>.from(
+            subscriptionsData['data'].map((item) => item['nickname']),
+          );
+        });
+      } else {
+        throw Exception('Failed to load subscriptions');
+      }
     } catch (e) {
+      print('Error in _fetchData: $e');
       setState(() {
         _errorMessage = 'Error fetching data: ${e.toString()}';
       });
@@ -152,14 +171,25 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
           }
         }
 
+        // Get the contact ID as an integer
+        final contactId = _contacts[_selectedContact];
+        if (contactId == null) {
+          throw Exception('Invalid contact selected');
+        }
+
         final newTicket = {
           'type': _selectedTicketType,
-          'contact': _contacts[_selectedContact], // Agent ID for database
-          'contact_name': _selectedContact, // Agent name for display
+          'contact': int.parse(
+            contactId.toString(),
+          ), // Ensure contact is an integer
+          'contact_name': _selectedContact,
           'subscription': _selectedSubscription,
           'description': _descriptionController.text,
-          'user_id': widget.userId,
+          'user_id': int.parse(
+            widget.userId.toString(),
+          ), // Ensure user_id is an integer
           'status': 'open',
+          'subject': _selectedTicketType, // Add subject field
           'attachments': attachmentsData,
           'attachments_display': _attachedFiles
               .map((file) => file.name)

@@ -45,7 +45,7 @@ class ApiService {
                 json.encode({
                   'status': 'error',
                   'message':
-                      'Connection timed out. Please check if XAMPP is running.',
+                      'Connection timed out. Please check your internet connection.',
                 }),
                 408,
               );
@@ -64,9 +64,9 @@ class ApiService {
         'baseUrl': baseUrl,
         'troubleshooting': '''
   Please check:
-  1. XAMPP is running (Apache and MySQL services)
-  2. Database 'ardent_ticket' exists
-  3. Table 'test_connection' exists in the database
+  1. Your internet connection
+  2. The server is running at $baseUrl
+  3. Database credentials are correct
   4. Your device/emulator can reach the server
   ''',
       };
@@ -175,11 +175,23 @@ class ApiService {
         'subscription',
         'description',
         'user_id',
+        'subject',
       ];
       for (final field in requiredFields) {
         if (ticketData[field] == null || ticketData[field].toString().isEmpty) {
           throw Exception('Missing required field: $field');
         }
+      }
+
+      // Ensure numeric fields are integers
+      final contactId = int.tryParse(ticketData['contact'].toString());
+      final userId = int.tryParse(ticketData['user_id'].toString());
+
+      if (contactId == null) {
+        throw Exception('Invalid contact ID');
+      }
+      if (userId == null) {
+        throw Exception('Invalid user ID');
       }
 
       // Process attachments if present
@@ -194,7 +206,7 @@ class ApiService {
               'file_type': attachment['type'] ?? 'application/octet-stream',
               'file_size': attachment['size'],
               'file_data': attachment['data'],
-              'uploaded_by': ticketData['user_id'],
+              'uploaded_by': userId,
             });
           }
         }
@@ -203,15 +215,22 @@ class ApiService {
       // Format the data for the API
       final formattedData = {
         'type': ticketData['type'],
-        'contact': ticketData['contact'],
+        'contact': contactId,
         'contact_name': ticketData['contact_name'],
         'subscription': ticketData['subscription'],
         'description': ticketData['description'],
-        'user_id': ticketData['user_id'].toString(),
-        'assigned_agent': ticketData['contact'],
+        'user_id': userId,
+        'assigned_agent': contactId,
         'status': 'open',
+        'subject': ticketData['subject'] ?? 'Ticket: ${ticketData['type']}',
         'attachments': processedAttachments,
       };
+
+      // Ensure subject is not empty
+      if (formattedData['subject'] == null ||
+          formattedData['subject'].toString().isEmpty) {
+        formattedData['subject'] = 'Ticket: ${ticketData['type']}';
+      }
 
       print('Creating ticket with data: ${json.encode(formattedData)}');
 
@@ -282,14 +301,32 @@ class ApiService {
   // Get agents
   static Future<Map<String, dynamic>> getAgents() async {
     try {
+      print('Fetching agents from: $baseUrl/api.php?action=get_agents');
+
       final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_agents'),
         headers: {'Accept': 'application/json'},
       );
 
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
+          // Ensure agent IDs are integers
+          if (data['data'] != null && data['data'] is List) {
+            data['data'] =
+                (data['data'] as List).map((agent) {
+                  if (agent is Map<String, dynamic>) {
+                    return {
+                      ...agent,
+                      'id': int.tryParse(agent['id'].toString()) ?? agent['id'],
+                    };
+                  }
+                  return agent;
+                }).toList();
+          }
           return data;
         } else {
           throw Exception(data['message'] ?? 'Failed to fetch agents');
@@ -298,6 +335,7 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
+      print('Error fetching agents: $e');
       throw Exception('Error fetching agents: $e');
     }
   }
@@ -325,7 +363,7 @@ class ApiService {
     }
   }
 
-  // Get current user info - Example method to get the logged-in user's ID
+  // Get current user info
   static Future<Map<String, dynamic>> getCurrentUser(int userId) async {
     try {
       print(
@@ -337,17 +375,13 @@ class ApiService {
             Uri.parse(
               '$baseUrl/api.php?action=get_current_user&user_id=$userId',
             ),
+            headers: {'Accept': 'application/json'},
           )
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () {
-              return http.Response(
-                json.encode({
-                  'status': 'error',
-                  'message':
-                      'Connection timed out. Please check if XAMPP is running.',
-                }),
-                408,
+              throw TimeoutException(
+                'Connection timed out. Please check your internet connection.',
               );
             },
           );
@@ -355,13 +389,21 @@ class ApiService {
       print('Response status code: ${response.statusCode}');
       print('Response body: ${response.body}');
 
-      final data = json.decode(response.body);
-      return data;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success' && data['data'] != null) {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch user data');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
     } catch (e) {
+      print('Error in getCurrentUser: $e');
       return {
         'status': 'error',
-        'message': 'Error fetching current user: $e',
-        'baseUrl': baseUrl,
+        'message': e.toString().replaceAll('Exception: ', ''),
       };
     }
   }
@@ -480,29 +522,67 @@ class ApiService {
   // Get all customers
   static Future<Map<String, dynamic>> getCustomers() async {
     try {
-      print('Fetching customers from: $baseUrl/api.php?action=get_customers');
+      print('Fetching customers from: $baseUrl/api.php?action=get_agents');
 
-      final response = await _client.get(
-        Uri.parse('$baseUrl/api.php?action=get_customers'),
-        headers: {'Accept': 'application/json'},
-      );
+      final response = await _client
+          .get(
+            Uri.parse('$baseUrl/api.php?action=get_agents'),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw TimeoutException(
+                'Connection timed out. Please check your internet connection.',
+              );
+            },
+          );
 
       print('Response status: ${response.statusCode}');
       print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['status'] == 'success') {
+
+        // Validate response structure
+        if (data['status'] == 'success' && data['data'] != null) {
+          // Ensure customer IDs are integers
+          if (data['data'] is List) {
+            data['data'] =
+                (data['data'] as List).map((customer) {
+                  if (customer is Map<String, dynamic>) {
+                    return {
+                      ...customer,
+                      'id':
+                          int.tryParse(customer['id'].toString()) ??
+                          customer['id'],
+                    };
+                  }
+                  return customer;
+                }).toList();
+          }
           return data;
         } else {
-          throw Exception(data['message'] ?? 'Failed to fetch customers');
+          throw Exception(
+            data['message'] ?? 'Invalid response format from server',
+          );
         }
       } else {
-        throw Exception('Server error: ${response.statusCode}');
+        throw Exception(
+          'Server error: ${response.statusCode} - ${response.body}',
+        );
       }
     } catch (e) {
       print('Error fetching customers: $e');
-      throw Exception('Error fetching customers: $e');
+      if (e is TimeoutException) {
+        throw Exception(
+          'Connection timed out. Please check your internet connection.',
+        );
+      }
+      throw Exception('Error fetching customers: ${e.toString()}');
     }
   }
 

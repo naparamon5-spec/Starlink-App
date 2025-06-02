@@ -47,7 +47,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       // Get data from API
       final response = await ApiService.getCurrentUser(userId);
 
-      if (response['success'] == true && response['data'] != null) {
+      if (response['status'] == 'success' && response['data'] != null) {
         final userData = response['data'];
 
         setState(() {
@@ -88,34 +88,69 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
   Future<void> _loadSubscriptions() async {
     try {
+      print('Loading subscriptions...');
       final response = await ApiService.getSubscriptions();
+
       if (response['status'] == 'success' && response['data'] != null) {
+        final subscriptions = List<Map<String, dynamic>>.from(response['data']);
+        print('Received ${subscriptions.length} subscriptions');
+
         setState(() {
-          _subscriptions = List<Map<String, dynamic>>.from(response['data']);
+          _subscriptions = subscriptions;
         });
 
         // Load billing cycles for each subscription
         for (var subscription in _subscriptions) {
-          await _loadBillingCycles(subscription['id'].toString());
+          if (subscription['id'] != null) {
+            await _loadBillingCycles(subscription['id'].toString());
+          } else {
+            print(
+              'Warning: Subscription missing ID: ${subscription.toString()}',
+            );
+          }
         }
+      } else {
+        print('Error response from getSubscriptions: ${response.toString()}');
+        throw Exception(response['message'] ?? 'Failed to fetch subscriptions');
       }
     } catch (e) {
       print('Error loading subscriptions: $e');
+      // Show error to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading subscriptions: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _loadBillingCycles(String subscriptionId) async {
     try {
+      print('Loading billing cycles for subscription ID: $subscriptionId');
       final response = await ApiService.getBillingCycles(subscriptionId);
+
       if (response['status'] == 'success' && response['data'] != null) {
+        final cycles = List<Map<String, dynamic>>.from(response['data']);
+        print('Received ${cycles.length} billing cycles');
+
         setState(() {
-          _billingCycles.addAll(
-            List<Map<String, dynamic>>.from(response['data']),
-          );
+          _billingCycles.addAll(cycles);
         });
+      } else {
+        print('Error response from getBillingCycles: ${response.toString()}');
+        throw Exception(
+          response['message'] ?? 'Failed to fetch billing cycles',
+        );
       }
     } catch (e) {
-      print('Error loading billing cycles: $e');
+      print(
+        'Error loading billing cycles for subscription $subscriptionId: $e',
+      );
+      // Don't throw the error, just log it and continue
+      // This prevents the entire subscription loading from failing
     }
   }
 
