@@ -2,33 +2,21 @@ import 'dart:convert';
 import 'dart:io' show Platform, HttpClient, X509Certificate;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import 'package:flutter/foundation.dart';
+import '../config/ssl_config.dart';
 
 class ApiService {
   // Get the appropriate base URL based on the platform
   static String get baseUrl {
-    if (Platform.isAndroid) {
-      // For Android emulator
-      return 'https://api.lamco.com.ph/starlinkAPI';
-    } else if (Platform.isIOS) {
-      // For iOS simulator
-      return 'https://api.lamco.com.ph/starlinkAPI';
-    } else {
-      // For physical devices, you'll need to replace this with your computer's IP address
-      // For example: return 'http://192.168.1.100/starlink_app/backend';
-      return 'https://api.lamco.com.ph/starlinkAPI';
-    }
+    return 'https://api.lamco.com.ph/starlinkAPI';
   }
 
-  // Create a custom HTTP client that bypasses certificate verification
+  // Create a custom HTTP client that uses our SSL configuration
   static http.Client get _client {
-    if (Platform.isAndroid || Platform.isIOS) {
-      final httpClient =
-          HttpClient()
-            ..badCertificateCallback =
-                (X509Certificate cert, String host, int port) => true;
-      return IOClient(httpClient);
-    }
-    return http.Client();
+    final httpClient =
+        HttpClient()..connectionTimeout = const Duration(seconds: 15);
+
+    return IOClient(httpClient);
   }
 
   // Test database connection
@@ -144,8 +132,8 @@ class ApiService {
         headers: {'Accept': 'application/json'},
       );
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      print('Get tickets response status: ${response.statusCode}');
+      print('Get tickets response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -168,6 +156,8 @@ class ApiService {
     Map<String, dynamic> ticketData,
   ) async {
     try {
+      print('Creating ticket with data: $ticketData');
+
       // Validate required fields
       final requiredFields = [
         'type',
@@ -175,23 +165,11 @@ class ApiService {
         'subscription',
         'description',
         'user_id',
-        'subject',
       ];
       for (final field in requiredFields) {
         if (ticketData[field] == null || ticketData[field].toString().isEmpty) {
           throw Exception('Missing required field: $field');
         }
-      }
-
-      // Ensure numeric fields are integers
-      final contactId = int.tryParse(ticketData['contact'].toString());
-      final userId = int.tryParse(ticketData['user_id'].toString());
-
-      if (contactId == null) {
-        throw Exception('Invalid contact ID');
-      }
-      if (userId == null) {
-        throw Exception('Invalid user ID');
       }
 
       // Process attachments if present
@@ -206,7 +184,7 @@ class ApiService {
               'file_type': attachment['type'] ?? 'application/octet-stream',
               'file_size': attachment['size'],
               'file_data': attachment['data'],
-              'uploaded_by': userId,
+              'uploaded_by': ticketData['user_id'],
             });
           }
         }
@@ -215,24 +193,19 @@ class ApiService {
       // Format the data for the API
       final formattedData = {
         'type': ticketData['type'],
-        'contact': contactId,
+        'contact': ticketData['contact'],
         'contact_name': ticketData['contact_name'],
         'subscription': ticketData['subscription'],
         'description': ticketData['description'],
-        'user_id': userId,
-        'assigned_agent': contactId,
+        'user_id': ticketData['user_id'].toString(),
+        'assigned_agent': ticketData['contact'],
         'status': 'open',
-        'subject': ticketData['subject'] ?? 'Ticket: ${ticketData['type']}',
+        'subject': ticketData['subject'] ?? ticketData['type'],
         'attachments': processedAttachments,
+        'created_at': DateTime.now().toIso8601String(),
       };
 
-      // Ensure subject is not empty
-      if (formattedData['subject'] == null ||
-          formattedData['subject'].toString().isEmpty) {
-        formattedData['subject'] = 'Ticket: ${ticketData['type']}';
-      }
-
-      print('Creating ticket with data: ${json.encode(formattedData)}');
+      print('Sending formatted ticket data: $formattedData');
 
       final response = await _client
           .post(
@@ -256,12 +229,31 @@ class ApiService {
             },
           );
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      print('Create ticket response status: ${response.statusCode}');
+      print('Create ticket response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+
+        // Ensure data is not null and has the expected structure
+        if (data == null) {
+          throw Exception('Invalid response: Response data is null');
+        }
+
         if (data['status'] == 'success') {
+          // Ensure data['data'] exists and is a Map
+          if (data['data'] == null) {
+            data['data'] = {};
+          }
+
+          // Add additional fields to the response for consistency
+          data['data'] = {
+            ...data['data'],
+            'status': 'OPEN',
+            'created_at': formattedData['created_at'],
+            'attachments': processedAttachments,
+            'contact_name': ticketData['contact_name'],
+          };
           return data;
         } else {
           throw Exception(data['message'] ?? 'Failed to create ticket');
@@ -271,7 +263,12 @@ class ApiService {
       }
     } catch (e) {
       print('Error creating ticket: $e');
-      throw Exception('Failed to create ticket: $e');
+      // Return a properly formatted error response
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+        'data': null,
+      };
     }
   }
 
@@ -611,6 +608,80 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Error fetching billing cycles: $e');
+    }
+  }
+
+  // Forgot password with improved error handling
+  static Future<Map<String, dynamic>> forgotPassword(String email) async {
+    try {
+      print('Attempting password reset for email: $email');
+      print('Sending request to: $baseUrl/api.php?action=forgot_password');
+
+      final response = await _client
+          .post(
+            Uri.parse('$baseUrl/api.php?action=forgot_password'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: json.encode({'email': email}),
+          )
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              return http.Response(
+                json.encode({
+                  'status': 'error',
+                  'message': 'Connection timed out. Please try again.',
+                }),
+                408,
+              );
+            },
+          );
+
+      print('Password reset response status: ${response.statusCode}');
+      print('Password reset response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success' || data['success'] == true) {
+          return data;
+        } else {
+          throw Exception(
+            data['message'] ?? 'Failed to process password reset request',
+          );
+        }
+      } else if (response.statusCode == 500) {
+        print('Server error details: ${response.body}');
+        throw Exception('Server error occurred. Please try again later.');
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error during password reset: $e');
+      if (e.toString().contains('CERTIFICATE_VERIFY_FAILED')) {
+        if (SSLConfig.isDevelopment) {
+          return {
+            'status': 'error',
+            'message':
+                'SSL Certificate verification failed in development mode. Please check your certificate configuration.',
+            'details': e.toString(),
+          };
+        } else {
+          return {
+            'status': 'error',
+            'message':
+                'SSL Certificate verification failed. Please contact support.',
+            'details': e.toString(),
+          };
+        }
+      }
+      return {
+        'status': 'error',
+        'message':
+            'Failed to process password reset request. Please try again.',
+        'details': e.toString(),
+      };
     }
   }
 }

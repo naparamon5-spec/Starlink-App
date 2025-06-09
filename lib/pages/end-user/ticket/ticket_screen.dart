@@ -165,7 +165,7 @@ class _TicketScreenState extends State<TicketScreen> {
     );
   }
 
-  Future<void> _loadTickets() async {
+  Future<void> _loadTickets({bool forceRefresh = false}) async {
     if (!mounted) return;
 
     setState(() => _isLoading = true);
@@ -182,16 +182,20 @@ class _TicketScreenState extends State<TicketScreen> {
           ),
         );
 
+        if (!mounted) return;
+
         setState(() {
+          // Process tickets and sort by creation date (newest first)
           _tickets = List<Map<String, dynamic>>.from(
             response['data'].map((ticket) {
               // Convert timestamps to readable format if needed
               String createdAt = ticket['created_at'] ?? 'N/A';
+              DateTime? parsedDate;
               try {
                 if (createdAt != 'N/A') {
-                  final date = DateTime.parse(createdAt);
+                  parsedDate = DateTime.parse(createdAt);
                   createdAt =
-                      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+                      '${parsedDate.year}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.day.toString().padLeft(2, '0')} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}';
                 }
               } catch (e) {
                 print('Error parsing date: $e');
@@ -237,6 +241,7 @@ class _TicketScreenState extends State<TicketScreen> {
                 'attachments': attachmentsDisplay,
                 'status': status,
                 'created_at': createdAt,
+                'created_at_raw': parsedDate, // Store raw date for sorting
                 'user_id': ticket['user_id'],
                 'full_data': {
                   ...ticket,
@@ -247,7 +252,17 @@ class _TicketScreenState extends State<TicketScreen> {
               };
             }),
           );
-          _filteredTickets = _tickets;
+
+          // Sort tickets by creation date (newest first)
+          _tickets.sort((a, b) {
+            final dateA = a['created_at_raw'] as DateTime?;
+            final dateB = b['created_at_raw'] as DateTime?;
+            if (dateA == null || dateB == null) return 0;
+            return dateB.compareTo(dateA);
+          });
+
+          // Update filtered tickets with a new list instance
+          _filteredTickets = List.from(_tickets);
           _isLoading = false;
         });
       } else {
@@ -347,44 +362,122 @@ class _TicketScreenState extends State<TicketScreen> {
               userId: parsedUserId!,
               onConfirm: (newTicket) async {
                 try {
+                  // Show loading indicator
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Text('Creating ticket...'),
+                        ],
+                      ),
+                      backgroundColor: Colors.blue,
+                      duration: Duration(seconds: 30),
+                    ),
+                  );
+
                   print('Submitting ticket data: $newTicket');
                   final response = await ApiService.createTicket(newTicket);
 
                   if (!mounted) return;
 
+                  // Check if response is null or invalid
+                  if (response == null) {
+                    throw Exception('No response from server');
+                  }
+
+                  // Check if response has the expected structure
+                  if (response is! Map<String, dynamic>) {
+                    throw Exception('Invalid response format from server');
+                  }
+
                   if (response['status'] == 'success') {
-                    // First refresh the tickets list
-                    await _loadTickets();
+                    // Clear the loading snackbar
+                    ScaffoldMessenger.of(context).clearSnackBars();
 
-                    // Then close the modal
-                    if (mounted) {
-                      Navigator.of(dialogContext).pop();
+                    // Close the modal first
+                    Navigator.of(dialogContext).pop();
 
-                      // Show success message after modal is closed
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Ticket created successfully'),
-                          backgroundColor: Colors.green,
-                          duration: Duration(seconds: 3),
+                    // Show refreshing indicator
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Row(
+                          children: [
+                            CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: 16),
+                            Text('Refreshing ticket list...'),
+                          ],
                         ),
-                      );
-                    }
-                  } else {
-                    throw Exception(
-                      response['message'] ?? 'Failed to create ticket',
+                        backgroundColor: Colors.blue,
+                        duration: Duration(seconds: 10),
+                      ),
                     );
+
+                    // Reset filters and search
+                    setState(() {
+                      _selectedFilter = 'All';
+                      _currentPage = 1;
+                      _searchController.clear();
+                    });
+
+                    // Force a complete reload of tickets
+                    await _loadTickets(forceRefresh: true);
+
+                    // Ensure the UI is updated with the new data
+                    if (mounted) {
+                      setState(() {
+                        // Force rebuild of the list by creating new instances
+                        _filteredTickets = List.from(_tickets);
+                      });
+
+                      // Additional UI refresh to ensure the list is updated
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          setState(() {
+                            // Force another rebuild after the frame
+                          });
+                        }
+                      });
+                    }
+
+                    // Clear the refreshing snackbar
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).clearSnackBars();
+
+                    // Show success message
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Ticket created successfully'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  } else {
+                    final errorMessage =
+                        response['message'] ?? 'Failed to create ticket';
+                    throw Exception(errorMessage);
                   }
                 } catch (e) {
                   print('Error creating ticket: $e');
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error creating ticket: $e'),
-                        backgroundColor: Colors.red,
-                        duration: const Duration(seconds: 3),
-                      ),
-                    );
-                  }
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error creating ticket: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
                 }
               },
               onCancel: () {

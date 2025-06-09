@@ -32,6 +32,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
   List<String> _subscriptions = [];
 
   bool _isLoading = true;
+  bool _isSubmitting = false; // Add this to prevent double submission
   String? _errorMessage;
 
   @override
@@ -155,10 +156,17 @@ class _NewTicketModalState extends State<NewTicketModal> {
   }
 
   void _submitTicket() async {
+    // Prevent double submission
+    if (_isSubmitting) return;
+
     if (_selectedTicketType != null &&
         _selectedContact != null &&
         _selectedSubscription != null &&
         _descriptionController.text.isNotEmpty) {
+      setState(() {
+        _isSubmitting = true;
+      });
+
       try {
         // Process attachments
         List<Map<String, dynamic>> attachmentsData = [];
@@ -180,59 +188,27 @@ class _NewTicketModalState extends State<NewTicketModal> {
         // Create the ticket with the correct field names
         final newTicket = {
           'user_id': widget.userId,
-          'ticket_type': _selectedTicketType,
-          'assigned_agent': _contacts[_selectedContact],
+          'type': _selectedTicketType,
+          'contact': _contacts[_selectedContact],
           'contact_name': _selectedContact,
-          'subscription_id': _selectedSubscription,
+          'subscription': _selectedSubscription,
           'description': _descriptionController.text,
-          'status': 'open',
+          'status': 'OPEN',
           'subject': _selectedTicketType,
           'attachments': attachmentsData,
         };
 
         print('Submitting ticket with data: $newTicket'); // Debug log
 
-        // Show loading indicator
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-                SizedBox(width: 16),
-                Text('Creating ticket...'),
-              ],
-            ),
-            backgroundColor: Colors.blue,
-            duration: Duration(seconds: 30),
-          ),
-        );
-
-        // Submit the ticket
+        // Call the parent's onConfirm callback and let it handle everything
         await widget.onConfirm(newTicket);
-
-        // Clear the loading snackbar
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).clearSnackBars();
-
-        // Close the modal
-        if (!mounted) return;
-        Navigator.of(context).pop();
-
-        // Show success message
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket created successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
       } catch (e) {
+        // Only handle errors here, let parent handle success
+        setState(() {
+          _isSubmitting = false;
+        });
+
         if (!mounted) return;
-        ScaffoldMessenger.of(context).clearSnackBars();
 
         // Format the error message
         String errorMessage = e.toString();
@@ -342,11 +318,14 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             child: Text(type),
                           );
                         }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedTicketType = value;
-                      });
-                    },
+                    onChanged:
+                        _isSubmitting
+                            ? null
+                            : (value) {
+                              setState(() {
+                                _selectedTicketType = value;
+                              });
+                            },
                     validator:
                         (value) =>
                             value == null
@@ -377,11 +356,14 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             child: Text(contact),
                           );
                         }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedContact = value;
-                      });
-                    },
+                    onChanged:
+                        _isSubmitting
+                            ? null
+                            : (value) {
+                              setState(() {
+                                _selectedContact = value;
+                              });
+                            },
                     validator:
                         (value) =>
                             value == null ? 'Please select a contact' : null,
@@ -414,11 +396,14 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             ),
                           );
                         }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedSubscription = value;
-                      });
-                    },
+                    onChanged:
+                        _isSubmitting
+                            ? null
+                            : (value) {
+                              setState(() {
+                                _selectedSubscription = value;
+                              });
+                            },
                     validator:
                         (value) =>
                             value == null
@@ -433,6 +418,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                   // Description
                   TextFormField(
                     controller: _descriptionController,
+                    enabled: !_isSubmitting,
                     decoration: InputDecoration(
                       labelText: 'Description',
                       border: OutlineInputBorder(
@@ -468,7 +454,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                         ),
                       ),
                       TextButton.icon(
-                        onPressed: _pickFiles,
+                        onPressed: _isSubmitting ? null : _pickFiles,
                         icon: const Icon(Icons.attach_file, size: 18),
                         label: const Text(
                           'Add File',
@@ -549,9 +535,11 @@ class _NewTicketModalState extends State<NewTicketModal> {
                                     trailing: IconButton(
                                       icon: const Icon(Icons.close, size: 20),
                                       onPressed:
-                                          () => _removeFile(
-                                            _attachedFiles.indexOf(file),
-                                          ),
+                                          _isSubmitting
+                                              ? null
+                                              : () => _removeFile(
+                                                _attachedFiles.indexOf(file),
+                                              ),
                                       tooltip: 'Remove file',
                                     ),
                                   ),
@@ -599,7 +587,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                     children: [
                       if (widget.onCancel != null)
                         TextButton(
-                          onPressed: widget.onCancel,
+                          onPressed: _isSubmitting ? null : widget.onCancel,
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -613,7 +601,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                         ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: _submitTicket,
+                        onPressed: _isSubmitting ? null : _submitTicket,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
@@ -623,10 +611,22 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             borderRadius: BorderRadius.circular(6.0),
                           ),
                         ),
-                        child: const Text(
-                          'Create Ticket',
-                          style: TextStyle(fontSize: 14),
-                        ),
+                        child:
+                            _isSubmitting
+                                ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                                : const Text(
+                                  'Create Ticket',
+                                  style: TextStyle(fontSize: 14),
+                                ),
                       ),
                     ],
                   ),

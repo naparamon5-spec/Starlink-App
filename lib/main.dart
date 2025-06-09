@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'pages/login_screen.dart'; // Import the LoginScreen
+import 'config/ssl_config.dart';
+import 'dart:io';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -10,6 +12,8 @@ void main() {
       statusBarIconBrightness: Brightness.dark,
     ),
   );
+  // Set up SSL configuration based on environment
+  HttpOverrides.global = SSLConfig.httpOverrides;
   runApp(const MyApp());
 }
 
