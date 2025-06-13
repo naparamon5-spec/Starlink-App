@@ -39,6 +39,15 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   }
 
   @override
+  void didUpdateWidget(CustomerViewScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Refresh tickets when the widget updates
+    if (widget.ticket != oldWidget.ticket) {
+      _loadTickets();
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.removeListener(_handleSearch);
     _searchController.dispose();

@@ -229,7 +229,27 @@ class _TicketScreenState extends State<TicketScreen> {
                 }
               }
 
-              final status = (ticket['status'] ?? 'open').toUpperCase();
+              // Map backend status to display status
+              String displayStatus;
+              String backendStatus =
+                  (ticket['status'] ?? 'open').toString().toLowerCase().trim();
+
+              switch (backendStatus) {
+                case 'open':
+                  displayStatus = 'OPEN';
+                  break;
+                case 'in progress':
+                  displayStatus = 'IN PROGRESS';
+                  break;
+                case 'done':
+                  displayStatus = 'DONE';
+                  break;
+                case 'closed':
+                  displayStatus = 'CLOSED';
+                  break;
+                default:
+                  displayStatus = backendStatus.toUpperCase();
+              }
 
               return {
                 'id': ticket['id'],
@@ -239,13 +259,13 @@ class _TicketScreenState extends State<TicketScreen> {
                 'subscription': ticket['subscription'] ?? 'N/A',
                 'description': ticket['description'] ?? 'No description',
                 'attachments': attachmentsDisplay,
-                'status': status,
+                'status': displayStatus,
                 'created_at': createdAt,
                 'created_at_raw': parsedDate, // Store raw date for sorting
                 'user_id': ticket['user_id'],
                 'full_data': {
                   ...ticket,
-                  'status': status,
+                  'status': displayStatus,
                   'created_at': createdAt,
                   'attachments': ticket['attachments'] ?? [],
                 },
@@ -326,166 +346,55 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
-  void _showNewTicketModal() {
-    if (_userId == null || _userId!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: User not logged in'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    // Parse user ID with validation
-    int? parsedUserId;
-    try {
-      parsedUserId = int.parse(_userId!);
-    } catch (e) {
-      print('Error parsing user ID: $_userId');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: Invalid user ID'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
+  void _showNewTicketModal() async {
+    final result = await showDialog(
       context: context,
-      barrierDismissible: false,
       builder:
-          (BuildContext dialogContext) => WillPopScope(
-            onWillPop: () async => false,
-            child: NewTicketModal(
-              userId: parsedUserId!,
-              onConfirm: (newTicket) async {
-                try {
-                  // Show loading indicator
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Row(
-                        children: [
-                          CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
-                          SizedBox(width: 16),
-                          Text('Creating ticket...'),
-                        ],
-                      ),
-                      backgroundColor: Colors.blue,
-                      duration: Duration(seconds: 30),
-                    ),
-                  );
+          (dialogContext) => NewTicketModal(
+            userId: int.parse(_userId ?? '0'),
+            onConfirm: (ticket) async {
+              // Check if forceRefresh is true
+              if (ticket['forceRefresh'] == true) {
+                // Force reload tickets
+                await _loadTickets(forceRefresh: true);
 
-                  print('Submitting ticket data: $newTicket');
-                  final response = await ApiService.createTicket(newTicket);
+                // Update the ticket list with the new ticket
+                setState(() {
+                  // Add the new ticket to the beginning of the list
+                  _tickets.insert(0, {
+                    'id': ticket['id'],
+                    'type': ticket['type'],
+                    'contact': ticket['contact'],
+                    'contact_id': ticket['contact_id'],
+                    'subscription': ticket['subscription'],
+                    'description': ticket['description'],
+                    'attachments': ticket['attachments'],
+                    'status': ticket['status'],
+                    'created_at': ticket['created_at'],
+                    'created_at_raw': ticket['created_at_raw'],
+                    'full_data': ticket['full_data'],
+                  });
 
-                  if (!mounted) return;
+                  // Update filtered tickets
+                  _filteredTickets = List.from(_tickets);
 
-                  // Check if response is null or invalid
-                  if (response == null) {
-                    throw Exception('No response from server');
-                  }
-
-                  // Check if response has the expected structure
-                  if (response is! Map<String, dynamic>) {
-                    throw Exception('Invalid response format from server');
-                  }
-
-                  if (response['status'] == 'success') {
-                    // Clear the loading snackbar
-                    ScaffoldMessenger.of(context).clearSnackBars();
-
-                    // Close the modal first
-                    Navigator.of(dialogContext).pop();
-
-                    // Show refreshing indicator
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Row(
-                          children: [
-                            CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                            SizedBox(width: 16),
-                            Text('Refreshing ticket list...'),
-                          ],
-                        ),
-                        backgroundColor: Colors.blue,
-                        duration: Duration(seconds: 10),
-                      ),
-                    );
-
-                    // Reset filters and search
-                    setState(() {
-                      _selectedFilter = 'All';
-                      _currentPage = 1;
-                      _searchController.clear();
-                    });
-
-                    // Force a complete reload of tickets
-                    await _loadTickets(forceRefresh: true);
-
-                    // Ensure the UI is updated with the new data
-                    if (mounted) {
-                      setState(() {
-                        // Force rebuild of the list by creating new instances
-                        _filteredTickets = List.from(_tickets);
-                      });
-
-                      // Additional UI refresh to ensure the list is updated
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) {
-                          setState(() {
-                            // Force another rebuild after the frame
-                          });
-                        }
-                      });
-                    }
-
-                    // Clear the refreshing snackbar
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).clearSnackBars();
-
-                    // Show success message
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Ticket created successfully'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                  } else {
-                    final errorMessage =
-                        response['message'] ?? 'Failed to create ticket';
-                    throw Exception(errorMessage);
-                  }
-                } catch (e) {
-                  print('Error creating ticket: $e');
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).clearSnackBars();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error creating ticket: ${e.toString()}'),
-                      backgroundColor: Colors.red,
-                      duration: const Duration(seconds: 3),
-                    ),
-                  );
-                }
-              },
-              onCancel: () {
-                Navigator.of(dialogContext).pop();
-              },
-            ),
+                  // Reset to first page
+                  _currentPage = 1;
+                });
+              }
+            },
+            onCancel: () {
+              Navigator.of(dialogContext).pop();
+            },
           ),
     );
+
+    if (result != null && result is Map<String, dynamic>) {
+      // Handle any additional result data if needed
+      if (result['forceRefresh'] == true) {
+        await _loadTickets(forceRefresh: true);
+      }
+    }
   }
 
   Widget _buildTicketCard(Map<String, dynamic> ticket) {

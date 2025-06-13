@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../../services/api_service.dart';
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:http/http.dart' as http;
 
 class NewTicketModal extends StatefulWidget {
   final Function(Map<String, dynamic>) onConfirm;
@@ -32,7 +33,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
   List<String> _subscriptions = [];
 
   bool _isLoading = true;
-  bool _isSubmitting = false; // Add this to prevent double submission
   String? _errorMessage;
 
   @override
@@ -48,6 +48,56 @@ class _NewTicketModalState extends State<NewTicketModal> {
     });
 
     try {
+      // First get the current user to get their EU code
+      final userData = await ApiService.getCurrentUser(widget.userId);
+      print('User data: ${userData.toString()}'); // Debug log
+
+      if (userData['status'] != 'success' || userData['data'] == null) {
+        throw Exception('Failed to get user data');
+      }
+
+      final user = userData['data'];
+      print('User object: $user'); // Debug log to see all user fields
+
+      // Try different possible EU code field names
+      String? euCode;
+      if (user['eu_code'] != null) {
+        euCode = user['eu_code'].toString();
+      } else if (user['com_eu_code'] != null) {
+        euCode = user['com_eu_code'].toString();
+      } else if (user['customer_code'] != null) {
+        euCode = user['customer_code'].toString();
+      }
+
+      print('Found EU code from user: $euCode'); // Debug log
+
+      if (euCode == null || euCode.isEmpty) {
+        // If no EU code found in user data, try to get it from end_users table
+        try {
+          final endUserData = await ApiService.getEndUserByUserId(
+            widget.userId,
+          );
+          print('End user data: $endUserData'); // Debug log
+
+          if (endUserData['status'] == 'success' &&
+              endUserData['data'] != null) {
+            euCode =
+                endUserData['data']['eu_code']?.toString() ??
+                endUserData['data']['customer_code']?.toString();
+            print('EU code from end_users: $euCode'); // Debug log
+          }
+        } catch (e) {
+          print('Error getting end user data: $e');
+          // Continue with the flow even if end user data fails
+        }
+      }
+
+      if (euCode == null || euCode.isEmpty) {
+        throw Exception(
+          'Could not find EU code for user. Please contact support.',
+        );
+      }
+
       // Fetch ticket categories
       final categoriesData = await ApiService.getCategories();
       setState(() {
@@ -56,25 +106,48 @@ class _NewTicketModalState extends State<NewTicketModal> {
         );
       });
 
-      // Fetch customers instead of agents
-      final customersData = await ApiService.getCustomers();
-      setState(() {
-        _contacts = Map.fromEntries(
-          (customersData['data'] as List).map(
-            (customer) =>
-                MapEntry(customer['name'] as String, customer['id'] as int),
-          ),
-        );
-      });
+      // Fetch contacts using EU code
+      final contactsData = await ApiService.getContactsByEuCode(euCode);
+      print('Contacts data: ${contactsData.toString()}'); // Debug log
+      if (contactsData['status'] == 'success') {
+        setState(() {
+          _contacts = Map.fromEntries(
+            (contactsData['data'] as List).map(
+              (contact) => MapEntry(
+                '${contact['name']} ${contact['first_name']}',
+                contact['id'],
+              ),
+            ),
+          );
+        });
+      } else {
+        throw Exception(contactsData['message'] ?? 'Failed to fetch contacts');
+      }
 
-      // Fetch subscriptions
-      final subscriptionsData = await ApiService.getSubscriptions();
-      setState(() {
-        _subscriptions = List<String>.from(
-          subscriptionsData['data'].map((item) => item['nickname']),
+      // Fetch subscriptions using EU code
+      final subscriptionsData = await ApiService.getSubscriptionsByEuCode(
+        euCode,
+      );
+      print('Subscriptions data: ${subscriptionsData.toString()}'); // Debug log
+      if (subscriptionsData['status'] == 'success') {
+        setState(() {
+          _subscriptions = List<String>.from(
+            subscriptionsData['data'].map(
+              (item) =>
+                  item['nickname'] ??
+                  item['name'] ??
+                  item['subscription_name'] ??
+                  'Unknown',
+            ),
+          );
+        });
+      } else {
+        throw Exception(
+          subscriptionsData['message'] ?? 'Failed to fetch subscriptions',
         );
-      });
+      }
     } catch (e) {
+      print('Error in _fetchData: $e'); // Debug log
       setState(() {
         _errorMessage = 'Error fetching data: ${e.toString()}';
       });
@@ -156,17 +229,10 @@ class _NewTicketModalState extends State<NewTicketModal> {
   }
 
   void _submitTicket() async {
-    // Prevent double submission
-    if (_isSubmitting) return;
-
     if (_selectedTicketType != null &&
         _selectedContact != null &&
         _selectedSubscription != null &&
         _descriptionController.text.isNotEmpty) {
-      setState(() {
-        _isSubmitting = true;
-      });
-
       try {
         // Process attachments
         List<Map<String, dynamic>> attachmentsData = [];
@@ -174,18 +240,17 @@ class _NewTicketModalState extends State<NewTicketModal> {
           for (var file in _attachedFiles) {
             if (file.bytes != null) {
               attachmentsData.add({
-                'file_name': file.name,
-                'original_name': file.name,
-                'file_type': file.extension ?? '',
-                'file_size': file.size,
-                'file_data': base64Encode(file.bytes!),
-                'uploaded_by': widget.userId,
+                'name': file.name,
+                'data': base64Encode(file.bytes!),
+                'type': file.extension ?? '',
+                'size': file.size,
+                'file_path': file.path ?? '',
               });
             }
           }
         }
 
-        // Create the ticket with the correct field names
+        // Create the ticket with attachments
         final newTicket = {
           'user_id': widget.userId,
           'type': _selectedTicketType,
@@ -193,22 +258,83 @@ class _NewTicketModalState extends State<NewTicketModal> {
           'contact_name': _selectedContact,
           'subscription': _selectedSubscription,
           'description': _descriptionController.text,
-          'status': 'OPEN',
-          'subject': _selectedTicketType,
+          'status': 'open',
           'attachments': attachmentsData,
+          'attachments_display': _attachedFiles
+              .map((file) => file.name)
+              .join(', '),
         };
 
-        print('Submitting ticket with data: $newTicket'); // Debug log
-
-        // Call the parent's onConfirm callback and let it handle everything
-        await widget.onConfirm(newTicket);
-      } catch (e) {
-        // Only handle errors here, let parent handle success
-        setState(() {
-          _isSubmitting = false;
-        });
-
+        // Show loading indicator
         if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+                SizedBox(width: 16),
+                Text('Creating ticket...'),
+              ],
+            ),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 30),
+          ),
+        );
+
+        // Submit the ticket using ApiService directly
+        final response = await ApiService.createTicket(newTicket);
+
+        // Clear the loading snackbar
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).clearSnackBars();
+
+        if (response['status'] == 'success') {
+          // Show success message
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ticket created successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+
+          // Format the ticket data to match the expected structure
+          final formattedTicket = {
+            'id': response['data']['id'] ?? '',
+            'type': response['data']['type'] ?? '',
+            'contact': response['data']['contact_name'] ?? '',
+            'contact_id': response['data']['contact'] ?? '',
+            'subscription': response['data']['subscription'] ?? '',
+            'description': response['data']['description'] ?? '',
+            'attachments':
+                response['data']['attachments_display'] ?? 'No attachments',
+            'status': 'OPEN',
+            'created_at': DateTime.now().toString(),
+            'created_at_raw': DateTime.now(),
+            'full_data': {
+              ...response['data'],
+              'status': 'OPEN',
+              'created_at': DateTime.now().toString(),
+            },
+            'forceRefresh': true,
+          };
+
+          // Call the parent's onConfirm callback with the response
+          widget.onConfirm(formattedTicket);
+
+          // Close the modal and return the formatted ticket data
+          if (mounted) {
+            Navigator.of(context).pop(formattedTicket);
+          }
+        } else {
+          throw Exception(response['message'] ?? 'Failed to create ticket');
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).clearSnackBars();
 
         // Format the error message
         String errorMessage = e.toString();
@@ -222,6 +348,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
         }
 
         print('Error details: $errorMessage'); // Debug print
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error creating ticket: $errorMessage'),
@@ -318,14 +445,11 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             child: Text(type),
                           );
                         }).toList(),
-                    onChanged:
-                        _isSubmitting
-                            ? null
-                            : (value) {
-                              setState(() {
-                                _selectedTicketType = value;
-                              });
-                            },
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedTicketType = value;
+                      });
+                    },
                     validator:
                         (value) =>
                             value == null
@@ -356,14 +480,11 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             child: Text(contact),
                           );
                         }).toList(),
-                    onChanged:
-                        _isSubmitting
-                            ? null
-                            : (value) {
-                              setState(() {
-                                _selectedContact = value;
-                              });
-                            },
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedContact = value;
+                      });
+                    },
                     validator:
                         (value) =>
                             value == null ? 'Please select a contact' : null,
@@ -396,14 +517,11 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             ),
                           );
                         }).toList(),
-                    onChanged:
-                        _isSubmitting
-                            ? null
-                            : (value) {
-                              setState(() {
-                                _selectedSubscription = value;
-                              });
-                            },
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedSubscription = value;
+                      });
+                    },
                     validator:
                         (value) =>
                             value == null
@@ -418,7 +536,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
                   // Description
                   TextFormField(
                     controller: _descriptionController,
-                    enabled: !_isSubmitting,
                     decoration: InputDecoration(
                       labelText: 'Description',
                       border: OutlineInputBorder(
@@ -454,7 +571,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                         ),
                       ),
                       TextButton.icon(
-                        onPressed: _isSubmitting ? null : _pickFiles,
+                        onPressed: _pickFiles,
                         icon: const Icon(Icons.attach_file, size: 18),
                         label: const Text(
                           'Add File',
@@ -535,11 +652,9 @@ class _NewTicketModalState extends State<NewTicketModal> {
                                     trailing: IconButton(
                                       icon: const Icon(Icons.close, size: 20),
                                       onPressed:
-                                          _isSubmitting
-                                              ? null
-                                              : () => _removeFile(
-                                                _attachedFiles.indexOf(file),
-                                              ),
+                                          () => _removeFile(
+                                            _attachedFiles.indexOf(file),
+                                          ),
                                       tooltip: 'Remove file',
                                     ),
                                   ),
@@ -587,7 +702,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                     children: [
                       if (widget.onCancel != null)
                         TextButton(
-                          onPressed: _isSubmitting ? null : widget.onCancel,
+                          onPressed: widget.onCancel,
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -601,7 +716,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                         ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: _isSubmitting ? null : _submitTicket,
+                        onPressed: _submitTicket,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
@@ -611,22 +726,10 @@ class _NewTicketModalState extends State<NewTicketModal> {
                             borderRadius: BorderRadius.circular(6.0),
                           ),
                         ),
-                        child:
-                            _isSubmitting
-                                ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                                : const Text(
-                                  'Create Ticket',
-                                  style: TextStyle(fontSize: 14),
-                                ),
+                        child: const Text(
+                          'Create Ticket',
+                          style: TextStyle(fontSize: 14),
+                        ),
                       ),
                     ],
                   ),

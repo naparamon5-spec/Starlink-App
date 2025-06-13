@@ -111,6 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
               MaterialPageRoute(
                 builder:
                     (context) => HomeScreen(
+                      userId: userId,
                       loginMessage: response['message'] ?? 'Login successful',
                     ),
               ),

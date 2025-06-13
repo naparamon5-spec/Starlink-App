@@ -175,29 +175,39 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
 
     setState(() => _isLoading = true);
     try {
+      print('Loading tickets for user ID: $_userId');
       final response = await ApiService.getTickets();
-      print('Raw ticket data from API: ${response['data']}'); // Debug log
+      print('Raw ticket data from API: ${response['data']}');
 
       if (response['status'] == 'success' && mounted) {
         setState(() {
           _tickets = List<Map<String, dynamic>>.from(
             response['data']
-                .where(
-                  (ticket) =>
-                      // Show tickets where this user is either the contact or the creator
-                      (ticket['contact']?.toString() == _userId.toString() ||
-                          ticket['user_id']?.toString() ==
-                              _userId.toString()) &&
-                      // Exclude CLOSED and DONE tickets
-                      ticket['status']?.toString().toLowerCase() != 'closed' &&
-                      ticket['status']?.toString().toLowerCase() != 'done',
-                )
-                .map((ticket) {
-                  // Debug log for each ticket's status
-                  print(
-                    'Processing ticket ID: ${ticket['id']}, Raw status: ${ticket['status']}',
-                  );
+                .where((ticket) {
+                  // Debug log for each ticket's filtering
+                  print('\nChecking ticket:');
+                  print('  ID: ${ticket['id']}');
+                  print('  User ID: $_userId');
+                  print('  Ticket contact: ${ticket['contact']}');
+                  print('  Ticket user_id: ${ticket['user_id']}');
+                  print('  Ticket status: ${ticket['status']}');
 
+                  // Convert IDs to strings for comparison
+                  String ticketContact = ticket['contact']?.toString() ?? '';
+                  String ticketUserId = ticket['user_id']?.toString() ?? '';
+                  String currentUserId = _userId.toString();
+
+                  // Show tickets where this user is either the contact or the creator
+                  bool isUserRelated =
+                      ticketContact == currentUserId ||
+                      ticketUserId == currentUserId;
+
+                  print('  Is user related: $isUserRelated');
+                  print('  Will display: $isUserRelated');
+
+                  return isUserRelated;
+                })
+                .map((ticket) {
                   // Format attachments for display
                   String attachmentsDisplay = 'No attachments';
                   if (ticket['attachments'] != null &&
@@ -208,7 +218,9 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                               .where((attachment) => attachment != null)
                               .map((attachment) {
                                 if (attachment is Map) {
-                                  return attachment['name']?.toString() ?? '';
+                                  return attachment['original_name']
+                                          ?.toString() ??
+                                      '';
                                 }
                                 return '';
                               })
@@ -228,53 +240,43 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                   String backendStatus =
                       (ticket['status'] ?? '').toString().toLowerCase().trim();
 
-                  // Debug log for status processing
-                  print('Processing status for ticket ${ticket['id']}:');
-                  print('Backend status: $backendStatus');
-
-                  // Strict status mapping based on backend values
-                  if (backendStatus.isEmpty) {
-                    print('Warning: Empty status for ticket ${ticket['id']}');
-                    displayStatus = 'OPEN';
-                  } else {
-                    switch (backendStatus) {
-                      case 'open':
-                        displayStatus = 'OPEN';
-                        break;
-                      case 'in progress':
-                        displayStatus = 'IN PROGRESS';
-                        break;
-                      default:
-                        print(
-                          'Warning: Unknown status "$backendStatus" for ticket ${ticket['id']}',
-                        );
-                        displayStatus = backendStatus.toUpperCase();
-                    }
+                  switch (backendStatus) {
+                    case 'open':
+                      displayStatus = 'OPEN';
+                      break;
+                    case 'in progress':
+                      displayStatus = 'IN PROGRESS';
+                      break;
+                    case 'done':
+                      displayStatus = 'DONE';
+                      break;
+                    case 'closed':
+                      displayStatus = 'CLOSED';
+                      break;
+                    default:
+                      displayStatus = backendStatus.toUpperCase();
                   }
-
-                  print('Final display status: $displayStatus');
 
                   return {
                     'id': ticket['id'],
                     'Status': displayStatus,
                     'Ticket Type': ticket['type'] ?? 'N/A',
-                    'Contact': ticket['contact'] ?? 'N/A',
+                    'Contact': ticket['contact_name'] ?? 'N/A',
                     'Subscription': ticket['subscription'] ?? 'N/A',
                     'Description': ticket['description'] ?? 'No description',
                     'Created At': _formatDate(ticket['created_at']),
                     'Attachments': attachmentsDisplay,
-                    // Store all data for detailed view
                     'full_data': {
                       ...ticket,
                       'created_at': _formatDate(ticket['created_at']),
                       'attachments': ticket['attachments'] ?? [],
                       'status': displayStatus,
-                      'raw_status':
-                          backendStatus, // Store the raw status for debugging
+                      'raw_status': backendStatus,
                     },
                   };
                 }),
           );
+          print('\nFinal filtered tickets count: ${_tickets.length}');
           _filteredTickets = _tickets;
           _isLoading = false;
         });
@@ -667,47 +669,33 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     }
   }
 
-  void showNewTicketModal() {
-    if (_userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('User ID not found. Please try again later.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
+  void _showNewTicketModal() async {
+    final result = await showDialog(
       context: context,
       builder:
-          (context) => CustomerTicketModal(
-            userId: _userId!,
-            onConfirm: (newTicket) async {
-              try {
-                final response = await ApiService.createTicket(newTicket);
-                if (response['status'] == 'success') {
-                  Navigator.of(context).pop();
-                  _loadTickets();
-                } else {
-                  throw Exception(
-                    response['message'] ?? 'Failed to create ticket',
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error creating ticket: ${e.toString()}'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
+          (dialogContext) => CustomerTicketModal(
+            userId: _userId ?? 0,
+            onConfirm: (ticket) async {
+              // The ticket data will be handled when the modal is closed
             },
-            onCancel: () => Navigator.of(context).pop(),
+            onCancel: () {
+              Navigator.of(dialogContext).pop();
+            },
           ),
     );
+
+    // Handle the result from the modal
+    if (result != null && result is Map<String, dynamic>) {
+      // Add the new ticket to the beginning of the list
+      setState(() {
+        _tickets.insert(0, result);
+        _filteredTickets = List.from(_tickets);
+        _currentPage = 1; // Reset to first page
+      });
+
+      // Refresh the ticket list to ensure we have the latest data
+      await _loadTickets();
+    }
   }
 
   void refreshTickets() {
@@ -862,7 +850,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 16.0, right: 16.0),
         child: FloatingActionButton(
-          onPressed: showNewTicketModal,
+          onPressed: _showNewTicketModal,
           backgroundColor: const Color(0xFF133343),
           child: const Icon(Icons.add, color: Colors.white),
           tooltip: 'Create new ticket',

@@ -138,6 +138,18 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
+          // Debug log for each ticket
+          if (data['data'] != null && data['data'] is List) {
+            print('Number of tickets received: ${data['data'].length}');
+            for (var ticket in data['data']) {
+              print('Ticket details:');
+              print('  ID: ${ticket['id']}');
+              print('  User ID: ${ticket['user_id']}');
+              print('  Contact: ${ticket['contact']}');
+              print('  Status: ${ticket['status']}');
+              print('  Type: ${ticket['type']}');
+            }
+          }
           return data;
         } else {
           throw Exception(data['message'] ?? 'Failed to fetch tickets');
@@ -179,12 +191,11 @@ class ApiService {
         for (var attachment in ticketData['attachments']) {
           if (attachment is Map<String, dynamic>) {
             processedAttachments.add({
-              'file_name': attachment['name'],
-              'original_name': attachment['name'],
-              'file_type': attachment['type'] ?? 'application/octet-stream',
-              'file_size': attachment['size'],
-              'file_data': attachment['data'],
-              'uploaded_by': ticketData['user_id'],
+              'name': attachment['name'],
+              'type': attachment['type'] ?? 'application/octet-stream',
+              'size': attachment['size'],
+              'data': attachment['data'],
+              'file_path': attachment['file_path'] ?? '',
             });
           }
         }
@@ -194,18 +205,19 @@ class ApiService {
       final formattedData = {
         'type': ticketData['type'],
         'contact': ticketData['contact'],
-        'contact_name': ticketData['contact_name'],
         'subscription': ticketData['subscription'],
         'description': ticketData['description'],
         'user_id': ticketData['user_id'].toString(),
-        'assigned_agent': ticketData['contact'],
-        'status': 'open',
         'subject': ticketData['subject'] ?? ticketData['type'],
         'attachments': processedAttachments,
-        'created_at': DateTime.now().toIso8601String(),
       };
 
-      print('Sending formatted ticket data: $formattedData');
+      print('Sending formatted ticket data to API:');
+      print('  Type: ${formattedData['type']}');
+      print('  Contact: ${formattedData['contact']}');
+      print('  User ID: ${formattedData['user_id']}');
+      print('  Subscription: ${formattedData['subscription']}');
+      print('  Description: ${formattedData['description']}');
 
       final response = await _client
           .post(
@@ -249,11 +261,22 @@ class ApiService {
           // Add additional fields to the response for consistency
           data['data'] = {
             ...data['data'],
-            'status': 'OPEN',
-            'created_at': formattedData['created_at'],
+            'status': 'open',
+            'created_at': DateTime.now().toIso8601String(),
             'attachments': processedAttachments,
-            'contact_name': ticketData['contact_name'],
+            'user_id': ticketData['user_id'],
+            'contact': ticketData['contact'],
+            'type': ticketData['type'],
+            'subscription': ticketData['subscription'],
+            'description': ticketData['description'],
           };
+
+          print('Final ticket data after creation:');
+          print('  ID: ${data['data']['id']}');
+          print('  Status: ${data['data']['status']}');
+          print('  User ID: ${data['data']['user_id']}');
+          print('  Contact: ${data['data']['contact']}');
+
           return data;
         } else {
           throw Exception(data['message'] ?? 'Failed to create ticket');
@@ -337,13 +360,22 @@ class ApiService {
     }
   }
 
-  // Get subscriptions
-  static Future<Map<String, dynamic>> getSubscriptions() async {
+  // Get subscriptions by EU code
+  static Future<Map<String, dynamic>> getSubscriptionsByEuCode(
+    String euCode,
+  ) async {
     try {
+      print('Fetching subscriptions for EU code: $euCode');
+
       final response = await _client.get(
-        Uri.parse('$baseUrl/api.php?action=get_subscriptions'),
+        Uri.parse(
+          '$baseUrl/api.php?action=get_subscriptions_by_eu_code&eu_code=$euCode',
+        ),
         headers: {'Accept': 'application/json'},
       );
+
+      print('Get subscriptions response status: ${response.statusCode}');
+      print('Get subscriptions response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -356,6 +388,68 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
+      print('Error fetching subscriptions: $e');
+      throw Exception('Error fetching subscriptions: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getSubscriptionsByCustomerCode(
+    String customerCode,
+  ) async {
+    try {
+      print('Fetching subscriptions for customer code: $customerCode');
+
+      final response = await _client.get(
+        Uri.parse(
+          '$baseUrl/api.php?action=get_subscriptions_by_customer_code&customer_code=$customerCode',
+        ),
+        headers: {'Accept': 'application/json'},
+      );
+
+      print('Get subscriptions response status: ${response.statusCode}');
+      print('Get subscriptions response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch subscriptions');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching subscriptions: $e');
+      throw Exception('Error fetching subscriptions: $e');
+    }
+  }
+
+  // Get all subscriptions (deprecated, use getSubscriptionsByEuCode instead)
+  static Future<Map<String, dynamic>> getSubscriptions() async {
+    try {
+      print('Fetching all subscriptions');
+
+      final response = await _client.get(
+        Uri.parse('$baseUrl/api.php?action=get_subscriptions'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      print('Get subscriptions response status: ${response.statusCode}');
+      print('Get subscriptions response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch subscriptions');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching subscriptions: $e');
       throw Exception('Error fetching subscriptions: $e');
     }
   }
@@ -682,6 +776,66 @@ class ApiService {
             'Failed to process password reset request. Please try again.',
         'details': e.toString(),
       };
+    }
+  }
+
+  // Get end user by user ID
+  static Future<Map<String, dynamic>> getEndUserByUserId(int userId) async {
+    try {
+      print('Fetching end user data for user ID: $userId');
+
+      final response = await _client.get(
+        Uri.parse('$baseUrl/api.php?action=get_end_user&user_id=$userId'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      print('Get end user response status: ${response.statusCode}');
+      print('Get end user response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch end user data');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching end user data: $e');
+      throw Exception('Error fetching end user data: $e');
+    }
+  }
+
+  // Get contacts by EU code
+  static Future<Map<String, dynamic>> getContactsByEuCode(String euCode) async {
+    try {
+      print('Fetching contacts for EU code: $euCode');
+
+      final response = await _client.get(
+        Uri.parse(
+          '$baseUrl/api.php?action=get_contacts_by_eu_code&eu_code=$euCode',
+        ),
+        headers: {'Accept': 'application/json'},
+      );
+
+      print('Get contacts response status: ${response.statusCode}');
+      print('Get contacts response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return data;
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch contacts');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching contacts: $e');
+      throw Exception('Error fetching contacts: $e');
     }
   }
 }

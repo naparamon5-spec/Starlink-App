@@ -28,18 +28,20 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
 
   List<String> _ticketTypes = [];
   Map<String, dynamic> _contacts = {};
+  Map<String, String> _customerCodes = {}; // Store customer codes
   List<String> _subscriptions = [];
 
   bool _isLoading = true;
+  bool _isLoadingSubscriptions = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    _fetchInitialData();
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchInitialData() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -47,6 +49,24 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
 
     try {
       // Fetch ticket categories
+      await _fetchTicketCategories();
+
+      // Fetch customers
+      await _fetchCustomers();
+    } catch (e) {
+      print('Error in _fetchInitialData: $e');
+      setState(() {
+        _errorMessage = 'Error fetching data: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchTicketCategories() async {
+    try {
       final categoriesData = await ApiService.getCategories();
       if (categoriesData['status'] == 'success' &&
           categoriesData['data'] != null) {
@@ -58,8 +78,13 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
       } else {
         throw Exception('Failed to load ticket categories');
       }
+    } catch (e) {
+      throw Exception('Error fetching ticket categories: $e');
+    }
+  }
 
-      // Fetch customers
+  Future<void> _fetchCustomers() async {
+    try {
       final customersData = await ApiService.getCustomers();
       if (customersData['status'] == 'success' &&
           customersData['data'] != null) {
@@ -72,32 +97,97 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
               ),
             ),
           );
+
+          // Store customer codes if available
+          _customerCodes = Map.fromEntries(
+            (customersData['data'] as List).map(
+              (customer) => MapEntry(
+                customer['name'] as String,
+                customer['code']?.toString() ?? customer['id'].toString(),
+              ),
+            ),
+          );
         });
       } else {
         throw Exception('Failed to load customers');
       }
+    } catch (e) {
+      throw Exception('Error fetching customers: $e');
+    }
+  }
 
-      // Fetch subscriptions
-      final subscriptionsData = await ApiService.getSubscriptions();
+  Future<void> _fetchSubscriptionsForCustomer(String customerCode) async {
+    setState(() {
+      _isLoadingSubscriptions = true;
+      _subscriptions = [];
+      _selectedSubscription = null;
+    });
+
+    try {
+      // Try different API methods based on what's available
+      Map<String, dynamic> subscriptionsData;
+
+      try {
+        // First try with customer code parameter
+        subscriptionsData = await ApiService.getSubscriptionsByCustomerCode(
+          customerCode,
+        );
+      } catch (e) {
+        // If that fails, try without parameter (get all subscriptions)
+        subscriptionsData = await ApiService.getSubscriptionsByCustomerCode(
+          customerCode,
+        );
+      }
+
       if (subscriptionsData['status'] == 'success' &&
           subscriptionsData['data'] != null) {
         setState(() {
           _subscriptions = List<String>.from(
-            subscriptionsData['data'].map((item) => item['nickname']),
+            subscriptionsData['data'].map(
+              (item) => item['nickname'] ?? item['name'] ?? 'Unknown',
+            ),
           );
         });
       } else {
-        throw Exception('Failed to load subscriptions');
+        // If no subscriptions found, show empty list
+        setState(() {
+          _subscriptions = [];
+        });
       }
     } catch (e) {
-      print('Error in _fetchData: $e');
+      print('Error fetching subscriptions: $e');
+      // Don't throw error, just show empty subscriptions
       setState(() {
-        _errorMessage = 'Error fetching data: ${e.toString()}';
+        _subscriptions = [];
       });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not load subscriptions for this customer'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     } finally {
       setState(() {
-        _isLoading = false;
+        _isLoadingSubscriptions = false;
       });
+    }
+  }
+
+  void _onCustomerSelected(String? customerName) {
+    setState(() {
+      _selectedContact = customerName;
+      _selectedSubscription = null;
+    });
+
+    if (customerName != null) {
+      final customerCode = _customerCodes[customerName];
+      if (customerCode != null) {
+        _fetchSubscriptionsForCustomer(customerCode);
+      }
     }
   }
 
@@ -150,103 +240,127 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
     });
   }
 
-  void _submitTicket() async {
-    if (_selectedTicketType != null &&
+  bool _isFormValid() {
+    return _selectedTicketType != null &&
         _selectedContact != null &&
         _selectedSubscription != null &&
-        _descriptionController.text.isNotEmpty) {
-      try {
-        // Process attachments
-        List<Map<String, dynamic>> attachmentsData = [];
-        if (_attachedFiles.isNotEmpty) {
-          for (var file in _attachedFiles) {
-            if (file.bytes != null) {
-              attachmentsData.add({
-                'name': file.name,
-                'data': base64Encode(file.bytes!),
-                'type': file.extension ?? '',
-                'size': file.size,
-              });
-            }
-          }
-        }
+        _descriptionController.text.trim().isNotEmpty;
+  }
 
-        // Get the contact ID as an integer
-        final contactId = _contacts[_selectedContact];
-        if (contactId == null) {
-          throw Exception('Invalid contact selected');
-        }
-
-        final newTicket = {
-          'type': _selectedTicketType,
-          'contact': int.parse(
-            contactId.toString(),
-          ), // Ensure contact is an integer
-          'contact_name': _selectedContact,
-          'subscription': _selectedSubscription,
-          'description': _descriptionController.text,
-          'user_id': int.parse(
-            widget.userId.toString(),
-          ), // Ensure user_id is an integer
-          'status': 'open',
-          'subject': _selectedTicketType, // Add subject field
-          'attachments': attachmentsData,
-          'attachments_display': _attachedFiles
-              .map((file) => file.name)
-              .join(', '),
-        };
-
-        // Show loading indicator
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-                SizedBox(width: 16),
-                Text('Creating ticket...'),
-              ],
-            ),
-            backgroundColor: Colors.blue,
-            duration: Duration(seconds: 30),
-          ),
-        );
-
-        // Submit the ticket
-        await widget.onConfirm(newTicket);
-
-        // Clear the loading snackbar
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).clearSnackBars();
-
-        // Show success message
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket created successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error creating ticket: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } else {
+  void _submitTicket() async {
+    if (!_isFormValid()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill in all required fields'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Process attachments
+      List<Map<String, dynamic>> attachmentsData = [];
+      if (_attachedFiles.isNotEmpty) {
+        for (var file in _attachedFiles) {
+          if (file.bytes != null) {
+            attachmentsData.add({
+              'name': file.name,
+              'data': base64Encode(file.bytes!),
+              'type': file.extension ?? '',
+              'size': file.size,
+            });
+          }
+        }
+      }
+
+      // Get the contact ID as an integer
+      final contactId = _contacts[_selectedContact];
+      if (contactId == null) {
+        throw Exception('Invalid contact selected');
+      }
+
+      final newTicket = {
+        'type': _selectedTicketType,
+        'contact': contactId,
+        'contact_name': _selectedContact,
+        'subscription': _selectedSubscription,
+        'description': _descriptionController.text.trim(),
+        'user_id': widget.userId,
+        'status': 'open',
+        'subject': _selectedTicketType,
+        'attachments': attachmentsData,
+        'attachments_display':
+            _attachedFiles.isNotEmpty
+                ? _attachedFiles.map((file) => file.name).join(', ')
+                : 'No attachments',
+      };
+
+      // Show loading indicator
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+              SizedBox(width: 16),
+              Text('Creating ticket...'),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 30),
+        ),
+      );
+
+      // Submit the ticket
+      await widget.onConfirm(newTicket);
+
+      // Clear the loading snackbar
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+
+      // Show success message
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ticket created successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
+      );
+
+      // Format the ticket data to match the expected structure
+      final formattedTicket = {
+        'id': newTicket['id'] ?? '',
+        'Status': 'OPEN',
+        'Ticket Type': newTicket['type'] ?? '',
+        'Contact': newTicket['contact_name'] ?? '',
+        'Subscription': newTicket['subscription'] ?? '',
+        'Description': newTicket['description'] ?? '',
+        'Created At': DateTime.now().toString(),
+        'Attachments': newTicket['attachments_display'] ?? 'No attachments',
+        'full_data': {
+          ...newTicket,
+          'status': 'OPEN',
+          'created_at': DateTime.now().toString(),
+        },
+      };
+
+      // Close the modal and return the formatted ticket data
+      if (mounted) {
+        Navigator.of(context).pop(formattedTicket);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error creating ticket: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -300,17 +414,49 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
 
                 // Loading or Error State
                 if (_isLoading)
-                  const Center(child: CircularProgressIndicator())
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
                 else if (_errorMessage != null)
-                  Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: Colors.red[700],
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: TextStyle(
+                              color: Colors.red[700],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _fetchInitialData,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
                   )
                 else ...[
                   // Ticket Type Dropdown
                   DropdownButtonFormField<String>(
                     decoration: InputDecoration(
-                      labelText: 'Ticket Type',
+                      labelText: 'Ticket Type *',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(6.0),
                       ),
@@ -334,18 +480,13 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                         _selectedTicketType = value;
                       });
                     },
-                    validator:
-                        (value) =>
-                            value == null
-                                ? 'Please select a ticket type'
-                                : null,
                   ),
                   const SizedBox(height: 12),
 
                   // Contact Dropdown
                   DropdownButtonFormField<String>(
                     decoration: InputDecoration(
-                      labelText: 'Contact',
+                      labelText: 'Contact *',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(6.0),
                       ),
@@ -364,21 +505,14 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                             child: Text(contact),
                           );
                         }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedContact = value;
-                      });
-                    },
-                    validator:
-                        (value) =>
-                            value == null ? 'Please select a contact' : null,
+                    onChanged: _onCustomerSelected,
                   ),
                   const SizedBox(height: 12),
 
                   // Subscription Dropdown
                   DropdownButtonFormField<String>(
                     decoration: InputDecoration(
-                      labelText: 'Subscription',
+                      labelText: 'Subscription *',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(6.0),
                       ),
@@ -389,28 +523,52 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                         vertical: 8,
                       ),
                       isDense: true,
+                      suffixIcon:
+                          _isLoadingSubscriptions
+                              ? const Padding(
+                                padding: EdgeInsets.all(12.0),
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                              : null,
                     ),
                     value: _selectedSubscription,
                     items:
-                        _subscriptions.map((subscription) {
-                          return DropdownMenuItem(
-                            value: subscription,
-                            child: Text(
-                              subscription,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          );
-                        }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedSubscription = value;
-                      });
-                    },
-                    validator:
-                        (value) =>
-                            value == null
-                                ? 'Please select a subscription'
-                                : null,
+                        _subscriptions.isEmpty && !_isLoadingSubscriptions
+                            ? [
+                              const DropdownMenuItem(
+                                value: null,
+                                child: Text(
+                                  'No subscriptions available',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ]
+                            : _subscriptions.map((subscription) {
+                              return DropdownMenuItem(
+                                value: subscription,
+                                child: Text(
+                                  subscription,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              );
+                            }).toList(),
+                    onChanged:
+                        _isLoadingSubscriptions || _subscriptions.isEmpty
+                            ? null
+                            : (value) {
+                              setState(() {
+                                _selectedSubscription = value;
+                              });
+                            },
                     isExpanded: true,
                     icon: const Icon(Icons.arrow_drop_down, size: 20),
                     dropdownColor: Colors.white,
@@ -421,7 +579,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                   TextFormField(
                     controller: _descriptionController,
                     decoration: InputDecoration(
-                      labelText: 'Description',
+                      labelText: 'Description *',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(6.0),
                       ),
@@ -433,11 +591,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                       ),
                     ),
                     maxLines: 4,
-                    validator:
-                        (value) =>
-                            value!.isEmpty
-                                ? 'Please enter a description'
-                                : null,
                   ),
                   const SizedBox(height: 12),
 
@@ -493,7 +646,10 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                       child: SingleChildScrollView(
                         child: Column(
                           children:
-                              _attachedFiles.map((file) {
+                              _attachedFiles.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final file = entry.value;
+
                                 return Container(
                                   decoration: BoxDecoration(
                                     border: Border(
@@ -535,10 +691,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                                     ),
                                     trailing: IconButton(
                                       icon: const Icon(Icons.close, size: 20),
-                                      onPressed:
-                                          () => _removeFile(
-                                            _attachedFiles.indexOf(file),
-                                          ),
+                                      onPressed: () => _removeFile(index),
                                       tooltip: 'Remove file',
                                     ),
                                   ),
@@ -552,15 +705,15 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                       margin: const EdgeInsets.only(top: 8),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.orange[50],
+                        color: Colors.blue[50],
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange[200]!),
+                        border: Border.all(color: Colors.blue[200]!),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.orange[700],
+                            Icons.info_outline,
+                            color: Colors.blue[700],
                             size: 20,
                           ),
                           const SizedBox(width: 8),
@@ -569,7 +722,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                               'No files attached. You can add files or continue without them.',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.orange[900],
+                                color: Colors.blue[900],
                               ),
                             ),
                           ),
@@ -600,7 +753,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                         ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: _submitTicket,
+                        onPressed: _isFormValid() ? _submitTicket : null,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,

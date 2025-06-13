@@ -89,7 +89,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   Future<void> _loadSubscriptions() async {
     try {
       print('Loading subscriptions...');
-      final response = await ApiService.getSubscriptions();
+      final response = await ApiService.getSubscriptionsByCustomerCode(
+        _userId.toString(),
+      );
 
       if (response['status'] == 'success' && response['data'] != null) {
         final subscriptions = List<Map<String, dynamic>>.from(response['data']);
@@ -176,29 +178,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       builder:
           (context) => CustomerTicketModal(
             userId: _userId!,
-            onConfirm: (newTicket) async {
-              try {
-                final response = await ApiService.createTicket(newTicket);
-                if (response['status'] == 'success') {
-                  Navigator.of(context).pop();
-                  // Set selected index to tickets screen to refresh the view
-                  setState(() {
-                    _selectedIndex = 1;
-                  });
-                } else {
-                  throw Exception(
-                    response['message'] ?? 'Failed to create ticket',
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error creating ticket: ${e.toString()}'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
+            onConfirm: (ticket) async {
+              // Check if forceRefresh is true
+              if (ticket['forceRefresh'] == true) {
+                // Set selected index to tickets screen to refresh the view
+                setState(() {
+                  _selectedIndex = 1;
+                });
               }
             },
             onCancel: () => Navigator.of(context).pop(),
