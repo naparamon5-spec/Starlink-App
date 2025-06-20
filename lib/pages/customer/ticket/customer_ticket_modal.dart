@@ -315,43 +315,54 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
         ),
       );
 
-      // Submit the ticket
-      await widget.onConfirm(newTicket);
+      // Create the ticket using ApiService
+      final response = await ApiService.createTicket(newTicket);
 
       // Clear the loading snackbar
       if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
 
-      // Show success message
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ticket created successfully'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3),
-        ),
-      );
+      if (response['status'] == 'success') {
+        // Format the ticket data to match the expected structure
+        final formattedTicket = {
+          'id': response['data']['id'] ?? '',
+          'Status': 'OPEN',
+          'Ticket Type': newTicket['type'] ?? '',
+          'Contact': newTicket['contact_name'] ?? '',
+          'Subscription': newTicket['subscription'] ?? '',
+          'Description': newTicket['description'] ?? '',
+          'Created At': DateTime.now().toString(),
+          'Attachments': newTicket['attachments_display'] ?? 'No attachments',
+          'full_data': {
+            ...newTicket,
+            'id': response['data']['id'] ?? '',
+            'status': 'OPEN',
+            'created_at': DateTime.now().toString(),
+            'attachments': newTicket['attachments'] ?? [],
+          },
+          'forceRefresh':
+              true, // Add forceRefresh flag to trigger a full refresh
+        };
 
-      // Format the ticket data to match the expected structure
-      final formattedTicket = {
-        'id': newTicket['id'] ?? '',
-        'Status': 'OPEN',
-        'Ticket Type': newTicket['type'] ?? '',
-        'Contact': newTicket['contact_name'] ?? '',
-        'Subscription': newTicket['subscription'] ?? '',
-        'Description': newTicket['description'] ?? '',
-        'Created At': DateTime.now().toString(),
-        'Attachments': newTicket['attachments_display'] ?? 'No attachments',
-        'full_data': {
-          ...newTicket,
-          'status': 'OPEN',
-          'created_at': DateTime.now().toString(),
-        },
-      };
+        // Show success message
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket created successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
 
-      // Close the modal and return the formatted ticket data
-      if (mounted) {
-        Navigator.of(context).pop(formattedTicket);
+        // Call the parent's onConfirm callback with the formatted ticket
+        widget.onConfirm(formattedTicket);
+
+        // Close the modal and return the formatted ticket data
+        if (mounted) {
+          Navigator.of(context).pop(formattedTicket);
+        }
+      } else {
+        throw Exception(response['message'] ?? 'Failed to create ticket');
       }
     } catch (e) {
       if (!mounted) return;

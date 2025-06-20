@@ -18,9 +18,6 @@ class SubscriptionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Debug print to check if data is received
-    print('Current Billing Cycle Data: $currentBillingCycle');
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

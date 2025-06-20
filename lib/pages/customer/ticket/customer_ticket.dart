@@ -4,6 +4,7 @@ import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'customer_ticket_modal.dart';
 import 'customer_view.dart';
+import '../../end-user/ticket/ticket_modal.dart';
 
 class CustomerTicketScreen extends StatefulWidget {
   final bool showAppBar;
@@ -175,23 +176,13 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
 
     setState(() => _isLoading = true);
     try {
-      print('Loading tickets for user ID: $_userId');
       final response = await ApiService.getTickets();
-      print('Raw ticket data from API: ${response['data']}');
 
       if (response['status'] == 'success' && mounted) {
         setState(() {
           _tickets = List<Map<String, dynamic>>.from(
             response['data']
                 .where((ticket) {
-                  // Debug log for each ticket's filtering
-                  print('\nChecking ticket:');
-                  print('  ID: ${ticket['id']}');
-                  print('  User ID: $_userId');
-                  print('  Ticket contact: ${ticket['contact']}');
-                  print('  Ticket user_id: ${ticket['user_id']}');
-                  print('  Ticket status: ${ticket['status']}');
-
                   // Convert IDs to strings for comparison
                   String ticketContact = ticket['contact']?.toString() ?? '';
                   String ticketUserId = ticket['user_id']?.toString() ?? '';
@@ -201,9 +192,6 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                   bool isUserRelated =
                       ticketContact == currentUserId ||
                       ticketUserId == currentUserId;
-
-                  print('  Is user related: $isUserRelated');
-                  print('  Will display: $isUserRelated');
 
                   return isUserRelated;
                 })
@@ -218,9 +206,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                               .where((attachment) => attachment != null)
                               .map((attachment) {
                                 if (attachment is Map) {
-                                  return attachment['original_name']
-                                          ?.toString() ??
-                                      '';
+                                  return attachment['name']?.toString() ?? '';
                                 }
                                 return '';
                               })
@@ -276,7 +262,6 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                   };
                 }),
           );
-          print('\nFinal filtered tickets count: ${_tickets.length}');
           _filteredTickets = _tickets;
           _isLoading = false;
         });
@@ -673,10 +658,49 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     final result = await showDialog(
       context: context,
       builder:
-          (dialogContext) => CustomerTicketModal(
+          (dialogContext) => NewTicketModal(
             userId: _userId ?? 0,
-            onConfirm: (ticket) async {
-              // The ticket data will be handled when the modal is closed
+            onConfirm: (ticket) {
+              // Immediately add the new ticket to the list
+              if (ticket['id'] != null && mounted) {
+                setState(() {
+                  // Format the ticket data to match the structure expected by _loadTickets
+                  final newTicket = {
+                    'id': ticket['id'],
+                    'Status': ticket['Status'] ?? 'OPEN',
+                    'Ticket Type': ticket['Ticket Type'] ?? 'N/A',
+                    'Contact': ticket['Contact'] ?? 'N/A',
+                    'Subscription': ticket['Subscription'] ?? 'N/A',
+                    'Description': ticket['Description'] ?? 'No description',
+                    'Created At':
+                        ticket['Created At'] ??
+                        _formatDate(DateTime.now().toString()),
+                    'Attachments': ticket['Attachments'] ?? 'No attachments',
+                    'full_data': {
+                      'id': ticket['id'],
+                      'type': ticket['Ticket Type'] ?? 'N/A',
+                      'contact': ticket['full_data']?['contact'],
+                      'contact_name': ticket['Contact'] ?? 'N/A',
+                      'subscription': ticket['Subscription'] ?? 'N/A',
+                      'description': ticket['Description'] ?? 'No description',
+                      'attachments': ticket['full_data']?['attachments'] ?? [],
+                      'status': ticket['Status'] ?? 'OPEN',
+                      'created_at':
+                          ticket['Created At'] ??
+                          _formatDate(DateTime.now().toString()),
+                      'created_at_raw':
+                          DateTime.tryParse(ticket['Created At'] ?? '') ??
+                          DateTime.now(),
+                      'user_id': ticket['full_data']?['user_id'],
+                    },
+                  };
+
+                  // Insert at the beginning of the list
+                  _tickets.insert(0, newTicket);
+                  _filteredTickets = List.from(_tickets);
+                  _currentPage = 1; // Reset to first page to show new ticket
+                });
+              }
             },
             onCancel: () {
               Navigator.of(dialogContext).pop();
@@ -684,17 +708,40 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
           ),
     );
 
-    // Handle the result from the modal
-    if (result != null && result is Map<String, dynamic>) {
-      // Add the new ticket to the beginning of the list
+    // Reload tickets to ensure consistency with backend
+    if (result != null && mounted) {
       setState(() {
-        _tickets.insert(0, result);
-        _filteredTickets = List.from(_tickets);
-        _currentPage = 1; // Reset to first page
+        _isLoading = true;
       });
+      try {
+        // Force refresh to get the latest data
+        await _loadTickets();
 
-      // Refresh the ticket list to ensure we have the latest data
-      await _loadTickets();
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket created successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error refreshing tickets: ${e.toString()}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
     }
   }
 

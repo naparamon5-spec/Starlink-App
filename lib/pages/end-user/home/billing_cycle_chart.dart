@@ -87,20 +87,14 @@ class BillingCycleChart extends StatelessWidget {
                       final cycle = billingCycles[groupIndex];
                       final startDate = DateTime.parse(cycle['startDate']);
                       final endDate = DateTime.parse(cycle['endDate']);
-                      final consumed = double.parse(
-                        cycle['consumedAmountGB'].toString(),
-                      );
-                      final limit = double.parse(
-                        cycle['usageLimitGB'].toString(),
-                      );
+                      final consumed = _parseDouble(cycle['consumedAmountGB']);
+                      final limit = _parseDouble(cycle['usageLimitGB']);
                       final percentage = (consumed / limit * 100)
                           .toStringAsFixed(1);
 
                       return BarTooltipItem(
                         '${startDate.day}/${startDate.month} - ${endDate.day}/${endDate.month}\n\n'
                         'Total Usage: ${consumed.toStringAsFixed(1)} GB\n'
-                        'Priority: ${cycle['totalPriorityGB']} GB\n'
-                        'Standard: ${cycle['totalStandardGB']} GB\n'
                         'Limit: ${limit.toStringAsFixed(1)} GB\n'
                         'Usage: $percentage%',
                         const TextStyle(
@@ -180,7 +174,8 @@ class BillingCycleChart extends StatelessWidget {
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
-                  horizontalInterval: _getMaxUsage() / 5,
+                  horizontalInterval:
+                      _getMaxUsage() > 0 ? _getMaxUsage() / 5 : 20,
                   getDrawingHorizontalLine: (value) {
                     return FlLine(
                       color: const Color(0xFF133343).withOpacity(0.08),
@@ -196,11 +191,9 @@ class BillingCycleChart extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildLegendItem('Total Usage', const Color(0xFF4CAF50)),
+              _buildLegendItem('Usage', const Color(0xFF4CAF50)),
               const SizedBox(width: 12),
-              _buildLegendItem('Priority Data', const Color(0xFF2196F3)),
-              const SizedBox(width: 12),
-              _buildLegendItem('Standard Data', const Color(0xFFFFC107)),
+              _buildLegendItem('Limit', const Color(0xFF133343)),
             ],
           ),
         ],
@@ -243,7 +236,7 @@ class BillingCycleChart extends StatelessWidget {
   double _getMaxUsage() {
     if (billingCycles.isEmpty) return 100;
     return billingCycles
-        .map((cycle) => double.parse(cycle['usageLimitGB'].toString()))
+        .map((cycle) => _parseDouble(cycle['usageLimitGB']))
         .reduce((a, b) => a > b ? a : b)
         .ceilToDouble();
   }
@@ -251,36 +244,46 @@ class BillingCycleChart extends StatelessWidget {
   List<BarChartGroupData> _createBarGroups() {
     return List.generate(billingCycles.length, (index) {
       final cycle = billingCycles[index];
-      final totalUsage = double.parse(cycle['consumedAmountGB'].toString());
-      final priorityUsage = double.parse(cycle['totalPriorityGB'].toString());
-      final standardUsage = double.parse(cycle['totalStandardGB'].toString());
+      final usage = _parseDouble(cycle['consumedAmountGB']);
+      final limit = _parseDouble(cycle['usageLimitGB']);
 
       return BarChartGroupData(
         x: index,
         barRods: [
-          // Standard Data (bottom)
+          // Usage Bar
           BarChartRodData(
-            toY: standardUsage,
-            color: const Color(0xFFFFC107),
+            toY: usage,
+            color: _getUsageColor(usage, limit),
             width: 12,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
           ),
-          // Priority Data (middle)
+          // Limit Line
           BarChartRodData(
-            toY: priorityUsage + standardUsage,
-            color: const Color(0xFF2196F3),
-            width: 12,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-          ),
-          // Total Usage (top)
-          BarChartRodData(
-            toY: totalUsage,
-            color: const Color(0xFF4CAF50),
-            width: 12,
+            toY: limit,
+            color: const Color(0xFF133343),
+            width: 2,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
           ),
         ],
       );
     });
+  }
+
+  Color _getUsageColor(double consumed, double limit) {
+    final percentage = consumed / limit;
+    if (percentage >= 0.9) {
+      return const Color(0xFFF44336); // Red for high usage
+    } else if (percentage >= 0.7) {
+      return const Color(0xFFFFC107); // Yellow for medium usage
+    }
+    return const Color(0xFF4CAF50); // Green for low usage
+  }
+
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
   }
 }

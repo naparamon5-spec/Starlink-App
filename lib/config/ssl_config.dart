@@ -18,11 +18,6 @@ class DevelopmentHttpOverrides extends HttpOverrides {
   HttpClient createHttpClient(SecurityContext? context) {
     return super.createHttpClient(context)
       ..badCertificateCallback = (X509Certificate cert, String host, int port) {
-        print('Development SSL Certificate Verification:');
-        print('Host: $host');
-        print('Port: $port');
-        print('Certificate Subject: ${cert.subject}');
-        print('Certificate Issuer: ${cert.issuer}');
         return true;
       };
   }

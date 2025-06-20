@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../ticket/customer_ticket_screen.dart';
 import '../ticket/customer_ticket.dart';
 import '../profile/customer_profile.dart';
+import '../profile/customer_notification.dart';
 import '../ticket/customer_ticket_modal.dart';
 import 'customer_details.dart';
 
@@ -330,7 +331,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       ),
                       TextButton(
                         onPressed: () {
-                          // Handle view all notifications
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      const CustomerNotificationScreen(),
+                            ),
+                          );
                         },
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.white,

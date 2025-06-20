@@ -5,6 +5,7 @@ import 'edit_profile.dart';
 import '../../login_screen.dart';
 import 'security_settings.dart';
 import 'notifications.dart';
+import 'dart:io';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -15,15 +16,25 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   late SharedPreferences _prefs;
-  String _jobTitle = 'Loading...';
+  String _position = 'Loading...';
   String _userId = 'Loading...';
   String _fullName = 'Loading...';
+  String _lastName = 'Loading...';
+  String? _profileImagePath;
   bool _isLoading = true;
+  bool _isImageLoading = false;
 
   @override
   void initState() {
     super.initState();
     _loadProfileData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload profile image when dependencies change
+    _loadProfileImage();
   }
 
   Future<void> _loadProfileData() async {
@@ -35,6 +46,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         throw Exception('User ID not found');
       }
 
+      // Load profile image path from SharedPreferences
+      final savedProfileImagePath = _prefs.getString('profileImagePath');
+      if (savedProfileImagePath != null) {
+        setState(() {
+          _profileImagePath = savedProfileImagePath;
+        });
+      }
+
       // Get data from API
       final response = await ApiService.getCurrentUser(userId);
 
@@ -44,14 +63,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() {
           _userId = userData['id']?.toString() ?? 'N/A';
           _fullName = userData['name'] ?? 'N/A';
-          _jobTitle = userData['role'] ?? 'end_user';
+          _lastName = userData['last_name'] ?? 'N/A';
+          _position = userData['position'] ?? 'end_user';
           _isLoading = false;
         });
 
         // Save to SharedPreferences for offline access
         await _prefs.setString('userId', _userId);
         await _prefs.setString('name', _fullName);
-        await _prefs.setString('jobTitle', _jobTitle);
+        await _prefs.setString('lastName', _lastName);
+        await _prefs.setString('position', _position);
       } else {
         throw Exception(response['message'] ?? 'Failed to fetch user data');
       }
@@ -61,7 +82,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _userId = _prefs.getString('userId') ?? 'N/A';
         _fullName = _prefs.getString('name') ?? 'N/A';
-        _jobTitle = _prefs.getString('jobTitle') ?? 'N/A';
+        _lastName = _prefs.getString('lastName') ?? 'N/A';
+        _position = _prefs.getString('position') ?? 'N/A';
         _isLoading = false;
       });
 
@@ -76,13 +98,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _loadProfileImage() async {
+    try {
+      setState(() {
+        _isImageLoading = true;
+      });
+
+      final savedProfileImagePath = _prefs.getString('profileImagePath');
+      if (savedProfileImagePath != null &&
+          savedProfileImagePath != _profileImagePath) {
+        setState(() {
+          _profileImagePath = savedProfileImagePath;
+        });
+      }
+    } catch (e) {
+      print('Error loading profile image: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isImageLoading = false;
+        });
+      }
+    }
+  }
+
   void _updateProfileData(Map<String, String> data) {
     setState(() {
-      _jobTitle = data['jobTitle'] ?? _jobTitle;
       if (data['name'] != null) {
         _fullName = data['name']!;
       }
+      if (data['lastName'] != null) {
+        _lastName = data['lastName']!;
+      }
+      if (data['profileImagePath'] != null) {
+        _profileImagePath = data['profileImagePath']!;
+      }
     });
+  }
+
+  Future<void> _handleLogout() async {
+    // Show confirmation dialog
+    final bool? shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirm Logout'),
+          content: const Text('Are you sure you want to logout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // If user confirms logout, proceed with logout
+    if (shouldLogout == true) {
+      try {
+        await _prefs.clear();
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error logging out: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildProfileInfo() {
+    return Column(
+      children: [
+        // Contact Info
+        _InfoItem(icon: Icons.person_outline, label: 'Name', value: _fullName),
+        const Divider(height: 24),
+        _InfoItem(icon: Icons.badge_outlined, label: 'ID', value: _userId),
+      ],
+    );
+  }
+
+  /// Get the profile image provider
+  ImageProvider? _getProfileImage() {
+    try {
+      if (_profileImagePath != null) {
+        final savedFile = File(_profileImagePath!);
+        if (savedFile.existsSync()) {
+          return FileImage(savedFile);
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error loading profile image: $e');
+      return null;
+    }
   }
 
   @override
@@ -142,10 +263,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 child: CircleAvatar(
                                   radius: 50,
-                                  backgroundImage: const AssetImage(
-                                    'assets/images/profile_placeholder.png',
-                                  ),
+                                  backgroundImage: _getProfileImage(),
                                   backgroundColor: Colors.grey[200],
+                                  child:
+                                      _isImageLoading
+                                          ? const CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Color(0xFF133343),
+                                                ),
+                                          )
+                                          : _getProfileImage() == null
+                                          ? const Icon(
+                                            Icons.person,
+                                            size: 40,
+                                            color: Color(0xFF133343),
+                                          )
+                                          : null,
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -176,7 +311,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  _jobTitle.toUpperCase(),
+                                  _position.toUpperCase(),
                                   style: const TextStyle(
                                     color: Colors.black,
                                     fontWeight: FontWeight.w500,
@@ -186,28 +321,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                               const SizedBox(height: 24),
 
-                              // Contact Info
-                              _InfoItem(
-                                icon: Icons.person_outline,
-                                label: 'Name',
-                                value: _fullName,
-                              ),
-
-                              const Divider(height: 24),
-
-                              _InfoItem(
-                                icon: Icons.badge_outlined,
-                                label: 'ID',
-                                value: _userId,
-                              ),
-
-                              const Divider(height: 24),
-
-                              _InfoItem(
-                                icon: Icons.work_outline,
-                                label: 'Role',
-                                value: _jobTitle.toUpperCase(),
-                              ),
+                              _buildProfileInfo(),
                             ],
                           ),
                         ),
@@ -221,8 +335,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _ActionButton(
                             icon: Icons.edit,
                             label: 'Edit Profile',
-                            onPressed: () {
-                              Navigator.push(
+                            onPressed: () async {
+                              final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder:
@@ -231,6 +345,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                 ),
                               );
+
+                              // Refresh profile data if returned from edit screen
+                              if (result != null &&
+                                  result is Map<String, dynamic>) {
+                                _updateProfileData(
+                                  Map<String, String>.from(result),
+                                );
+                              }
                             },
                             backgroundColor: Colors.grey[300] ?? Colors.grey,
                             iconColor: Colors.black87,
@@ -281,14 +403,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _ActionButton(
                             icon: Icons.logout,
                             label: 'Logout',
-                            onPressed: () {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const LoginScreen(),
-                                ),
-                              );
-                            },
+                            onPressed: _handleLogout,
                             backgroundColor: Colors.grey[300] ?? Colors.grey,
                             iconColor: Colors.black87,
                             textColor: Colors.black87,

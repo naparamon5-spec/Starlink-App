@@ -100,20 +100,10 @@ class _TicketScreenState extends State<TicketScreen> {
               List<dynamic> attachments = [];
 
               if (ticket['attachments'] != null) {
-                print('DEBUG: Raw attachments data: ${ticket['attachments']}');
-                print(
-                  'DEBUG: Attachments type: ${ticket['attachments'].runtimeType}',
-                );
-
-                // Simply use the original_name directly
                 attachmentsDisplay = ticket['attachments'].toString();
                 attachments = [
                   {'original_name': ticket['attachments']},
                 ];
-                print('DEBUG: Using attachment name: $attachmentsDisplay');
-              } else {
-                print('DEBUG: No attachments found in ticket');
-                attachmentsDisplay = 'No attachments';
               }
 
               // Map backend status to display status
@@ -131,14 +121,12 @@ class _TicketScreenState extends State<TicketScreen> {
                 displayStatus = 'DONE';
               } else if (backendStatus == 'closed') {
                 displayStatus = 'CLOSED';
-              } else {
-                displayStatus = backendStatus.toUpperCase();
               }
 
               final processedTicket = {
                 'id': ticket['id'],
                 'Status': displayStatus,
-                'Contact': ticket['contact_name'] ?? 'Not Assigned',
+                'Contact': ticket['contact_name'],
                 'Subscription': ticket['subscription'] ?? 'N/A',
                 'Ticket Type': ticket['type'] ?? 'N/A',
                 'Attachments': attachmentsDisplay,
@@ -146,15 +134,12 @@ class _TicketScreenState extends State<TicketScreen> {
                   ...ticket,
                   'created_at': _formatDate(ticket['created_at']),
                   'attachments': attachments,
-                  'contact': ticket['contact'] ?? null,
-                  'contact_name': ticket['contact_name'] ?? 'Not Assigned',
+                  'contact': ticket['contact'],
+                  'contact_name': ticket['contact_name'],
                   'status': displayStatus,
                 },
               };
 
-              print(
-                'Processed ticket attachments: ${processedTicket['Attachments']}',
-              ); // Debug log
               return processedTicket;
             }),
           );
@@ -165,7 +150,6 @@ class _TicketScreenState extends State<TicketScreen> {
         throw Exception(response['message'] ?? 'Failed to load tickets');
       }
     } catch (e) {
-      print('Error loading tickets: $e');
       if (!mounted) return;
       setState(() {
         _tickets = [];
@@ -245,11 +229,6 @@ class _TicketScreenState extends State<TicketScreen> {
   void _showTicketDetails(Map<String, dynamic> ticket) {
     final fullData = ticket['full_data'] as Map<String, dynamic>;
 
-    // Debug print to verify contact data in details
-    print(
-      'Showing ticket details - Contact: ${fullData['contact_name']} (ID: ${fullData['contact']})',
-    );
-
     showDialog(
       context: context,
       builder:
@@ -294,9 +273,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               Expanded(
                                 child: _buildDetailItem(
                                   'Contact',
-                                  fullData['contact_name'] != null
-                                      ? '${fullData['contact_name']} (ID: ${fullData['contact']})'
-                                      : 'Not Assigned',
+                                  fullData['Contact'],
                                 ),
                               ),
                               const SizedBox(width: 24),
@@ -426,44 +403,25 @@ class _TicketScreenState extends State<TicketScreen> {
                                     ...(fullData['attachments'] as List).map((
                                       attachment,
                                     ) {
-                                      print(
-                                        'DEBUG: Processing attachment in details: $attachment',
-                                      );
                                       if (attachment is Map) {
-                                        print(
-                                          'DEBUG: Attachment map keys in details: ${attachment.keys.toList()}',
-                                        );
-                                        // Get the original_name from the attachment
                                         final fileName =
                                             attachment['original_name']
                                                 ?.toString() ??
                                             attachment['file_name']
                                                 ?.toString() ??
                                             'Unknown file';
-                                        print(
-                                          'DEBUG: Extracted filename in details: $fileName',
-                                        );
 
                                         final fileType =
                                             attachment['file_type']
                                                 ?.toString() ??
                                             fileName.split('.').last;
-                                        print(
-                                          'DEBUG: Extracted file type in details: $fileType',
-                                        );
 
                                         final fileSize = _formatFileSize(
                                           attachment['file_size'] as int?,
                                         );
-                                        print(
-                                          'DEBUG: Extracted file size in details: $fileSize',
-                                        );
 
                                         final fileId =
                                             attachment['id']?.toString();
-                                        print(
-                                          'DEBUG: Extracted file ID in details: $fileId',
-                                        );
 
                                         return Padding(
                                           padding: const EdgeInsets.only(
@@ -669,25 +627,19 @@ class _TicketScreenState extends State<TicketScreen> {
           ),
     ).then((result) async {
       if (result != null && result is Map<String, dynamic>) {
-        print('Received status update: ${result['status']}'); // Debug print
-
-        // Update the ticket status in the list
         setState(() {
           final ticketIndex = _tickets.indexWhere(
             (t) => t['id'].toString() == result['id'].toString(),
           );
           if (ticketIndex != -1) {
-            // Update both the display status and full data status
             _tickets[ticketIndex]['Status'] = result['status'];
             if (_tickets[ticketIndex]['full_data'] != null) {
               _tickets[ticketIndex]['full_data']['status'] = result['status'];
             }
-            // Update filtered tickets as well
             _filteredTickets = List.from(_tickets);
           }
         });
 
-        // Always reload tickets after a status update
         await _loadTickets();
       }
     });
@@ -1055,11 +1007,12 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                           Expanded(
                             child: _buildDetailItem(
                               'Contact',
-                              _ticket['contact_name'] != null
-                                  ? '${_ticket['contact_name']} (ID: ${_ticket['contact']})'
-                                  : 'Not Assigned',
+                              _ticket['contact_name'] ??
+                                  _ticket['name'] ??
+                                  'Not Assigned',
                             ),
                           ),
+
                           const SizedBox(width: 24),
                           Expanded(
                             child: _buildDetailItem(
@@ -1109,7 +1062,6 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
 
   Widget _buildAttachmentsSection() {
     final attachments = _ticket['attachments'];
-    print('Building attachments section with data: $attachments'); // Debug log
 
     return Card(
       elevation: 2,
@@ -1142,10 +1094,6 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                   children: [
                     if (attachments is List) ...[
                       ...(attachments as List).map((attachment) {
-                        print(
-                          'Processing attachment in UI: $attachment',
-                        ); // Debug log
-
                         String fileName;
                         String fileType = '';
                         String fileSize = '';

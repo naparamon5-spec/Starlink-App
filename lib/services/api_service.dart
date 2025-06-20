@@ -22,8 +22,6 @@ class ApiService {
   // Test database connection
   static Future<Map<String, dynamic>> testConnection() async {
     try {
-      print('Attempting to connect to: $baseUrl/test_connection.php');
-
       final response = await _client
           .get(Uri.parse('$baseUrl/test_connection.php'))
           .timeout(
@@ -39,9 +37,6 @@ class ApiService {
               );
             },
           );
-
-      print('Response status code: ${response.statusCode}');
-      print('Response body: ${response.body}');
 
       final data = json.decode(response.body);
       return data;
@@ -67,8 +62,6 @@ class ApiService {
     String password,
   ) async {
     try {
-      print('Attempting to login: $baseUrl/login.php');
-
       final response = await _client
           .post(
             Uri.parse('$baseUrl/login.php'),
@@ -88,9 +81,6 @@ class ApiService {
               );
             },
           );
-
-      print('Response status code: ${response.statusCode}');
-      print('Response body: ${response.body}');
 
       final data = json.decode(response.body);
 
@@ -113,7 +103,6 @@ class ApiService {
 
       return data;
     } catch (e) {
-      print('Login error: $e');
       return {
         'status': 'error',
         'message': e.toString().replaceAll('Exception: ', ''),
@@ -125,31 +114,14 @@ class ApiService {
   // Get all tickets
   static Future<Map<String, dynamic>> getTickets() async {
     try {
-      print('Fetching tickets from: $baseUrl/api.php?action=get_tickets');
-
       final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_tickets'),
         headers: {'Accept': 'application/json'},
       );
 
-      print('Get tickets response status: ${response.statusCode}');
-      print('Get tickets response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          // Debug log for each ticket
-          if (data['data'] != null && data['data'] is List) {
-            print('Number of tickets received: ${data['data'].length}');
-            for (var ticket in data['data']) {
-              print('Ticket details:');
-              print('  ID: ${ticket['id']}');
-              print('  User ID: ${ticket['user_id']}');
-              print('  Contact: ${ticket['contact']}');
-              print('  Status: ${ticket['status']}');
-              print('  Type: ${ticket['type']}');
-            }
-          }
           return data;
         } else {
           throw Exception(data['message'] ?? 'Failed to fetch tickets');
@@ -158,7 +130,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching tickets: $e');
       throw Exception('Error fetching tickets: $e');
     }
   }
@@ -168,8 +139,6 @@ class ApiService {
     Map<String, dynamic> ticketData,
   ) async {
     try {
-      print('Creating ticket with data: $ticketData');
-
       // Validate required fields
       final requiredFields = [
         'type',
@@ -205,19 +174,13 @@ class ApiService {
       final formattedData = {
         'type': ticketData['type'],
         'contact': ticketData['contact'],
+        'contact_name': ticketData['contact_name'],
         'subscription': ticketData['subscription'],
         'description': ticketData['description'],
         'user_id': ticketData['user_id'].toString(),
         'subject': ticketData['subject'] ?? ticketData['type'],
         'attachments': processedAttachments,
       };
-
-      print('Sending formatted ticket data to API:');
-      print('  Type: ${formattedData['type']}');
-      print('  Contact: ${formattedData['contact']}');
-      print('  User ID: ${formattedData['user_id']}');
-      print('  Subscription: ${formattedData['subscription']}');
-      print('  Description: ${formattedData['description']}');
 
       final response = await _client
           .post(
@@ -241,9 +204,6 @@ class ApiService {
             },
           );
 
-      print('Create ticket response status: ${response.statusCode}');
-      print('Create ticket response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
@@ -266,16 +226,13 @@ class ApiService {
             'attachments': processedAttachments,
             'user_id': ticketData['user_id'],
             'contact': ticketData['contact'],
+            'contact_name': ticketData['contact_name'],
             'type': ticketData['type'],
             'subscription': ticketData['subscription'],
             'description': ticketData['description'],
+            'attachments_display':
+                ticketData['attachments_display'] ?? 'No attachments',
           };
-
-          print('Final ticket data after creation:');
-          print('  ID: ${data['data']['id']}');
-          print('  Status: ${data['data']['status']}');
-          print('  User ID: ${data['data']['user_id']}');
-          print('  Contact: ${data['data']['contact']}');
 
           return data;
         } else {
@@ -285,8 +242,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error creating ticket: $e');
-      // Return a properly formatted error response
       return {
         'status': 'error',
         'message': e.toString().replaceAll('Exception: ', ''),
@@ -321,15 +276,10 @@ class ApiService {
   // Get agents
   static Future<Map<String, dynamic>> getAgents() async {
     try {
-      print('Fetching agents from: $baseUrl/api.php?action=get_agents');
-
       final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_agents'),
         headers: {'Accept': 'application/json'},
       );
-
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -355,7 +305,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching agents: $e');
       throw Exception('Error fetching agents: $e');
     }
   }
@@ -365,17 +314,12 @@ class ApiService {
     String euCode,
   ) async {
     try {
-      print('Fetching subscriptions for EU code: $euCode');
-
       final response = await _client.get(
         Uri.parse(
           '$baseUrl/api.php?action=get_subscriptions_by_eu_code&eu_code=$euCode',
         ),
         headers: {'Accept': 'application/json'},
       );
-
-      print('Get subscriptions response status: ${response.statusCode}');
-      print('Get subscriptions response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -388,7 +332,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching subscriptions: $e');
       throw Exception('Error fetching subscriptions: $e');
     }
   }
@@ -397,8 +340,6 @@ class ApiService {
     String customerCode,
   ) async {
     try {
-      print('Fetching subscriptions for customer code: $customerCode');
-
       final response = await _client.get(
         Uri.parse(
           '$baseUrl/api.php?action=get_subscriptions_by_customer_code&customer_code=$customerCode',
@@ -406,9 +347,6 @@ class ApiService {
         headers: {'Accept': 'application/json'},
       );
 
-      print('Get subscriptions response status: ${response.statusCode}');
-      print('Get subscriptions response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
@@ -420,7 +358,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching subscriptions: $e');
       throw Exception('Error fetching subscriptions: $e');
     }
   }
@@ -428,15 +365,10 @@ class ApiService {
   // Get all subscriptions (deprecated, use getSubscriptionsByEuCode instead)
   static Future<Map<String, dynamic>> getSubscriptions() async {
     try {
-      print('Fetching all subscriptions');
-
       final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_subscriptions'),
         headers: {'Accept': 'application/json'},
       );
-
-      print('Get subscriptions response status: ${response.statusCode}');
-      print('Get subscriptions response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -449,7 +381,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching subscriptions: $e');
       throw Exception('Error fetching subscriptions: $e');
     }
   }
@@ -457,10 +388,6 @@ class ApiService {
   // Get current user info
   static Future<Map<String, dynamic>> getCurrentUser(int userId) async {
     try {
-      print(
-        'Fetching current user from: $baseUrl/api.php?action=get_current_user&user_id=$userId',
-      );
-
       final response = await _client
           .get(
             Uri.parse(
@@ -477,9 +404,6 @@ class ApiService {
             },
           );
 
-      print('Response status code: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success' && data['data'] != null) {
@@ -491,7 +415,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error in getCurrentUser: $e');
       return {
         'status': 'error',
         'message': e.toString().replaceAll('Exception: ', ''),
@@ -505,10 +428,6 @@ class ApiService {
     String newStatus,
   ) async {
     try {
-      print(
-        'Updating ticket status: $baseUrl/api.php?action=update_ticket_status',
-      );
-
       final response = await _client.post(
         Uri.parse('$baseUrl/api.php?action=update_ticket_status'),
         headers: {
@@ -517,9 +436,6 @@ class ApiService {
         },
         body: json.encode({'ticket_id': ticketId, 'status': newStatus}),
       );
-
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -532,7 +448,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error updating ticket status: $e');
       throw Exception('Failed to update ticket status: $e');
     }
   }
@@ -563,8 +478,6 @@ class ApiService {
     required String newPassword,
   }) async {
     try {
-      print('Updating password for user: $userId');
-
       final response = await _client
           .post(
             Uri.parse('$baseUrl/api.php?action=update_password'),
@@ -591,9 +504,6 @@ class ApiService {
             },
           );
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success' || data['success'] == true) {
@@ -605,7 +515,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error updating password: $e');
       throw Exception('Failed to update password: $e');
     }
   }
@@ -613,8 +522,6 @@ class ApiService {
   // Get all customers
   static Future<Map<String, dynamic>> getCustomers() async {
     try {
-      print('Fetching customers from: $baseUrl/api.php?action=get_agents');
-
       final response = await _client
           .get(
             Uri.parse('$baseUrl/api.php?action=get_agents'),
@@ -631,9 +538,6 @@ class ApiService {
               );
             },
           );
-
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -667,7 +571,6 @@ class ApiService {
         );
       }
     } catch (e) {
-      print('Error fetching customers: $e');
       if (e is TimeoutException) {
         throw Exception(
           'Connection timed out. Please check your internet connection.',
@@ -678,12 +581,12 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getBillingCycles(
-    String subscriptionId,
+    String serviceLineNumber,
   ) async {
     try {
       final response = await _client.get(
         Uri.parse(
-          '$baseUrl/api.php?action=get_billing_cycles&subscription_id=$subscriptionId',
+          '$baseUrl/api.php?action=get_billing_cycles&serviceLineNumber=$serviceLineNumber',
         ),
         headers: {'Accept': 'application/json'},
       );
@@ -708,9 +611,6 @@ class ApiService {
   // Forgot password with improved error handling
   static Future<Map<String, dynamic>> forgotPassword(String email) async {
     try {
-      print('Attempting password reset for email: $email');
-      print('Sending request to: $baseUrl/api.php?action=forgot_password');
-
       final response = await _client
           .post(
             Uri.parse('$baseUrl/api.php?action=forgot_password'),
@@ -733,9 +633,6 @@ class ApiService {
             },
           );
 
-      print('Password reset response status: ${response.statusCode}');
-      print('Password reset response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success' || data['success'] == true) {
@@ -746,13 +643,11 @@ class ApiService {
           );
         }
       } else if (response.statusCode == 500) {
-        print('Server error details: ${response.body}');
         throw Exception('Server error occurred. Please try again later.');
       } else {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error during password reset: $e');
       if (e.toString().contains('CERTIFICATE_VERIFY_FAILED')) {
         if (SSLConfig.isDevelopment) {
           return {
@@ -782,15 +677,10 @@ class ApiService {
   // Get end user by user ID
   static Future<Map<String, dynamic>> getEndUserByUserId(int userId) async {
     try {
-      print('Fetching end user data for user ID: $userId');
-
       final response = await _client.get(
         Uri.parse('$baseUrl/api.php?action=get_end_user&user_id=$userId'),
         headers: {'Accept': 'application/json'},
       );
-
-      print('Get end user response status: ${response.statusCode}');
-      print('Get end user response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -803,7 +693,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching end user data: $e');
       throw Exception('Error fetching end user data: $e');
     }
   }
@@ -811,17 +700,12 @@ class ApiService {
   // Get contacts by EU code
   static Future<Map<String, dynamic>> getContactsByEuCode(String euCode) async {
     try {
-      print('Fetching contacts for EU code: $euCode');
-
       final response = await _client.get(
         Uri.parse(
           '$baseUrl/api.php?action=get_contacts_by_eu_code&eu_code=$euCode',
         ),
         headers: {'Accept': 'application/json'},
       );
-
-      print('Get contacts response status: ${response.statusCode}');
-      print('Get contacts response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -834,7 +718,6 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching contacts: $e');
       throw Exception('Error fetching contacts: $e');
     }
   }

@@ -50,14 +50,12 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       // First get the current user to get their EU code
       final userData = await ApiService.getCurrentUser(widget.userId);
-      print('User data: ${userData.toString()}'); // Debug log
 
       if (userData['status'] != 'success' || userData['data'] == null) {
         throw Exception('Failed to get user data');
       }
 
       final user = userData['data'];
-      print('User object: $user'); // Debug log to see all user fields
 
       // Try different possible EU code field names
       String? euCode;
@@ -69,25 +67,20 @@ class _HomeScreenState extends State<HomeScreen> {
         euCode = user['customer_code'].toString();
       }
 
-      print('Found EU code from user: $euCode'); // Debug log
-
       if (euCode == null || euCode.isEmpty) {
         // If no EU code found in user data, try to get it from end_users table
         try {
           final endUserData = await ApiService.getEndUserByUserId(
             widget.userId,
           );
-          print('End user data: $endUserData'); // Debug log
 
           if (endUserData['status'] == 'success' &&
               endUserData['data'] != null) {
             euCode =
                 endUserData['data']['eu_code']?.toString() ??
                 endUserData['data']['customer_code']?.toString();
-            print('EU code from end_users: $euCode'); // Debug log
           }
         } catch (e) {
-          print('Error getting end user data: $e');
           throw Exception(
             'Could not find EU code for user. Please contact support.',
           );
@@ -102,7 +95,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Now fetch subscriptions using the EU code
       final response = await ApiService.getSubscriptionsByEuCode(euCode);
-      print('Subscriptions response: ${response.toString()}'); // Debug log
 
       if (response['status'] == 'success' && response['data'] != null) {
         setState(() {
@@ -118,7 +110,6 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } catch (e) {
-      print('Error in _loadSubscriptionData: $e'); // Debug log
       setState(() {
         _errorMessage = 'Error loading subscription data: ${e.toString()}';
         _isLoading = false;
@@ -131,7 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final response = await ApiService.getBillingCycles(
-        _subscriptionData!['id'].toString(),
+        _subscriptionData!['serviceLineNumber'].toString(),
       );
       if (response['status'] == 'success') {
         setState(() {
@@ -257,6 +248,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   active:
                       _subscriptionData!['active'] == '1' ||
                       _subscriptionData!['active'] == 'true',
+                  currentBillingCycle:
+                      _billingCycles.isNotEmpty ? _billingCycles[0] : null,
                 ),
               ),
             ),

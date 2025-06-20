@@ -6,7 +6,7 @@ import 'customer_edit_profile.dart';
 import 'customer_security_settings.dart';
 import 'customer_notification.dart';
 import '../../login_screen.dart';
-import '../ticket/customer_ticket.dart';
+import 'dart:io';
 
 class CustomerProfileScreen extends StatefulWidget {
   final bool showAppBar;
@@ -20,18 +20,28 @@ class CustomerProfileScreen extends StatefulWidget {
 class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   bool _isLoading = true;
   String? _userName;
+  String? _userLastName;
   String? _userEmail;
   String? _userPhone;
   String? _userAddress;
   String? _userId;
   String? _jobTitle;
   String? _companyName;
-  String? _userType;
+  String? _userPosition;
+  String? _profileImagePath;
+  bool _isImageLoading = false;
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload profile image when dependencies change
+    _loadProfileImage();
   }
 
   Future<void> _loadUserData() async {
@@ -43,6 +53,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         throw Exception('User ID not found');
       }
 
+      // Load profile image path from SharedPreferences
+      final savedProfileImagePath = prefs.getString('profileImagePath');
+      if (savedProfileImagePath != null) {
+        setState(() {
+          _profileImagePath = savedProfileImagePath;
+        });
+      }
+
       // Get data from API
       final response = await ApiService.getCurrentUser(userId);
 
@@ -52,24 +70,26 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         setState(() {
           _userId = userData['id']?.toString() ?? 'N/A';
           _userName = userData['name'] ?? 'N/A';
+          _userLastName = userData['last_name'] ?? 'N/A';
           _userEmail = userData['email'] ?? 'N/A';
           _userPhone = userData['phone'] ?? 'N/A';
           _userAddress = userData['address'] ?? 'N/A';
           _jobTitle = userData['job_title'] ?? 'N/A';
           _companyName = userData['company_name'] ?? 'N/A';
-          _userType = userData['role'] ?? 'customer';
+          _userPosition = userData['position'] ?? 'customer';
           _isLoading = false;
         });
 
         // Save to SharedPreferences for offline access
         await prefs.setString('userId', _userId!);
         await prefs.setString('name', _userName!);
+        await prefs.setString('lastName', _userLastName!);
         await prefs.setString('email', _userEmail!);
         await prefs.setString('phone', _userPhone!);
         await prefs.setString('address', _userAddress!);
         await prefs.setString('jobTitle', _jobTitle!);
         await prefs.setString('companyName', _companyName!);
-        await prefs.setString('userType', _userType!);
+        await prefs.setString('userType', _userPosition!);
       } else {
         throw Exception(response['message'] ?? 'Failed to fetch user data');
       }
@@ -89,30 +109,86 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     }
   }
 
+  Future<void> _loadProfileImage() async {
+    try {
+      setState(() {
+        _isImageLoading = true;
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      final savedProfileImagePath = prefs.getString('profileImagePath');
+      if (savedProfileImagePath != null &&
+          savedProfileImagePath != _profileImagePath) {
+        setState(() {
+          _profileImagePath = savedProfileImagePath;
+        });
+      }
+    } catch (e) {
+      print('Error loading profile image: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isImageLoading = false;
+        });
+      }
+    }
+  }
+
   void _updateProfileData(Map<String, String> data) {
     setState(() {
       if (data['name'] != null) {
         _userName = data['name']!;
       }
+      if (data['lastName'] != null) {
+        _userLastName = data['lastName']!;
+      }
+      if (data['profileImagePath'] != null) {
+        _profileImagePath = data['profileImagePath']!;
+      }
     });
   }
 
   Future<void> _handleLogout() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error logging out: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    // Show confirmation dialog
+    final bool? shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Logout'),
+          content: const Text('Are you sure you want to logout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // If user confirms logout, proceed with logout
+    if (shouldLogout == true) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error logging out: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -132,10 +208,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     );
   }
 
-  String _getUserTypeDisplay() {
-    return _userType?.toUpperCase() ?? 'CUSTOMER';
-  }
-
   Widget _buildProfileInfo() {
     return Column(
       children: [
@@ -145,24 +217,30 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           label: 'Name',
           value: _userName ?? 'Not set',
         ),
-
         const Divider(height: 24),
-
         _InfoItem(
           icon: Icons.badge_outlined,
           label: 'ID',
           value: _userId ?? 'Not set',
         ),
-
-        const Divider(height: 24),
-
-        _InfoItem(
-          icon: Icons.work_outline,
-          label: 'Role',
-          value: _getUserTypeDisplay(),
-        ),
       ],
     );
+  }
+
+  /// Get the profile image provider
+  ImageProvider? _getProfileImage() {
+    try {
+      if (_profileImagePath != null) {
+        final savedFile = File(_profileImagePath!);
+        if (savedFile.existsSync()) {
+          return FileImage(savedFile);
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error loading profile image: $e');
+      return null;
+    }
   }
 
   @override
@@ -220,10 +298,24 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                                 ),
                                 child: CircleAvatar(
                                   radius: 50,
-                                  backgroundImage: const AssetImage(
-                                    'assets/images/profile_placeholder.png',
-                                  ),
+                                  backgroundImage: _getProfileImage(),
                                   backgroundColor: Colors.grey[200],
+                                  child:
+                                      _isImageLoading
+                                          ? const CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Color(0xFF133343),
+                                                ),
+                                          )
+                                          : _getProfileImage() == null
+                                          ? const Icon(
+                                            Icons.person,
+                                            size: 40,
+                                            color: Color(0xFF133343),
+                                          )
+                                          : null,
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -250,11 +342,11 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                                 decoration: BoxDecoration(
                                   color: Theme.of(
                                     context,
-                                  ).primaryColor.withOpacity(0.1),
+                                  ).primaryColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  '${_getUserTypeDisplay()}',
+                                  _userPosition?.toUpperCase() ?? 'CUSTOMER',
                                   style: const TextStyle(
                                     color: Colors.black,
                                     fontWeight: FontWeight.w500,
@@ -278,8 +370,8 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                           _ActionButton(
                             icon: Icons.edit,
                             label: 'Edit Profile',
-                            onPressed: () {
-                              Navigator.push(
+                            onPressed: () async {
+                              final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder:
@@ -288,6 +380,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                                       ),
                                 ),
                               );
+
+                              // Refresh profile data if returned from edit screen
+                              if (result != null &&
+                                  result is Map<String, dynamic>) {
+                                _updateProfileData(
+                                  Map<String, String>.from(result),
+                                );
+                              }
                             },
                             backgroundColor: Colors.grey[300] ?? Colors.grey,
                             iconColor: Colors.black87,

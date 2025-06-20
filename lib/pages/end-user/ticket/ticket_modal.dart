@@ -50,14 +50,12 @@ class _NewTicketModalState extends State<NewTicketModal> {
     try {
       // First get the current user to get their EU code
       final userData = await ApiService.getCurrentUser(widget.userId);
-      print('User data: ${userData.toString()}'); // Debug log
 
       if (userData['status'] != 'success' || userData['data'] == null) {
         throw Exception('Failed to get user data');
       }
 
       final user = userData['data'];
-      print('User object: $user'); // Debug log to see all user fields
 
       // Try different possible EU code field names
       String? euCode;
@@ -69,25 +67,20 @@ class _NewTicketModalState extends State<NewTicketModal> {
         euCode = user['customer_code'].toString();
       }
 
-      print('Found EU code from user: $euCode'); // Debug log
-
       if (euCode == null || euCode.isEmpty) {
         // If no EU code found in user data, try to get it from end_users table
         try {
           final endUserData = await ApiService.getEndUserByUserId(
             widget.userId,
           );
-          print('End user data: $endUserData'); // Debug log
 
           if (endUserData['status'] == 'success' &&
               endUserData['data'] != null) {
             euCode =
                 endUserData['data']['eu_code']?.toString() ??
                 endUserData['data']['customer_code']?.toString();
-            print('EU code from end_users: $euCode'); // Debug log
           }
         } catch (e) {
-          print('Error getting end user data: $e');
           // Continue with the flow even if end user data fails
         }
       }
@@ -108,15 +101,11 @@ class _NewTicketModalState extends State<NewTicketModal> {
 
       // Fetch contacts using EU code
       final contactsData = await ApiService.getContactsByEuCode(euCode);
-      print('Contacts data: ${contactsData.toString()}'); // Debug log
       if (contactsData['status'] == 'success') {
         setState(() {
           _contacts = Map.fromEntries(
             (contactsData['data'] as List).map(
-              (contact) => MapEntry(
-                '${contact['name']} ${contact['first_name']}',
-                contact['id'],
-              ),
+              (contact) => MapEntry('${contact['name']}', contact['id']),
             ),
           );
         });
@@ -128,7 +117,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
       final subscriptionsData = await ApiService.getSubscriptionsByEuCode(
         euCode,
       );
-      print('Subscriptions data: ${subscriptionsData.toString()}'); // Debug log
       if (subscriptionsData['status'] == 'success') {
         setState(() {
           _subscriptions = List<String>.from(
@@ -147,7 +135,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
         );
       }
     } catch (e) {
-      print('Error in _fetchData: $e'); // Debug log
       setState(() {
         _errorMessage = 'Error fetching data: ${e.toString()}';
       });
@@ -165,7 +152,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
         allowedExtensions: ['pdf', 'docx', 'jpg', 'jpeg', 'png'],
         allowMultiple: true,
         withData: true,
-        onFileLoading: (FilePickerStatus status) => print(status),
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -244,7 +230,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                 'data': base64Encode(file.bytes!),
                 'type': file.extension ?? '',
                 'size': file.size,
-                'file_path': file.path ?? '',
+                'file_path': 'uploads/tickets/${file.name}',
               });
             }
           }
@@ -283,7 +269,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
           ),
         );
 
-        // Submit the ticket using ApiService directly
+        // Submit the ticket using ApiService
         final response = await ApiService.createTicket(newTicket);
 
         // Clear the loading snackbar
@@ -291,38 +277,75 @@ class _NewTicketModalState extends State<NewTicketModal> {
         ScaffoldMessenger.of(context).clearSnackBars();
 
         if (response['status'] == 'success') {
-          // Show success message
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ticket created successfully'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
+          final ticketId = response['data']['id'];
+
+          // Upload attachments to the specified API
+          if (_attachedFiles.isNotEmpty) {
+            try {
+              // Create multipart request
+              final request = http.MultipartRequest(
+                'POST',
+                Uri.parse(
+                  'https://starlink.ardentnetworks.com.ph/tickets/upload_attachment',
+                ),
+              );
+
+              // Add basic fields
+              request.fields['user_id'] = widget.userId.toString();
+              request.fields['ticket_no'] = ticketId.toString();
+
+              // Add files
+              for (var file in _attachedFiles) {
+                if (file.bytes != null) {
+                  request.files.add(
+                    http.MultipartFile.fromBytes(
+                      'attachments[]',
+                      file.bytes!,
+                      filename: 'uploads/tickets/${file.name}',
+                    ),
+                  );
+                }
+              }
+
+              // Send the request
+              final streamedResponse = await request.send();
+              final uploadResponse = await http.Response.fromStream(
+                streamedResponse,
+              );
+
+              if (uploadResponse.statusCode != 200) {
+                // Handle upload failure silently
+              }
+            } catch (e) {
+              // Handle upload error silently
+            }
+          }
 
           // Format the ticket data to match the expected structure
           final formattedTicket = {
-            'id': response['data']['id'] ?? '',
-            'type': response['data']['type'] ?? '',
-            'contact': response['data']['contact_name'] ?? '',
-            'contact_id': response['data']['contact'] ?? '',
-            'subscription': response['data']['subscription'] ?? '',
-            'description': response['data']['description'] ?? '',
-            'attachments':
-                response['data']['attachments_display'] ?? 'No attachments',
-            'status': 'OPEN',
-            'created_at': DateTime.now().toString(),
-            'created_at_raw': DateTime.now(),
+            'id': ticketId,
+            'Status': 'OPEN',
+            'Ticket Type': _selectedTicketType,
+            'Contact': _selectedContact,
+            'Subscription': _selectedSubscription,
+            'Description': _descriptionController.text,
+            'Created At': DateTime.now().toString(),
+            'Attachments': _attachedFiles.map((file) => file.name).join(', '),
             'full_data': {
               ...response['data'],
               'status': 'OPEN',
               'created_at': DateTime.now().toString(),
+              'attachments': attachmentsData,
+              'user_id': widget.userId,
+              'contact': _contacts[_selectedContact],
+              'contact_name': _selectedContact,
+              'type': _selectedTicketType,
+              'subscription': _selectedSubscription,
+              'description': _descriptionController.text,
             },
-            'forceRefresh': true,
           };
 
-          // Call the parent's onConfirm callback with the response
+          // Call the parent's onConfirm callback with the formatted ticket
           widget.onConfirm(formattedTicket);
 
           // Close the modal and return the formatted ticket data
@@ -346,8 +369,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
         } else if (errorMessage.contains('<br />')) {
           errorMessage = 'Server error. Please try again later.';
         }
-
-        print('Error details: $errorMessage'); // Debug print
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

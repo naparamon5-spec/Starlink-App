@@ -198,12 +198,12 @@ class _TicketScreenState extends State<TicketScreen> {
                       '${parsedDate.year}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.day.toString().padLeft(2, '0')} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}';
                 }
               } catch (e) {
-                print('Error parsing date: $e');
+                // Handle date parsing error silently
               }
 
               // Get agent name from the map using the contact ID
               final contactId = ticket['contact']?.toString() ?? '';
-              final contactName = agentMap[contactId] ?? 'Not Assigned';
+              final contactName = agentMap[contactId];
 
               // Process attachments
               String attachmentsDisplay = 'No attachments';
@@ -289,7 +289,6 @@ class _TicketScreenState extends State<TicketScreen> {
         throw Exception(response['message'] ?? 'Failed to load tickets');
       }
     } catch (e) {
-      print('Error loading tickets: $e');
       if (!mounted) return;
       setState(() {
         _tickets = [];
@@ -352,34 +351,40 @@ class _TicketScreenState extends State<TicketScreen> {
       builder:
           (dialogContext) => NewTicketModal(
             userId: int.parse(_userId ?? '0'),
-            onConfirm: (ticket) async {
-              // Check if forceRefresh is true
-              if (ticket['forceRefresh'] == true) {
-                // Force reload tickets
-                await _loadTickets(forceRefresh: true);
-
-                // Update the ticket list with the new ticket
+            onConfirm: (ticket) {
+              // Immediately add the new ticket to the list
+              if (ticket['id'] != null && mounted) {
                 setState(() {
-                  // Add the new ticket to the beginning of the list
-                  _tickets.insert(0, {
+                  final newTicket = {
                     'id': ticket['id'],
-                    'type': ticket['type'],
-                    'contact': ticket['contact'],
-                    'contact_id': ticket['contact_id'],
-                    'subscription': ticket['subscription'],
-                    'description': ticket['description'],
-                    'attachments': ticket['attachments'],
-                    'status': ticket['status'],
-                    'created_at': ticket['created_at'],
-                    'created_at_raw': ticket['created_at_raw'],
-                    'full_data': ticket['full_data'],
-                  });
+                    'type': ticket['Ticket Type'] ?? 'N/A',
+                    'contact': ticket['Contact'],
+                    'contact_id': ticket['full_data']?['contact'],
+                    'subscription': ticket['Subscription'] ?? 'N/A',
+                    'description': ticket['Description'] ?? 'No description',
+                    'attachments': ticket['Attachments'] ?? 'No attachments',
+                    'status': ticket['Status'] ?? 'OPEN',
+                    'created_at':
+                        ticket['Created At'] ??
+                        _formatDate(DateTime.now().toString()),
+                    'created_at_raw':
+                        DateTime.tryParse(ticket['Created At'] ?? '') ??
+                        DateTime.now(),
+                    'user_id': ticket['full_data']?['user_id'],
+                    'full_data': {
+                      ...ticket['full_data'],
+                      'status': ticket['Status'] ?? 'OPEN',
+                      'created_at':
+                          ticket['Created At'] ??
+                          _formatDate(DateTime.now().toString()),
+                      'attachments': ticket['full_data']?['attachments'] ?? [],
+                    },
+                  };
 
-                  // Update filtered tickets
+                  // Insert at the beginning of the list
+                  _tickets.insert(0, newTicket);
                   _filteredTickets = List.from(_tickets);
-
-                  // Reset to first page
-                  _currentPage = 1;
+                  _currentPage = 1; // Reset to first page to show new ticket
                 });
               }
             },
@@ -389,11 +394,49 @@ class _TicketScreenState extends State<TicketScreen> {
           ),
     );
 
-    if (result != null && result is Map<String, dynamic>) {
-      // Handle any additional result data if needed
-      if (result['forceRefresh'] == true) {
+    // Reload tickets to ensure consistency with backend
+    if (result != null && mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+      try {
         await _loadTickets(forceRefresh: true);
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket created successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error refreshing tickets: ${e.toString()}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
+    }
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} '
+          '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateStr;
     }
   }
 

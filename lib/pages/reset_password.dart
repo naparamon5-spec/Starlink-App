@@ -47,14 +47,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     });
 
     try {
-      // Print request data for debugging
       final requestBody = {
         'email': widget.email,
         'verification_code': widget.verificationCode,
         'new_password': _passwordController.text,
         'confirm_password': _confirmPasswordController.text,
       };
-      print('Request body: $requestBody'); // Debug print
 
       final response = await http.post(
         Uri.parse('${ApiService.baseUrl}/reset_password.php'),
@@ -65,14 +63,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         body: json.encode(requestBody),
       );
 
-      print('Response status code: ${response.statusCode}'); // Debug print
-      print('Response body: ${response.body}'); // Debug print
-
       if (!mounted) return;
 
       try {
         final data = json.decode(response.body) as Map<String, dynamic>;
-        print('Parsed response data: $data'); // Debug print
 
         if (response.statusCode == 200) {
           if (data['status'] == 'success' || data['success'] == true) {
@@ -101,25 +95,21 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           } else {
             final error =
                 data['message'] as String? ?? data['error'] as String?;
-            print('Error from server: $error'); // Debug print
             setState(() {
               _errorMessage = error ?? 'Failed to reset password';
             });
           }
         } else {
-          print('Server error: ${response.statusCode}'); // Debug print
           setState(() {
             _errorMessage = 'Server error. Please try again later.';
           });
         }
       } catch (e) {
-        print('Error parsing response: $e'); // Debug print
         setState(() {
           _errorMessage = 'Invalid server response. Please try again.';
         });
       }
     } catch (e) {
-      print('Error during password reset: $e'); // Debug print
       setState(() {
         _errorMessage = 'An error occurred. Please try again.';
       });
