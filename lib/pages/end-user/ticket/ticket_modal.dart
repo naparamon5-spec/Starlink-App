@@ -23,13 +23,14 @@ class NewTicketModal extends StatefulWidget {
 
 class _NewTicketModalState extends State<NewTicketModal> {
   String? _selectedTicketType;
-  String? _selectedContact;
+  String? _selectedContactId;
+  String? _selectedContactName;
   Map<String, dynamic>? _selectedSubscription;
   final _descriptionController = TextEditingController();
   final List<PlatformFile> _attachedFiles = [];
 
   List<String> _ticketTypes = [];
-  Map<String, dynamic> _contacts = {};
+  List<Map<String, dynamic>> _contacts = [];
   List<Map<String, dynamic>> _subscriptions = [];
 
   bool _isLoading = true;
@@ -103,11 +104,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
       final contactsData = await ApiService.getContactsByEuCode(euCode);
       if (contactsData['status'] == 'success') {
         setState(() {
-          _contacts = Map.fromEntries(
-            (contactsData['data'] as List).map(
-              (contact) => MapEntry('${contact['name']}', contact['id']),
-            ),
-          );
+          _contacts = List<Map<String, dynamic>>.from(contactsData['data']);
         });
       } else {
         throw Exception(contactsData['message'] ?? 'Failed to fetch contacts');
@@ -210,7 +207,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
 
   void _submitTicket() async {
     if (_selectedTicketType != null &&
-        _selectedContact != null &&
+        _selectedContactId != null &&
         _selectedSubscription != null &&
         _descriptionController.text.isNotEmpty) {
       try {
@@ -232,10 +229,10 @@ class _NewTicketModalState extends State<NewTicketModal> {
 
         // Create the ticket with attachments
         final newTicket = {
-          'user_id': widget.userId,
+          'user_id': _selectedContactId,
           'type': _selectedTicketType,
-          'contact': _contacts[_selectedContact],
-          'contact_name': _selectedContact,
+          'contact': _selectedContactId,
+          'contact_name': _selectedContactName ?? '',
           'subscription': _selectedSubscription?['serviceLineNumber'],
           'subject': _selectedSubscription?['nickname'],
           'description': _descriptionController.text,
@@ -321,7 +318,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
             'id': ticketId,
             'Status': 'OPEN',
             'Ticket Type': _selectedTicketType,
-            'Contact': _selectedContact,
+            'Contact': _selectedContactName ?? '',
             'Subscription': _selectedSubscription?['nickname'],
             'Description': _descriptionController.text,
             'Created At': DateTime.now().toString(),
@@ -331,9 +328,9 @@ class _NewTicketModalState extends State<NewTicketModal> {
               'status': 'OPEN',
               'created_at': DateTime.now().toString(),
               'attachments': attachmentsData,
-              'user_id': widget.userId,
-              'contact': _contacts[_selectedContact],
-              'contact_name': _selectedContact,
+              'user_id': _selectedContactId,
+              'contact': _selectedContactId,
+              'contact_name': _selectedContactName ?? '',
               'type': _selectedTicketType,
               'subscription': _selectedSubscription?['serviceLineNumber'],
               'nickname': _selectedSubscription?['nickname'],
@@ -489,17 +486,32 @@ class _NewTicketModalState extends State<NewTicketModal> {
                         vertical: 8,
                       ),
                     ),
-                    value: _selectedContact,
+                    value: _selectedContactId,
                     items:
-                        _contacts.keys.map((contact) {
+                        _contacts.map((contact) {
+                          final name =
+                              (contact['first_name'] ?? '') +
+                              (contact['last_name'] != null
+                                  ? ' ' + contact['last_name']
+                                  : '');
                           return DropdownMenuItem(
-                            value: contact,
-                            child: Text(contact),
+                            value: contact['id'].toString(),
+                            child: Text(name.isNotEmpty ? name : 'No Name'),
                           );
                         }).toList(),
                     onChanged: (value) {
                       setState(() {
-                        _selectedContact = value;
+                        _selectedContactId = value;
+                        final selected = _contacts.firstWhere(
+                          (c) => c['id'].toString() == value,
+                          orElse: () => {},
+                        );
+                        _selectedContactName =
+                            ((selected['first_name'] ?? '') +
+                                    (selected['last_name'] != null
+                                        ? ' ' + selected['last_name']
+                                        : ''))
+                                .trim();
                       });
                     },
                     validator:
