@@ -7,12 +7,12 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import '../../../services/api_service.dart';
 
 /// Customer Edit Profile Screen
 ///
 /// This screen allows customers to edit their profile information including:
 /// - First Name, Last Name, Middle Name (optional)
-/// - Email address with validation
 /// - Profile image upload with the following features:
 ///   * Image picker from gallery
 ///   * File size validation (max 5MB)
@@ -57,12 +57,47 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _loadSavedData() async {
     _prefs = await SharedPreferences.getInstance();
+    int? userId = _prefs.getInt('user_id');
+    String? firstName;
+    String? lastName;
+    String? middleName;
+    String? email;
+    if (userId != null) {
+      try {
+        final response = await ApiService.getCurrentUser(userId);
+        if (response['status'] == 'success' && response['data'] != null) {
+          final userData = response['data'];
+          firstName =
+              userData['first_name'] ??
+              userData['name'] ??
+              _prefs.getString('firstName') ??
+              'John';
+          lastName =
+              userData['last_name'] ?? _prefs.getString('lastName') ?? 'Doe';
+          middleName =
+              userData['middle_name'] ?? _prefs.getString('middleName') ?? '';
+          email =
+              userData['email'] ??
+              _prefs.getString('email') ??
+              'johndoe@example.com';
+        }
+      } catch (e) {
+        firstName = _prefs.getString('firstName') ?? 'John';
+        lastName = _prefs.getString('lastName') ?? 'Doe';
+        middleName = _prefs.getString('middleName') ?? '';
+        email = _prefs.getString('email') ?? 'johndoe@example.com';
+      }
+    } else {
+      firstName = _prefs.getString('firstName') ?? 'John';
+      lastName = _prefs.getString('lastName') ?? 'Doe';
+      middleName = _prefs.getString('middleName') ?? '';
+      email = _prefs.getString('email') ?? 'johndoe@example.com';
+    }
     setState(() {
-      _firstNameController.text = _prefs.getString('firstName') ?? 'John';
-      _lastNameController.text = _prefs.getString('lastName') ?? 'Doe';
-      _middleNameController.text = _prefs.getString('middleName') ?? '';
-      _emailController.text =
-          _prefs.getString('email') ?? 'johndoe@example.com';
+      _firstNameController.text = firstName!;
+      _lastNameController.text = lastName!;
+      _middleNameController.text = middleName!;
+      _emailController.text = email!;
       _savedImagePath = _prefs.getString('profileImagePath');
     });
   }
@@ -78,48 +113,74 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _saveProfile() async {
     if (_formKey.currentState!.validate()) {
-      // Save to SharedPreferences
-      await _prefs.setString('firstName', _firstNameController.text);
-      await _prefs.setString('lastName', _lastNameController.text);
-      await _prefs.setString('middleName', _middleNameController.text);
-      await _prefs.setString('email', _emailController.text);
-
-      // Save profile image path if available
-      if (_savedImagePath != null) {
-        await _prefs.setString('profileImagePath', _savedImagePath!);
-      }
-
-      if (mounted) {
-        // Return the updated profile data to the previous screen
-        Navigator.pop(context, {
-          'firstName': _firstNameController.text,
-          'lastName': _lastNameController.text,
-          'email': _emailController.text,
-          'profileImagePath': _savedImagePath,
-        });
-
-        // Show success message with enhanced styling
+      int? userId = _prefs.getInt('user_id');
+      if (userId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                const Text(
-                  'Profile updated successfully!',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF133343),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+          const SnackBar(
+            content: Text('User ID not found.'),
+            backgroundColor: Colors.red,
           ),
         );
+        return;
+      }
+      final updateData = {
+        'user_id': userId,
+        'first_name': _firstNameController.text,
+        'last_name': _lastNameController.text,
+        'middle_name': _middleNameController.text,
+      };
+      bool updateSuccess = false;
+      String errorMsg = '';
+      try {
+        final response = await ApiService.updateUserProfile(updateData);
+        if (response['status'] == 'success') {
+          updateSuccess = true;
+          await _prefs.setString('firstName', _firstNameController.text);
+          await _prefs.setString('lastName', _lastNameController.text);
+          await _prefs.setString('middleName', _middleNameController.text);
+        } else {
+          errorMsg = response['message'] ?? 'Failed to update profile.';
+        }
+      } catch (e) {
+        errorMsg = e.toString();
+      }
+      if (mounted) {
+        if (updateSuccess) {
+          Navigator.pop(context, {
+            'firstName': _firstNameController.text,
+            'lastName': _lastNameController.text,
+            'middleName': _middleNameController.text,
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Profile updated successfully!',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF133343),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update profile: $errorMsg'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     }
   }
@@ -438,6 +499,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     }
                     return null;
                   },
+                  readOnly: true,
                 ),
 
                 const SizedBox(height: 32),
@@ -488,6 +550,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     required IconData icon,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
+    bool readOnly = false,
   }) {
     return TextFormField(
       controller: controller,
@@ -506,6 +569,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       ),
       validator: validator,
+      readOnly: readOnly,
     );
   }
 

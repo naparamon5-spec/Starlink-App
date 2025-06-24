@@ -136,11 +136,20 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
   void _updateProfileData(Map<String, String> data) {
     setState(() {
-      if (data['name'] != null) {
-        _userName = data['name']!;
+      // Compose full name from first, middle, last name if available
+      final firstName = data['firstName'] ?? '';
+      final middleName = data['middleName'] ?? '';
+      final lastName = data['lastName'] ?? '';
+      final fullName =
+          (firstName +
+                  (middleName.isNotEmpty ? ' ' + middleName : '') +
+                  (lastName.isNotEmpty ? ' ' + lastName : ''))
+              .trim();
+      if (fullName.isNotEmpty) {
+        _userName = fullName;
       }
-      if (data['lastName'] != null) {
-        _userLastName = data['lastName']!;
+      if (lastName.isNotEmpty) {
+        _userLastName = lastName;
       }
       if (data['profileImagePath'] != null) {
         _profileImagePath = data['profileImagePath']!;
