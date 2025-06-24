@@ -232,7 +232,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
           'user_id': _selectedContactId,
           'type': _selectedTicketType,
           'contact': _selectedContactId,
-          'contact_name': _selectedContactName ?? '',
+          'contact_name': _selectedContactName ?? _selectedContactId ?? '',
           'subscription': _selectedSubscription?['serviceLineNumber'],
           'subject': _selectedSubscription?['nickname'],
           'description': _descriptionController.text,
@@ -263,6 +263,10 @@ class _NewTicketModalState extends State<NewTicketModal> {
 
         // Submit the ticket using ApiService
         final response = await ApiService.createTicket(newTicket);
+
+        // Debug print the response
+        print('Ticket creation response:');
+        print(response);
 
         // Clear the loading snackbar
         if (!mounted) return;
@@ -512,6 +516,13 @@ class _NewTicketModalState extends State<NewTicketModal> {
                                         ? ' ' + selected['last_name']
                                         : ''))
                                 .trim();
+                        // Fallback if still empty
+                        if ((_selectedContactName ?? '').isEmpty &&
+                            selected.isNotEmpty) {
+                          _selectedContactName =
+                              selected['user_name'] ??
+                              selected['id'].toString();
+                        }
                       });
                     },
                     validator:

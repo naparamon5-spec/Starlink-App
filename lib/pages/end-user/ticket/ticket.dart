@@ -148,9 +148,14 @@ class _TicketScreenState extends State<TicketScreen> {
 
               // Compose contact name from user_first_name and user_name
               String contactName =
-                  ticket['user_first_name'] ??
+                  ticket['contact_name'] ??
                   ticket['user_name'] ??
-                  ticket['user_id']?.toString() ??
+                  (((ticket['first_name'] ?? '') +
+                          (ticket['last_name'] != null
+                              ? ' ' + ticket['last_name']
+                              : ''))
+                      .trim()) ??
+                  ticket['contact']?.toString() ??
                   'Not Assigned';
 
               final processedTicket = {
@@ -267,6 +272,8 @@ class _TicketScreenState extends State<TicketScreen> {
   void _showTicketDetails(Map<String, dynamic> ticket) {
     final fullData = ticket['full_data'] as Map<String, dynamic>;
 
+    print(fullData); // or debugPrint(fullData.toString());
+
     showDialog(
       context: context,
       builder:
@@ -311,8 +318,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               Expanded(
                                 child: _buildDetailItem(
                                   'Contact',
-                                  fullData['contact_name']?.toString() ??
-                                      fullData['name']?.toString() ??
+                                  fullData['user_name']?.toString() ??
                                       'Not Assigned',
                                 ),
                               ),
@@ -959,6 +965,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    print('TicketDetailsScreen _ticket: ' + _ticket.toString());
     final status = _ticket['status']?.toString().toUpperCase() ?? 'N/A';
 
     return Scaffold(
@@ -1057,8 +1064,8 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                           Expanded(
                             child: _buildDetailItem(
                               'Contact',
-                              _ticket['contact_name']?.toString() ??
-                                  _ticket['name']?.toString() ??
+                              _ticket['full_data']?['contact_name']
+                                      ?.toString() ??
                                   'Not Assigned',
                             ),
                           ),

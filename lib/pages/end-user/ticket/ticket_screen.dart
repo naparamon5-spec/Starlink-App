@@ -350,7 +350,10 @@ class _TicketScreenState extends State<TicketScreen> {
           (dialogContext) => NewTicketModal(
             userId: int.parse(_userId ?? '0'),
             onConfirm: (ticket) {
-              // Immediately add the new ticket to the list
+              // Debug print to check contact_name
+              print(
+                'onConfirm ticket: Contact = \'${ticket['Contact']}\', contact_name = \'${ticket['full_data']?['contact_name']}\'',
+              );
               if (ticket['id'] != null && mounted) {
                 setState(() {
                   final serviceLineNumber =
@@ -359,10 +362,16 @@ class _TicketScreenState extends State<TicketScreen> {
                     _subscriptions,
                     serviceLineNumber,
                   );
+                  // Always use contact_name if available
+                  final contactName =
+                      ticket['Contact'] ??
+                      ticket['full_data']?['contact_name'] ??
+                      '';
                   final newTicket = {
                     'id': ticket['id'],
                     'type': ticket['Ticket Type'] ?? 'N/A',
-                    'contact': ticket['Contact'],
+                    'contact': contactName,
+                    'contact_name': contactName,
                     'contact_id': ticket['full_data']?['contact'],
                     'subscription': subscriptionNickname,
                     'serviceLineNumber': serviceLineNumber,
@@ -385,8 +394,10 @@ class _TicketScreenState extends State<TicketScreen> {
                       'attachments': ticket['full_data']?['attachments'] ?? [],
                       'subscription_nickname': subscriptionNickname,
                       'serviceLineNumber': serviceLineNumber,
+                      'contact_name': contactName,
                     },
                   };
+                  print('newTicket contact: \'${newTicket['contact']}\'');
                   _tickets.insert(0, newTicket);
                   _filteredTickets = List.from(_tickets);
                   _currentPage = 1; // Reset to first page to show new ticket
@@ -468,6 +479,7 @@ class _TicketScreenState extends State<TicketScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () {
+          print('Tapped ticket: ' + ticket.toString());
           Navigator.push(
             context,
             MaterialPageRoute(
