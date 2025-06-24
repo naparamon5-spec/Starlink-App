@@ -59,11 +59,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (response['status'] == 'success' && response['data'] != null) {
         final userData = response['data'];
-
+        final firstName = userData['first_name'] ?? '';
+        final lastName = userData['last_name'] ?? '';
+        final middleName = userData['middle_name'] ?? '';
+        final fullName =
+            (firstName +
+                    (middleName.isNotEmpty ? ' ' + middleName : '') +
+                    (lastName.isNotEmpty ? ' ' + lastName : ''))
+                .trim();
         setState(() {
           _userId = userData['id']?.toString() ?? 'N/A';
-          _fullName = userData['name'] ?? 'N/A';
-          _lastName = userData['last_name'] ?? 'N/A';
+          _fullName =
+              fullName.isNotEmpty ? fullName : (userData['name'] ?? 'N/A');
+          _lastName =
+              lastName.isNotEmpty ? lastName : (userData['last_name'] ?? 'N/A');
           _position = userData['position'] ?? 'end_user';
           _isLoading = false;
         });
@@ -124,11 +133,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _updateProfileData(Map<String, String> data) {
     setState(() {
-      if (data['name'] != null) {
-        _fullName = data['name']!;
+      // Compose full name from first, middle, last name if available
+      final firstName = data['firstName'] ?? '';
+      final middleName = data['middleName'] ?? '';
+      final lastName = data['lastName'] ?? '';
+      final fullName =
+          (firstName +
+                  (middleName.isNotEmpty ? ' ' + middleName : '') +
+                  (lastName.isNotEmpty ? ' ' + lastName : ''))
+              .trim();
+      if (fullName.isNotEmpty) {
+        _fullName = fullName;
       }
-      if (data['lastName'] != null) {
-        _lastName = data['lastName']!;
+      if (lastName.isNotEmpty) {
+        _lastName = lastName;
       }
       if (data['profileImagePath'] != null) {
         _profileImagePath = data['profileImagePath']!;
@@ -336,7 +354,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             icon: Icons.edit,
                             label: 'Edit Profile',
                             onPressed: () async {
-                              final result = await Navigator.push(
+                              await Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder:
@@ -345,14 +363,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                 ),
                               );
-
-                              // Refresh profile data if returned from edit screen
-                              if (result != null &&
-                                  result is Map<String, dynamic>) {
-                                _updateProfileData(
-                                  Map<String, String>.from(result),
-                                );
-                              }
+                              setState(() {
+                                _isLoading = true;
+                              });
+                              await _loadProfileData();
                             },
                             backgroundColor: Colors.grey[300] ?? Colors.grey,
                             iconColor: Colors.black87,

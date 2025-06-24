@@ -722,6 +722,30 @@ class ApiService {
       throw Exception('Error fetching contacts: $e');
     }
   }
+
+  // Update user profile (first name, last name, middle name)
+  static Future<Map<String, dynamic>> updateUserProfile(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final response = await _client.post(
+        Uri.parse('$baseUrl/api.php?action=update_user_profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode(data),
+      );
+      if (response.statusCode == 200) {
+        final respData = json.decode(response.body);
+        return respData;
+      } else {
+        throw Exception('Server error: \\${response.statusCode}');
+      }
+    } catch (e) {
+      return {'status': 'error', 'message': e.toString()};
+    }
+  }
 }
 
 class TimeoutException implements Exception {
