@@ -146,17 +146,33 @@ class _TicketScreenState extends State<TicketScreen> {
                 displayStatus = 'CLOSED';
               }
 
-              // Compose contact name from user_first_name and user_name
+              // Compose contact name: prefer user_name, then name, then first_name + last_name
               String contactName =
-                  ticket['contact_name'] ??
-                  ticket['user_name'] ??
-                  (((ticket['first_name'] ?? '') +
-                          (ticket['last_name'] != null
-                              ? ' ' + ticket['last_name']
-                              : ''))
-                      .trim()) ??
-                  ticket['contact']?.toString() ??
-                  'Not Assigned';
+                  (ticket['user_name'] != null &&
+                          ticket['user_name'].toString().trim().isNotEmpty)
+                      ? ticket['user_name']
+                      : (ticket['name'] != null &&
+                          ticket['name'].toString().trim().isNotEmpty)
+                      ? ticket['name']
+                      : (((ticket['first_name'] ?? '') +
+                                  ((ticket['last_name'] != null &&
+                                          ticket['last_name']
+                                              .toString()
+                                              .trim()
+                                              .isNotEmpty)
+                                      ? ' ' + ticket['last_name']
+                                      : ''))
+                              .trim()
+                              .isNotEmpty
+                          ? ((ticket['first_name'] ?? '') +
+                              ((ticket['last_name'] != null &&
+                                      ticket['last_name']
+                                          .toString()
+                                          .trim()
+                                          .isNotEmpty)
+                                  ? ' ' + ticket['last_name']
+                                  : ''))
+                          : 'Not Assigned');
 
               final processedTicket = {
                 'id': ticket['id'],
@@ -1064,8 +1080,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                           Expanded(
                             child: _buildDetailItem(
                               'Contact',
-                              _ticket['full_data']?['contact_name']
-                                      ?.toString() ??
+                              _ticket['full_data']?['user_name']?.toString() ??
                                   'Not Assigned',
                             ),
                           ),

@@ -494,13 +494,34 @@ class _NewTicketModalState extends State<NewTicketModal> {
                     items:
                         _contacts.map((contact) {
                           final name =
-                              (contact['first_name'] ?? '') +
-                              (contact['last_name'] != null
-                                  ? ' ' + contact['last_name']
-                                  : '');
+                              (contact['name'] != null &&
+                                      contact['name']
+                                          .toString()
+                                          .trim()
+                                          .isNotEmpty)
+                                  ? contact['name']
+                                  : (((contact['first_name'] ?? '') +
+                                              ((contact['last_name'] != null &&
+                                                      contact['last_name']
+                                                          .toString()
+                                                          .trim()
+                                                          .isNotEmpty)
+                                                  ? ' ' + contact['last_name']
+                                                  : ''))
+                                          .trim()
+                                          .isNotEmpty
+                                      ? ((contact['first_name'] ?? '') +
+                                          ((contact['last_name'] != null &&
+                                                  contact['last_name']
+                                                      .toString()
+                                                      .trim()
+                                                      .isNotEmpty)
+                                              ? ' ' + contact['last_name']
+                                              : ''))
+                                      : 'No Name');
                           return DropdownMenuItem(
                             value: contact['id'].toString(),
-                            child: Text(name.isNotEmpty ? name : 'No Name'),
+                            child: Text(name),
                           );
                         }).toList(),
                     onChanged: (value) {
@@ -511,18 +532,31 @@ class _NewTicketModalState extends State<NewTicketModal> {
                           orElse: () => {},
                         );
                         _selectedContactName =
-                            ((selected['first_name'] ?? '') +
-                                    (selected['last_name'] != null
-                                        ? ' ' + selected['last_name']
-                                        : ''))
-                                .trim();
-                        // Fallback if still empty
-                        if ((_selectedContactName ?? '').isEmpty &&
-                            selected.isNotEmpty) {
-                          _selectedContactName =
-                              selected['user_name'] ??
-                              selected['id'].toString();
-                        }
+                            (selected['name'] != null &&
+                                    selected['name']
+                                        .toString()
+                                        .trim()
+                                        .isNotEmpty)
+                                ? selected['name']
+                                : (((selected['first_name'] ?? '') +
+                                            ((selected['last_name'] != null &&
+                                                    selected['last_name']
+                                                        .toString()
+                                                        .trim()
+                                                        .isNotEmpty)
+                                                ? ' ' + selected['last_name']
+                                                : ''))
+                                        .trim()
+                                        .isNotEmpty
+                                    ? ((selected['first_name'] ?? '') +
+                                        ((selected['last_name'] != null &&
+                                                selected['last_name']
+                                                    .toString()
+                                                    .trim()
+                                                    .isNotEmpty)
+                                            ? ' ' + selected['last_name']
+                                            : ''))
+                                    : 'No Name');
                       });
                     },
                     validator:
