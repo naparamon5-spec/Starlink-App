@@ -20,6 +20,7 @@ class _TicketScreenState extends State<TicketScreen> {
   List<Map<String, dynamic>> _filteredTickets = [];
   bool _isLoading = true;
   String? _userId;
+  List<Map<String, dynamic>> _subscriptions = [];
 
   // Pagination variables
   int _itemsPerPage = 6;
@@ -61,7 +62,7 @@ class _TicketScreenState extends State<TicketScreen> {
   void initState() {
     super.initState();
     _loadUserData();
-    _loadTickets();
+    _loadSubscriptionsAndTickets();
     _searchController.addListener(_handleSearch);
   }
 
@@ -165,15 +166,21 @@ class _TicketScreenState extends State<TicketScreen> {
     );
   }
 
+  Future<void> _loadSubscriptionsAndTickets() async {
+    // Fetch all subscriptions for mapping
+    final subsResponse = await ApiService.getSubscriptions();
+    if (subsResponse['status'] == 'success') {
+      _subscriptions = List<Map<String, dynamic>>.from(subsResponse['data']);
+    }
+    await _loadTickets();
+  }
+
   Future<void> _loadTickets({bool forceRefresh = false}) async {
     if (!mounted) return;
-
     setState(() => _isLoading = true);
     try {
       final response = await ApiService.getTickets();
-
       if (response['status'] == 'success' && mounted) {
-        // First, get the list of agents to map IDs to names
         final agentsResponse = await ApiService.getAgents();
         final agentMap = Map.fromEntries(
           (agentsResponse['data'] as List).map(
@@ -181,14 +188,10 @@ class _TicketScreenState extends State<TicketScreen> {
                 MapEntry(agent['id'].toString(), agent['name'] as String),
           ),
         );
-
         if (!mounted) return;
-
         setState(() {
-          // Process tickets and sort by creation date (newest first)
           _tickets = List<Map<String, dynamic>>.from(
             response['data'].map((ticket) {
-              // Convert timestamps to readable format if needed
               String createdAt = ticket['created_at'] ?? 'N/A';
               DateTime? parsedDate;
               try {
@@ -197,15 +200,9 @@ class _TicketScreenState extends State<TicketScreen> {
                   createdAt =
                       '${parsedDate.year}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.day.toString().padLeft(2, '0')} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}';
                 }
-              } catch (e) {
-                // Handle date parsing error silently
-              }
-
-              // Get agent name from the map using the contact ID
+              } catch (e) {}
               final contactId = ticket['contact']?.toString() ?? '';
               final contactName = agentMap[contactId];
-
-              // Process attachments
               String attachmentsDisplay = 'No attachments';
               if (ticket['attachments'] != null) {
                 if (ticket['attachments'] is List) {
@@ -228,12 +225,9 @@ class _TicketScreenState extends State<TicketScreen> {
                   attachmentsDisplay = ticket['attachments'];
                 }
               }
-
-              // Map backend status to display status
               String displayStatus;
               String backendStatus =
                   (ticket['status'] ?? 'open').toString().toLowerCase().trim();
-
               switch (backendStatus) {
                 case 'open':
                   displayStatus = 'OPEN';
@@ -250,38 +244,42 @@ class _TicketScreenState extends State<TicketScreen> {
                 default:
                   displayStatus = backendStatus.toUpperCase();
               }
-
+              // Use getNickname for display
+              final serviceLineNumber = ticket['subscription']?.toString();
+              final subscriptionNickname = getNickname(
+                _subscriptions,
+                serviceLineNumber,
+              );
               return {
                 'id': ticket['id'],
                 'type': ticket['type'] ?? 'N/A',
                 'contact': contactName,
                 'contact_id': ticket['contact'],
-                'subscription': ticket['subscription'] ?? 'N/A',
+                'subscription': subscriptionNickname,
+                'serviceLineNumber': serviceLineNumber,
                 'description': ticket['description'] ?? 'No description',
                 'attachments': attachmentsDisplay,
                 'status': displayStatus,
                 'created_at': createdAt,
-                'created_at_raw': parsedDate, // Store raw date for sorting
+                'created_at_raw': parsedDate,
                 'user_id': ticket['user_id'],
                 'full_data': {
                   ...ticket,
                   'status': displayStatus,
                   'created_at': createdAt,
                   'attachments': ticket['attachments'] ?? [],
+                  'subscription_nickname': subscriptionNickname,
+                  'serviceLineNumber': serviceLineNumber,
                 },
               };
             }),
           );
-
-          // Sort tickets by creation date (newest first)
           _tickets.sort((a, b) {
             final dateA = a['created_at_raw'] as DateTime?;
             final dateB = b['created_at_raw'] as DateTime?;
             if (dateA == null || dateB == null) return 0;
             return dateB.compareTo(dateA);
           });
-
-          // Update filtered tickets with a new list instance
           _filteredTickets = List.from(_tickets);
           _isLoading = false;
         });
@@ -355,12 +353,19 @@ class _TicketScreenState extends State<TicketScreen> {
               // Immediately add the new ticket to the list
               if (ticket['id'] != null && mounted) {
                 setState(() {
+                  final serviceLineNumber =
+                      ticket['full_data']?['subscription']?.toString();
+                  final subscriptionNickname = getNickname(
+                    _subscriptions,
+                    serviceLineNumber,
+                  );
                   final newTicket = {
                     'id': ticket['id'],
                     'type': ticket['Ticket Type'] ?? 'N/A',
                     'contact': ticket['Contact'],
                     'contact_id': ticket['full_data']?['contact'],
-                    'subscription': ticket['Subscription'] ?? 'N/A',
+                    'subscription': subscriptionNickname,
+                    'serviceLineNumber': serviceLineNumber,
                     'description': ticket['Description'] ?? 'No description',
                     'attachments': ticket['Attachments'] ?? 'No attachments',
                     'status': ticket['Status'] ?? 'OPEN',
@@ -378,10 +383,10 @@ class _TicketScreenState extends State<TicketScreen> {
                           ticket['Created At'] ??
                           _formatDate(DateTime.now().toString()),
                       'attachments': ticket['full_data']?['attachments'] ?? [],
+                      'subscription_nickname': subscriptionNickname,
+                      'serviceLineNumber': serviceLineNumber,
                     },
                   };
-
-                  // Insert at the beginning of the list
                   _tickets.insert(0, newTicket);
                   _filteredTickets = List.from(_tickets);
                   _currentPage = 1; // Reset to first page to show new ticket
@@ -393,16 +398,12 @@ class _TicketScreenState extends State<TicketScreen> {
             },
           ),
     );
-
-    // Reload tickets to ensure consistency with backend
     if (result != null && mounted) {
       setState(() {
         _isLoading = true;
       });
       try {
         await _loadTickets(forceRefresh: true);
-
-        // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Ticket created successfully'),
@@ -470,7 +471,9 @@ class _TicketScreenState extends State<TicketScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => TicketDetailsScreen(ticket: ticket),
+              builder:
+                  (context) =>
+                      TicketDetailsScreen(ticket: ticket, subscriptions: []),
             ),
           );
         },

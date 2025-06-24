@@ -7,6 +7,19 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:convert';
 
+// Top-level function for mapping serviceLineNumber to nickname
+String getNickname(
+  List<Map<String, dynamic>> subscriptions,
+  String? serviceLineNumber,
+) {
+  if (serviceLineNumber == null) return 'N/A';
+  final sub = subscriptions.firstWhere(
+    (s) => s['serviceLineNumber'].toString() == serviceLineNumber.toString(),
+    orElse: () => {},
+  );
+  return sub['nickname'] ?? serviceLineNumber;
+}
+
 class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key});
 
@@ -21,6 +34,7 @@ class _TicketScreenState extends State<TicketScreen> {
   List<Map<String, dynamic>> _filteredTickets = [];
   bool _isLoading = true;
   Map<String, dynamic>? _selectedTicket;
+  List<Map<String, dynamic>> _subscriptions = [];
 
   // Updated filter options to match backend ticket_type values
   final List<String> _filterOptions = [
@@ -44,7 +58,7 @@ class _TicketScreenState extends State<TicketScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTickets();
+    _loadSubscriptionsAndTickets();
     _searchController.addListener(_handleSearch);
   }
 
@@ -82,6 +96,15 @@ class _TicketScreenState extends State<TicketScreen> {
             return matchesFilter && matchesQuery;
           }).toList();
     });
+  }
+
+  Future<void> _loadSubscriptionsAndTickets() async {
+    // Fetch all subscriptions for mapping
+    final subsResponse = await ApiService.getSubscriptions();
+    if (subsResponse['status'] == 'success') {
+      _subscriptions = List<Map<String, dynamic>>.from(subsResponse['data']);
+    }
+    await _loadTickets();
   }
 
   Future<void> _loadTickets() async {
@@ -126,8 +149,12 @@ class _TicketScreenState extends State<TicketScreen> {
               final processedTicket = {
                 'id': ticket['id'],
                 'Status': displayStatus,
-                'Contact': ticket['contact_name'],
-                'Subscription': ticket['subscription'] ?? 'N/A',
+                'name': ticket['contact_name'],
+                'Contact': ticket['contact'],
+                'Subscription': getNickname(
+                  _subscriptions,
+                  ticket['subscription'],
+                ),
                 'Ticket Type': ticket['type'] ?? 'N/A',
                 'Attachments': attachmentsDisplay,
                 'full_data': {
@@ -135,8 +162,12 @@ class _TicketScreenState extends State<TicketScreen> {
                   'created_at': _formatDate(ticket['created_at']),
                   'attachments': attachments,
                   'contact': ticket['contact'],
-                  'contact_name': ticket['contact_name'],
+                  'name': ticket['contact_name'],
                   'status': displayStatus,
+                  'subscription_nickname': getNickname(
+                    _subscriptions,
+                    ticket['subscription'],
+                  ),
                 },
               };
 
@@ -273,14 +304,18 @@ class _TicketScreenState extends State<TicketScreen> {
                               Expanded(
                                 child: _buildDetailItem(
                                   'Contact',
-                                  fullData['Contact'],
+                                  fullData['Contact']?.toString() ??
+                                      'Not Assigned',
                                 ),
                               ),
                               const SizedBox(width: 24),
                               Expanded(
                                 child: _buildDetailItem(
                                   'Subscription',
-                                  fullData['subscription'] ?? 'N/A',
+                                  getNickname(
+                                    _subscriptions,
+                                    fullData['subscription'],
+                                  ),
                                 ),
                               ),
                             ],
@@ -837,8 +872,13 @@ class _TicketScreenState extends State<TicketScreen> {
 
 class TicketDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> ticket;
+  final List<Map<String, dynamic>> subscriptions;
 
-  const TicketDetailsScreen({Key? key, required this.ticket}) : super(key: key);
+  const TicketDetailsScreen({
+    Key? key,
+    required this.ticket,
+    required this.subscriptions,
+  }) : super(key: key);
 
   @override
   _TicketDetailsScreenState createState() => _TicketDetailsScreenState();
@@ -846,11 +886,13 @@ class TicketDetailsScreen extends StatefulWidget {
 
 class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
   late Map<String, dynamic> _ticket;
+  late List<Map<String, dynamic>> _subscriptions;
 
   @override
   void initState() {
     super.initState();
     _ticket = widget.ticket;
+    _subscriptions = widget.subscriptions;
   }
 
   Color _getStatusColor(String status) {
@@ -1007,9 +1049,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                           Expanded(
                             child: _buildDetailItem(
                               'Contact',
-                              _ticket['contact_name'] ??
-                                  _ticket['name'] ??
-                                  'Not Assigned',
+                              _ticket['user_id']?.toString() ?? 'Not Assigned',
                             ),
                           ),
 
@@ -1017,7 +1057,10 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                           Expanded(
                             child: _buildDetailItem(
                               'Subscription',
-                              _ticket['subscription']?.toString(),
+                              getNickname(
+                                _subscriptions,
+                                _ticket['subscription']?.toString(),
+                              ),
                             ),
                           ),
                         ],

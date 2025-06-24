@@ -24,13 +24,13 @@ class NewTicketModal extends StatefulWidget {
 class _NewTicketModalState extends State<NewTicketModal> {
   String? _selectedTicketType;
   String? _selectedContact;
-  String? _selectedSubscription;
+  Map<String, dynamic>? _selectedSubscription;
   final _descriptionController = TextEditingController();
   final List<PlatformFile> _attachedFiles = [];
 
   List<String> _ticketTypes = [];
   Map<String, dynamic> _contacts = {};
-  List<String> _subscriptions = [];
+  List<Map<String, dynamic>> _subscriptions = [];
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -119,14 +119,8 @@ class _NewTicketModalState extends State<NewTicketModal> {
       );
       if (subscriptionsData['status'] == 'success') {
         setState(() {
-          _subscriptions = List<String>.from(
-            subscriptionsData['data'].map(
-              (item) =>
-                  item['nickname'] ??
-                  item['name'] ??
-                  item['subscription_name'] ??
-                  'Unknown',
-            ),
+          _subscriptions = List<Map<String, dynamic>>.from(
+            subscriptionsData['data'],
           );
         });
       } else {
@@ -242,7 +236,8 @@ class _NewTicketModalState extends State<NewTicketModal> {
           'type': _selectedTicketType,
           'contact': _contacts[_selectedContact],
           'contact_name': _selectedContact,
-          'subscription': _selectedSubscription,
+          'subscription': _selectedSubscription?['serviceLineNumber'],
+          'subject': _selectedSubscription?['nickname'],
           'description': _descriptionController.text,
           'status': 'open',
           'attachments': attachmentsData,
@@ -327,7 +322,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
             'Status': 'OPEN',
             'Ticket Type': _selectedTicketType,
             'Contact': _selectedContact,
-            'Subscription': _selectedSubscription,
+            'Subscription': _selectedSubscription?['nickname'],
             'Description': _descriptionController.text,
             'Created At': DateTime.now().toString(),
             'Attachments': _attachedFiles.map((file) => file.name).join(', '),
@@ -340,7 +335,8 @@ class _NewTicketModalState extends State<NewTicketModal> {
               'contact': _contacts[_selectedContact],
               'contact_name': _selectedContact,
               'type': _selectedTicketType,
-              'subscription': _selectedSubscription,
+              'subscription': _selectedSubscription?['serviceLineNumber'],
+              'nickname': _selectedSubscription?['nickname'],
               'description': _descriptionController.text,
             },
           };
@@ -513,7 +509,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
                   const SizedBox(height: 12),
 
                   // Subscription Dropdown
-                  DropdownButtonFormField<String>(
+                  DropdownButtonFormField<Map<String, dynamic>>(
                     decoration: InputDecoration(
                       labelText: 'Subscription',
                       border: OutlineInputBorder(
@@ -530,12 +526,9 @@ class _NewTicketModalState extends State<NewTicketModal> {
                     value: _selectedSubscription,
                     items:
                         _subscriptions.map((subscription) {
-                          return DropdownMenuItem(
+                          return DropdownMenuItem<Map<String, dynamic>>(
                             value: subscription,
-                            child: Text(
-                              subscription,
-                              style: const TextStyle(fontSize: 13),
-                            ),
+                            child: Text(subscription['nickname'] ?? 'Unknown'),
                           );
                         }).toList(),
                     onChanged: (value) {

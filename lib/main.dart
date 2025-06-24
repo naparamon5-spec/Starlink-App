@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'pages/splash_screen.dart'; // Import the SplashScreen
 import 'pages/login_screen.dart'; // Import the LoginScreen
 import 'config/ssl_config.dart';
 import 'dart:io';
