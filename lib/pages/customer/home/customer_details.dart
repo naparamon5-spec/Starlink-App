@@ -18,7 +18,7 @@ class CustomerDetailsScreen extends StatelessWidget {
             // Enhanced Header Section with Gradient and Horizontal Status
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(24, 48, 24, 32),
+              padding: const EdgeInsets.fromLTRB(24, 72, 24, 48),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFF133343), Color(0xFF1E4B5F)],
@@ -185,6 +185,12 @@ class CustomerDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   _buildDetailCard(
+                    icon: Icons.data_usage_outlined,
+                    title: 'Data Plan',
+                    content: subscription['dataplan'] ?? 'N/A',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDetailCard(
                     icon: Icons.calendar_today_outlined,
                     title: 'Start Date',
                     content: subscription['startDate'] ?? 'N/A',
@@ -194,52 +200,6 @@ class CustomerDetailsScreen extends StatelessWidget {
                     icon: Icons.update_outlined,
                     title: 'End Date',
                     content: subscription['endDate'] ?? 'N/A',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            // Action Buttons
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        // TODO: Implement create ticket functionality
-                      },
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('Create Ticket'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF133343),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        // TODO: Implement view history functionality
-                      },
-                      icon: const Icon(Icons.history),
-                      label: const Text('View History'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF133343),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: const BorderSide(color: Color(0xFF133343)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -263,9 +223,9 @@ class CustomerDetailsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.13),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
