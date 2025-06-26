@@ -222,15 +222,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       children: [
         // Contact Info
         _InfoItem(
-          icon: Icons.person_outline,
-          label: 'Name',
-          value: _userName ?? 'Not set',
-        ),
-        const Divider(height: 24),
-        _InfoItem(
-          icon: Icons.badge_outlined,
-          label: 'ID',
-          value: _userId ?? 'Not set',
+          icon: Icons.email_outlined,
+          label: 'Email',
+          value: _userEmail ?? 'Not set',
         ),
       ],
     );
