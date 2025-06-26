@@ -509,13 +509,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       return 'Please enter your email';
                     }
                     if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                      r'^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}\$',
                     ).hasMatch(value)) {
                       return 'Please enter a valid email';
                     }
                     return null;
                   },
                   readOnly: true,
+                  fillColor: Color(0xFFF5F5F5),
+                  filled: true,
                 ),
 
                 const SizedBox(height: 32),
@@ -567,6 +569,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
     bool readOnly = false,
+    Widget? suffixIcon,
+    Color? fillColor,
+    bool filled = false,
+    String? helperText,
+    TextStyle? helperStyle,
   }) {
     return TextFormField(
       controller: controller,
@@ -584,6 +591,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: Theme.of(context).primaryColor),
         ),
+        suffixIcon: suffixIcon,
+        fillColor: fillColor,
+        filled: filled,
+        helperText: helperText,
+        helperStyle: helperStyle,
       ),
       validator: validator,
     );

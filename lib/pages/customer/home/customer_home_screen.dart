@@ -207,12 +207,18 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   Widget _buildBody() {
-    return IndexedStack(
-      index: _selectedIndex,
+    return Column(
       children: [
-        _buildDashboard(),
-        const CustomerTicketScreen(showAppBar: false),
-        const CustomerProfileScreen(showAppBar: false),
+        Expanded(
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              _buildDashboard(),
+              const CustomerTicketScreen(showAppBar: false),
+              const CustomerProfileScreen(showAppBar: false),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -459,7 +465,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 ),
               )
               : SizedBox(
-                height: 360,
+                height: 320,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: _subscriptions.length,
@@ -499,6 +505,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                                     offset: const Offset(0, 6),
                                   ),
                                 ],
+                                border: Border.all(
+                                  color: Colors.grey[200]!,
+                                  width: 2,
+                                ),
                               ),
                             ),
                             // Content
@@ -740,7 +750,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
         currentIndex: _selectedIndex,
-        selectedItemColor: const Color(0xFF133343),
+        selectedItemColor: const Color(0xFFB83A4B),
+        unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
       ),
     );

@@ -25,7 +25,7 @@ class BottomNavigatorBar extends StatelessWidget {
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
       currentIndex: currentIndex,
-      selectedItemColor: const Color(0xFF133343),
+      selectedItemColor: const Color(0xFFB83A4B),
       unselectedItemColor: Colors.grey,
       onTap: onTap,
       type: BottomNavigationBarType.fixed,
