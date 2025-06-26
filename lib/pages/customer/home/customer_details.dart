@@ -15,94 +15,149 @@ class CustomerDetailsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Section with Back Button
+            // Enhanced Header Section with Gradient and Horizontal Status
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+              padding: const EdgeInsets.fromLTRB(24, 48, 24, 32),
               decoration: BoxDecoration(
-                color: const Color(0xFF133343),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF133343), Color(0xFF1E4B5F)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 borderRadius: const BorderRadius.vertical(
                   bottom: Radius.circular(30),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
                   ),
                 ],
+                image: const DecorationImage(
+                  image: AssetImage('assets/images/logo_full.svg'),
+                  fit: BoxFit.none,
+                  alignment: Alignment.bottomRight,
+                  opacity: 0.04,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Back Button
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(
-                      Icons.arrow_back_ios_new,
-                      color: Colors.white,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  const SizedBox(height: 16),
-                  // Status Badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          isActive
-                              ? const Color(0xFFE8F5E9)
-                              : const Color(0xFFFFEBEE),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isActive ? Icons.check_circle : Icons.cancel,
-                          size: 20,
+                  // Top Row: Back Button (left) and Status Badge (right)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new,
+                          color: Colors.white,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeInOut,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
                           color:
                               isActive
-                                  ? const Color(0xFF2E7D32)
-                                  : const Color(0xFFC62828),
+                                  ? const Color(0xFF2E7D32).withOpacity(0.12)
+                                  : const Color(0xFFC62828).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow:
+                              isActive
+                                  ? [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFF2E7D32,
+                                      ).withOpacity(0.4),
+                                      blurRadius: 16,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                  : [],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          isActive ? 'Active' : 'Inactive',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color:
-                                isActive
-                                    ? const Color(0xFF2E7D32)
-                                    : const Color(0xFFC62828),
-                          ),
+                        child: Row(
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 600),
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color:
+                                    isActive
+                                        ? const Color(0xFF2E7D32)
+                                        : const Color(0xFFC62828),
+                                shape: BoxShape.circle,
+                                boxShadow:
+                                    isActive
+                                        ? [
+                                          BoxShadow(
+                                            color: const Color(
+                                              0xFF2E7D32,
+                                            ).withOpacity(0.6),
+                                            blurRadius: 12,
+                                            spreadRadius: 2,
+                                          ),
+                                        ]
+                                        : [],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              isActive ? 'Active' : 'Inactive',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color:
+                                    isActive
+                                        ? const Color(0xFF2E7D32)
+                                        : const Color(0xFFC62828),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   // Subscription Name
                   Text(
                     subscription['nickname'] ?? 'N/A',
                     style: const TextStyle(
-                      fontSize: 28,
+                      fontSize: 30,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
+                      letterSpacing: 0.5,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   // Service Line
-                  Text(
-                    'Service Line: ${subscription['serviceLineNumber'] ?? 'N/A'}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white.withOpacity(0.9),
-                    ),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.router_outlined,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Service Line: ${subscription['serviceLineNumber'] ?? 'N/A'}',
+                        style: TextStyle(
+                          fontSize: 17,
+                          color: Colors.white.withOpacity(0.92),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
