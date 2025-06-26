@@ -131,14 +131,14 @@ class CustomerDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   _buildDetailCard(
                     icon: Icons.calendar_today_outlined,
-                    title: 'Created Date',
-                    content: subscription['created_at'] ?? 'N/A',
+                    title: 'Start Date',
+                    content: subscription['startDate'] ?? 'N/A',
                   ),
                   const SizedBox(height: 16),
                   _buildDetailCard(
                     icon: Icons.update_outlined,
-                    title: 'Last Updated',
-                    content: subscription['updated_at'] ?? 'N/A',
+                    title: 'End Date',
+                    content: subscription['endDate'] ?? 'N/A',
                   ),
                 ],
               ),
