@@ -21,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _fullName = 'Loading...';
   String _lastName = 'Loading...';
   String? _profileImagePath;
+  String _userEmail = 'Loading...';
   bool _isLoading = true;
   bool _isImageLoading = false;
 
@@ -74,6 +75,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _lastName =
               lastName.isNotEmpty ? lastName : (userData['last_name'] ?? 'N/A');
           _position = userData['position'] ?? 'end_user';
+          _userEmail = userData['email'] ?? _prefs.getString('email') ?? 'N/A';
           _isLoading = false;
         });
 
@@ -82,6 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await _prefs.setString('name', _fullName);
         await _prefs.setString('lastName', _lastName);
         await _prefs.setString('position', _position);
+        await _prefs.setString('email', _userEmail);
       } else {
         throw Exception(response['message'] ?? 'Failed to fetch user data');
       }
@@ -93,6 +96,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _fullName = _prefs.getString('name') ?? 'N/A';
         _lastName = _prefs.getString('lastName') ?? 'N/A';
         _position = _prefs.getString('position') ?? 'N/A';
+        _userEmail = _prefs.getString('email') ?? 'N/A';
         _isLoading = false;
       });
 
@@ -201,9 +205,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       children: [
         // Contact Info
-        _InfoItem(icon: Icons.person_outline, label: 'Name', value: _fullName),
-        const Divider(height: 24),
-        _InfoItem(icon: Icons.badge_outlined, label: 'ID', value: _userId),
+        _InfoItem(
+          icon: Icons.email_outlined,
+          label: 'Email',
+          value: _userEmail,
+        ),
       ],
     );
   }
