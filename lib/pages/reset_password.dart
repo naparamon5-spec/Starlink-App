@@ -55,7 +55,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       };
 
       final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/reset_password.php'),
+        Uri.parse('${ApiService.baseUrl}/routes/reset_password.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

@@ -50,7 +50,7 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/verify_code.php'),
+        Uri.parse('${ApiService.baseUrl}/routes/verify_code.php'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'email': widget.email,

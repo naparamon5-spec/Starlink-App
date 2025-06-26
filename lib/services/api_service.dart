@@ -65,7 +65,7 @@ class ApiService {
     try {
       final response = await _client
           .post(
-            Uri.parse('$baseUrl/login.php'),
+            Uri.parse('$baseUrl/routes/login.php'),
             headers: {'Content-Type': 'application/json'},
             body: json.encode({'username': username, 'password': password}),
           )
@@ -614,7 +614,7 @@ class ApiService {
     try {
       final response = await _client
           .post(
-            Uri.parse('$baseUrl/api.php?action=forgot_password'),
+            Uri.parse('$baseUrl/routes/forgot_password.php'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
