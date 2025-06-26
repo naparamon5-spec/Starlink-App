@@ -241,6 +241,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 _selectedImageFile = savedFile;
                 _savedImagePath = savedFile.path;
               });
+              // Save image path to SharedPreferences
+              await _prefs.setString('profileImagePath', savedFile.path);
 
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
