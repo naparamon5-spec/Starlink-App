@@ -460,9 +460,26 @@ class _NewTicketModalState extends State<NewTicketModal> {
                         _ticketTypes.map((type) {
                           return DropdownMenuItem(
                             value: type,
-                            child: Text(type),
+                            child: Text(
+                              type,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           );
                         }).toList(),
+                    selectedItemBuilder: (context) {
+                      return _ticketTypes.map((type) {
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            type,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        );
+                      }).toList();
+                    },
+                    isExpanded: true,
                     onChanged: (value) {
                       setState(() {
                         _selectedTicketType = value;
