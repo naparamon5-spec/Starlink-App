@@ -232,11 +232,11 @@ class _TicketScreenState extends State<TicketScreen> {
                 case 'open':
                   displayStatus = 'OPEN';
                   break;
-                case 'in progress':
+                case 'in_progress':
                   displayStatus = 'IN PROGRESS';
                   break;
-                case 'done':
-                  displayStatus = 'DONE';
+                case 'resolved':
+                  displayStatus = 'RESOLVED';
                   break;
                 case 'closed':
                   displayStatus = 'CLOSED';
@@ -467,6 +467,9 @@ class _TicketScreenState extends State<TicketScreen> {
         break;
       case 'IN PROGRESS':
         statusColor = Colors.orange;
+        break;
+      case 'RESOLVED':
+        statusColor = Colors.blue;
         break;
       default:
         statusColor = Colors.grey;

@@ -93,7 +93,7 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
           _tickets = List<Map<String, dynamic>>.from(
             response['data']
                 .where((ticket) {
-                  // Show tickets where this user is the contact and status is DONE or CLOSED
+                  // Show tickets where this user is the contact and status is RESOLVED or CLOSED
                   final status =
                       (ticket as Map<String, dynamic>)['status']
                           ?.toString()
@@ -104,14 +104,12 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                       '';
                   final userId = _userId.toString();
 
-                  // Check if the ticket belongs to the user and has a DONE or CLOSED status
+                  // Check if the ticket belongs to the user and has a RESOLVED or CLOSED status
                   final isUserTicket = contactId == userId;
-                  final isDoneOrClosed =
-                      status == 'done' ||
-                      status == 'completed' ||
-                      status == 'closed';
+                  final isResolvedOrClosed =
+                      status == 'resolved' || status == 'closed';
 
-                  return isUserTicket && isDoneOrClosed;
+                  return isUserTicket && isResolvedOrClosed;
                 })
                 .map((ticket) {
                   final Map<String, dynamic> ticketData =
@@ -149,8 +147,14 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                           .trim();
 
                   // Map status to display format
-                  if (backendStatus == 'done' || backendStatus == 'completed') {
-                    displayStatus = 'DONE';
+                  if (backendStatus == 'open' || backendStatus == 'opened') {
+                    displayStatus = 'OPEN';
+                  } else if (backendStatus == 'in progress' ||
+                      backendStatus == 'in_progress' ||
+                      backendStatus == 'inprogress') {
+                    displayStatus = 'IN PROGRESS';
+                  } else if (backendStatus == 'resolved') {
+                    displayStatus = 'RESOLVED';
                   } else if (backendStatus == 'closed' ||
                       backendStatus == 'close') {
                     displayStatus = 'CLOSED';
@@ -212,7 +216,11 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
 
   Color _getStatusColor(String status) {
     switch (status.toUpperCase()) {
-      case 'DONE':
+      case 'OPEN':
+        return Colors.green;
+      case 'IN PROGRESS':
+        return Colors.orange;
+      case 'RESOLVED':
         return Colors.blue;
       case 'CLOSED':
         return Colors.red;
@@ -223,7 +231,11 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
 
   IconData _getStatusIcon(String status) {
     switch (status.toUpperCase()) {
-      case 'DONE':
+      case 'OPEN':
+        return Icons.radio_button_unchecked;
+      case 'IN PROGRESS':
+        return Icons.hourglass_empty;
+      case 'RESOLVED':
         return Icons.check_circle_outline;
       case 'CLOSED':
         return Icons.cancel_outlined;

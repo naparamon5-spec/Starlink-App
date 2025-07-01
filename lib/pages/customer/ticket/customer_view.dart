@@ -109,10 +109,13 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
           _tickets = List<Map<String, dynamic>>.from(
             response['data']
                 .where((ticket) {
-                  // Show tickets where this user is the contact and status is not DONE or CLOSED
+                  // Show tickets where this user is the contact and status is DONE, COMPLETED, or CLOSED
+                  final status =
+                      ticket['status']?.toString()?.toLowerCase() ?? '';
                   return ticket['contact'] == _userId &&
-                      ticket['status']?.toString().toLowerCase() != 'done' &&
-                      ticket['status']?.toString().toLowerCase() != 'closed';
+                      (status == 'done' ||
+                          status == 'completed' ||
+                          status == 'closed');
                 })
                 .map((ticket) {
                   String attachmentsDisplay = 'No attachments';
@@ -153,6 +156,13 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                       backendStatus == 'in_progress' ||
                       backendStatus == 'inprogress') {
                     displayStatus = 'IN PROGRESS';
+                  } else if (backendStatus == 'resolved' ||
+                      backendStatus == 'done' ||
+                      backendStatus == 'completed') {
+                    displayStatus = 'RESOLVE';
+                  } else if (backendStatus == 'closed' ||
+                      backendStatus == 'close') {
+                    displayStatus = 'CLOSED';
                   } else {
                     displayStatus = backendStatus.toUpperCase();
                   }
@@ -257,28 +267,28 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
     try {
       final response = await ApiService.updateTicketStatus(
         widget.ticket['id'].toString(),
-        'done',
+        'resolved',
       );
 
       if (response['status'] == 'success') {
         setState(() {
-          widget.ticket['status'] = 'DONE';
+          widget.ticket['status'] = 'RESOLVED';
           if (widget.ticket['full_data'] != null) {
-            widget.ticket['full_data']['status'] = 'DONE';
+            widget.ticket['full_data']['status'] = 'RESOLVED';
           }
         });
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Ticket marked as done successfully'),
+              content: Text('Ticket marked as resolved successfully'),
               backgroundColor: Colors.green,
             ),
           );
 
           // Pop back to the ticket screen with updated status and force refresh
           Navigator.pop(context, {
-            'status': 'DONE',
+            'status': 'RESOLVED',
             'id': widget.ticket['id'].toString(),
             'shouldRefresh': true,
             'forceRefresh': true,
@@ -378,7 +388,9 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   Widget build(BuildContext context) {
     final ticket = widget.ticket;
     final fullData = ticket['full_data'] as Map<String, dynamic>;
-    final status = fullData['status']?.toString().toUpperCase() ?? 'OPEN';
+    String status = fullData['status']?.toString().toUpperCase() ?? 'OPEN';
+    if (status.trim().isEmpty) status = 'OPEN';
+    print('Ticket status in UI: $status');
 
     return Scaffold(
       appBar: AppBar(
@@ -636,7 +648,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                 ),
               ),
             if ((_isAccepted || status == 'IN PROGRESS') &&
-                status != 'DONE') ...[
+                status != 'RESOLVE' &&
+                status != 'CLOSED') ...[
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -745,7 +758,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         return Colors.green;
       case 'IN PROGRESS':
         return Colors.orange;
-      case 'DONE':
+      case 'RESOLVE':
         return Colors.blue;
       case 'CLOSED':
         return Colors.red;

@@ -231,10 +231,12 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                       displayStatus = 'OPEN';
                       break;
                     case 'in progress':
+                    case 'in_progress':
+                    case 'inprogress':
                       displayStatus = 'IN PROGRESS';
                       break;
-                    case 'done':
-                      displayStatus = 'DONE';
+                    case 'resolved':
+                      displayStatus = 'RESOLVED';
                       break;
                     case 'closed':
                       displayStatus = 'CLOSED';
@@ -370,47 +372,40 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
+                                    Builder(
+                                      builder: (context) {
+                                        final status =
                                             fullData['status']
-                                                        ?.toString()
-                                                        .toUpperCase() ==
-                                                    'OPEN'
-                                                ? Colors.green.withOpacity(0.1)
-                                                : Colors.red.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color:
-                                              fullData['status']
-                                                          ?.toString()
-                                                          .toUpperCase() ==
-                                                      'OPEN'
-                                                  ? Colors.green
-                                                  : Colors.red,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        fullData['status']
                                                 ?.toString()
                                                 .toUpperCase() ??
-                                            'OPEN',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color:
-                                              fullData['status']
-                                                          ?.toString()
-                                                          .toUpperCase() ==
-                                                      'OPEN'
-                                                  ? Colors.green
-                                                  : Colors.red,
-                                        ),
-                                      ),
+                                            'OPEN';
+                                        final statusColor = _getStatusColor(
+                                          status,
+                                        );
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            border: Border.all(
+                                              color: statusColor,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            status,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: statusColor,
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),
@@ -942,7 +937,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
             if (result != null && result is Map<String, dynamic>) {
               // If the ticket was closed or done, remove it from this list
               if (result['status']?.toString().toUpperCase() == 'CLOSED' ||
-                  result['status']?.toString().toUpperCase() == 'DONE') {
+                  result['status']?.toString().toUpperCase() == 'RESOLVED') {
                 setState(() {
                   _tickets.removeWhere(
                     (t) => t['id'].toString() == result['id'].toString(),
@@ -1097,6 +1092,10 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
         return Colors.green;
       case 'IN PROGRESS':
         return Colors.orange;
+      case 'RESOLVED':
+        return Colors.blue;
+      case 'CLOSED':
+        return Colors.red;
       default:
         return Colors.grey;
     }
@@ -1135,6 +1134,10 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
         return Icons.radio_button_unchecked;
       case 'IN PROGRESS':
         return Icons.hourglass_empty;
+      case 'RESOLVED':
+        return Icons.check_circle_outline;
+      case 'CLOSED':
+        return Icons.cancel_outlined;
       default:
         return Icons.help_outline;
     }

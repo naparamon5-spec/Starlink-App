@@ -140,10 +140,12 @@ class _TicketScreenState extends State<TicketScreen> {
                   backendStatus == 'in_progress' ||
                   backendStatus == 'inprogress') {
                 displayStatus = 'IN PROGRESS';
-              } else if (backendStatus == 'done') {
-                displayStatus = 'DONE';
+              } else if (backendStatus == 'resolved') {
+                displayStatus = 'RESOLVED';
               } else if (backendStatus == 'closed') {
                 displayStatus = 'CLOSED';
+              } else {
+                displayStatus = backendStatus.toUpperCase();
               }
 
               // Compose contact name: prefer user_name, then name, then first_name + last_name
@@ -716,7 +718,7 @@ class _TicketScreenState extends State<TicketScreen> {
         return Colors.green;
       case 'IN PROGRESS':
         return Colors.orange;
-      case 'DONE':
+      case 'RESOLVED':
         return Colors.blue;
       case 'CLOSED':
         return Colors.red;
@@ -931,7 +933,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
         return Colors.green;
       case 'IN PROGRESS':
         return Colors.orange;
-      case 'DONE':
+      case 'RESOLVED':
         return Colors.blue;
       case 'CLOSED':
         return Colors.red;
