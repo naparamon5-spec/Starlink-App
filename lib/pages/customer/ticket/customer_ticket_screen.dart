@@ -93,23 +93,25 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
           _tickets = List<Map<String, dynamic>>.from(
             response['data']
                 .where((ticket) {
-                  // Show tickets where this user is the contact and status is RESOLVED or CLOSED
                   final status =
                       (ticket as Map<String, dynamic>)['status']
                           ?.toString()
-                          .toLowerCase() ??
+                          ?.toLowerCase() ??
                       '';
                   final contactId =
                       (ticket as Map<String, dynamic>)['contact']?.toString() ??
                       '';
-                  final userId = _userId.toString();
-
-                  // Check if the ticket belongs to the user and has a RESOLVED or CLOSED status
-                  final isUserTicket = contactId == userId;
+                  final userIdField =
+                      (ticket as Map<String, dynamic>)['user_id']?.toString() ??
+                      '';
+                  final currentUserId = _userId.toString();
+                  // Show tickets where this user is either the contact or the creator and status is RESOLVED or CLOSED
+                  final isUserRelated =
+                      contactId == currentUserId ||
+                      userIdField == currentUserId;
                   final isResolvedOrClosed =
                       status == 'resolved' || status == 'closed';
-
-                  return isUserTicket && isResolvedOrClosed;
+                  return isUserRelated && isResolvedOrClosed;
                 })
                 .map((ticket) {
                   final Map<String, dynamic> ticketData =
@@ -137,7 +139,6 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                       attachmentsDisplay = ticketData['attachments'].toString();
                     }
                   }
-
                   // Map backend status to display status
                   String displayStatus;
                   String backendStatus =
@@ -145,15 +146,8 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                           .toString()
                           .toLowerCase()
                           .trim();
-
                   // Map status to display format
-                  if (backendStatus == 'open' || backendStatus == 'opened') {
-                    displayStatus = 'OPEN';
-                  } else if (backendStatus == 'in progress' ||
-                      backendStatus == 'in_progress' ||
-                      backendStatus == 'inprogress') {
-                    displayStatus = 'IN PROGRESS';
-                  } else if (backendStatus == 'resolved') {
+                  if (backendStatus == 'resolved') {
                     displayStatus = 'RESOLVED';
                   } else if (backendStatus == 'closed' ||
                       backendStatus == 'close') {
@@ -161,7 +155,6 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                   } else {
                     displayStatus = backendStatus.toUpperCase();
                   }
-
                   return {
                     'id': ticketData['id'],
                     'type': ticketData['type'] ?? 'N/A',
@@ -187,7 +180,7 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
         throw Exception(response['message'] ?? 'Failed to load tickets');
       }
     } catch (e) {
-      print('Error loading tickets: $e');
+      print('Error loading tickets: ${e.toString()}');
       if (!mounted) return;
       setState(() {
         _tickets = [];
@@ -260,57 +253,11 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search tickets...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _selectedFilter,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                    labelText: 'Filter by Status',
-                  ),
-                  items:
-                      _filterOptions.map((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value),
-                        );
-                      }).toList(),
-                  onChanged: (String? newValue) {
-                    if (newValue != null) {
-                      setState(() {
-                        _selectedFilter = newValue;
-                        _handleSearch();
-                      });
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
           Expanded(
             child:
                 _isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : _filteredTickets.isEmpty
+                    : _tickets.isEmpty
                     ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -322,9 +269,7 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            _selectedFilter == 'All'
-                                ? 'No resolved tickets found'
-                                : 'No ${_selectedFilter.toLowerCase()} tickets found',
+                            'No resolved or closed tickets found',
                             style: const TextStyle(
                               fontSize: 16,
                               color: Colors.grey,
@@ -334,12 +279,11 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                       ),
                     )
                     : ListView.builder(
-                      itemCount: _filteredTickets.length,
+                      itemCount: _tickets.length,
                       itemBuilder: (context, index) {
-                        final ticket = _filteredTickets[index];
+                        final ticket = _tickets[index];
                         final status =
                             ticket['status'].toString().toUpperCase();
-
                         return Card(
                           margin: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -401,11 +345,17 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                               ).then((result) {
                                 if (result != null &&
                                     result is Map<String, dynamic>) {
-                                  // Force reload tickets if forceRefresh is true
-                                  if (result['forceRefresh'] == true) {
+                                  if (result['status']
+                                              ?.toString()
+                                              .toUpperCase() ==
+                                          'RESOLVED' ||
+                                      result['status']
+                                              ?.toString()
+                                              .toUpperCase() ==
+                                          'CLOSED' ||
+                                      result['forceRefresh'] == true) {
                                     _loadTickets();
                                   } else {
-                                    // Update the ticket status in the list
                                     setState(() {
                                       final ticketIndex = _tickets.indexWhere(
                                         (t) =>
@@ -420,8 +370,6 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                                           _tickets[ticketIndex]['full_data']['status'] =
                                               result['status'];
                                         }
-                                        // Update filtered tickets as well
-                                        _filteredTickets = List.from(_tickets);
                                       }
                                     });
                                   }
