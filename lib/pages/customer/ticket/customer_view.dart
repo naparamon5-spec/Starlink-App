@@ -758,6 +758,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         return Colors.green;
       case 'IN PROGRESS':
         return Colors.orange;
+      case 'RESOLVED':
       case 'RESOLVE':
         return Colors.blue;
       case 'CLOSED':
