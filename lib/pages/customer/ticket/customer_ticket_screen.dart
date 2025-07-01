@@ -21,7 +21,7 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
   bool _isLoading = true;
   int? _userId;
 
-  final List<String> _filterOptions = ['All', 'DONE', 'CLOSED'];
+  final List<String> _filterOptions = ['All', 'RESOLVED', 'CLOSED'];
 
   @override
   void initState() {
@@ -58,25 +58,21 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
   void _handleSearch() {
     final query = _searchController.text.toLowerCase();
     final selectedStatus = _selectedFilter;
-
     setState(() {
       _filteredTickets =
           _tickets.where((ticket) {
-            bool matchesFilter = true;
+            bool matchesStatus = true;
             if (selectedStatus != 'All') {
-              final ticketStatus =
-                  ticket['status']?.toString().toUpperCase() ?? '';
-              matchesFilter = ticketStatus == selectedStatus;
+              matchesStatus =
+                  ticket['status']?.toString()?.toUpperCase() == selectedStatus;
             }
-
             bool matchesQuery = true;
             if (query.isNotEmpty) {
               matchesQuery = ticket.values.any(
                 (value) => value.toString().toLowerCase().contains(query),
               );
             }
-
-            return matchesFilter && matchesQuery;
+            return matchesStatus && matchesQuery;
           }).toList();
     });
   }
@@ -173,7 +169,8 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                   };
                 }),
           );
-          _filteredTickets = _tickets;
+          // Initialize filtered tickets
+          _filteredTickets = List.from(_tickets);
           _isLoading = false;
         });
       } else {
@@ -253,11 +250,57 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search tickets...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _selectedFilter,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                    labelText: 'Filter by Status',
+                  ),
+                  items:
+                      _filterOptions.map((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value),
+                        );
+                      }).toList(),
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        _selectedFilter = newValue;
+                        _handleSearch();
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child:
                 _isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : _tickets.isEmpty
+                    : _filteredTickets.isEmpty
                     ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -279,9 +322,9 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
                       ),
                     )
                     : ListView.builder(
-                      itemCount: _tickets.length,
+                      itemCount: _filteredTickets.length,
                       itemBuilder: (context, index) {
-                        final ticket = _tickets[index];
+                        final ticket = _filteredTickets[index];
                         final status =
                             ticket['status'].toString().toUpperCase();
                         return Card(
