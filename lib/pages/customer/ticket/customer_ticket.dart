@@ -95,6 +95,11 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     setState(() {
       _filteredTickets =
           _tickets.where((ticket) {
+            // Only show tickets with status OPEN or IN PROGRESS
+            final status = ticket['Status']?.toString()?.toUpperCase() ?? '';
+            final isOpenOrInProgress =
+                status == 'OPEN' || status == 'IN PROGRESS';
+            if (!isOpenOrInProgress) return false;
             // Filter by search query
             bool matchesQuery = true;
             if (query.isNotEmpty) {
@@ -103,10 +108,8 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                 return value.contains(query);
               });
             }
-
             return matchesQuery;
           }).toList();
-
       // Reset to first page when search/filter changes
       _currentPage = 1;
     });
@@ -187,13 +190,19 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                   String ticketContact = ticket['contact']?.toString() ?? '';
                   String ticketUserId = ticket['user_id']?.toString() ?? '';
                   String currentUserId = _userId.toString();
-
                   // Show tickets where this user is either the contact or the creator
                   bool isUserRelated =
                       ticketContact == currentUserId ||
                       ticketUserId == currentUserId;
-
-                  return isUserRelated;
+                  // Only include tickets with status OPEN or IN PROGRESS
+                  String backendStatus =
+                      (ticket['status'] ?? '').toString().toLowerCase().trim();
+                  bool isOpenOrInProgress =
+                      backendStatus == 'open' ||
+                      backendStatus == 'in progress' ||
+                      backendStatus == 'in_progress' ||
+                      backendStatus == 'inprogress';
+                  return isUserRelated && isOpenOrInProgress;
                 })
                 .map((ticket) {
                   // Format attachments for display
