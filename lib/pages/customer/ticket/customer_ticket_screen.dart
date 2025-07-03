@@ -176,6 +176,16 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
       } else {
         throw Exception(response['message'] ?? 'Failed to load tickets');
       }
+
+      final inProgressIds = await _getInProgressTicketIds();
+      for (var ticket in _tickets) {
+        if (inProgressIds.contains(ticket['id'].toString())) {
+          ticket['status'] = 'IN PROGRESS';
+          if (ticket['full_data'] != null) {
+            ticket['full_data']['status'] = 'IN PROGRESS';
+          }
+        }
+      }
     } catch (e) {
       print('Error loading tickets: ${e.toString()}');
       if (!mounted) return;
@@ -191,6 +201,11 @@ class _CustomerTicketScreenState extends State<CustomerTicketHistory>
         ),
       );
     }
+  }
+
+  Future<List<String>> _getInProgressTicketIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('in_progress_ticket_ids') ?? [];
   }
 
   String _formatDate(String? dateStr) {

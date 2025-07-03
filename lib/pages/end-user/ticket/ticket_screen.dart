@@ -189,97 +189,106 @@ class _TicketScreenState extends State<TicketScreen> {
           ),
         );
         if (!mounted) return;
-        setState(() {
-          _tickets = List<Map<String, dynamic>>.from(
-            response['data'].map((ticket) {
-              String createdAt = ticket['created_at'] ?? 'N/A';
-              DateTime? parsedDate;
-              try {
-                if (createdAt != 'N/A') {
-                  parsedDate = DateTime.parse(createdAt);
-                  createdAt =
-                      '${parsedDate.year}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.day.toString().padLeft(2, '0')} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}';
-                }
-              } catch (e) {}
-              final contactId = ticket['contact']?.toString() ?? '';
-              final contactName = agentMap[contactId];
-              String attachmentsDisplay = 'No attachments';
-              if (ticket['attachments'] != null) {
-                if (ticket['attachments'] is List) {
-                  final attachments = List<dynamic>.from(ticket['attachments']);
-                  if (attachments.isNotEmpty) {
-                    attachmentsDisplay = attachments
-                        .map((attachment) {
-                          if (attachment is Map) {
-                            return attachment['original_name']?.toString() ??
-                                '';
-                          } else if (attachment is String) {
-                            return attachment;
-                          }
-                          return '';
-                        })
-                        .where((name) => name.isNotEmpty)
-                        .join(', ');
-                  }
-                } else if (ticket['attachments'] is String) {
-                  attachmentsDisplay = ticket['attachments'];
-                }
+        List<Map<String, dynamic>>
+        loadedTickets = List<Map<String, dynamic>>.from(
+          response['data'].map((ticket) {
+            String createdAt = ticket['created_at'] ?? 'N/A';
+            DateTime? parsedDate;
+            try {
+              if (createdAt != 'N/A') {
+                parsedDate = DateTime.parse(createdAt);
+                createdAt =
+                    '${parsedDate.year}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.day.toString().padLeft(2, '0')} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}';
               }
-              String displayStatus;
-              String backendStatus =
-                  (ticket['status'] ?? 'open').toString().toLowerCase().trim();
-              switch (backendStatus) {
-                case 'open':
-                  displayStatus = 'OPEN';
-                  break;
-                case 'in_progress':
-                  displayStatus = 'IN PROGRESS';
-                  break;
-                case 'resolved':
-                  displayStatus = 'RESOLVED';
-                  break;
-                case 'closed':
-                  displayStatus = 'CLOSED';
-                  break;
-                default:
-                  displayStatus = backendStatus.toUpperCase();
+            } catch (e) {}
+            final contactId = ticket['contact']?.toString() ?? '';
+            final contactName = agentMap[contactId];
+            String attachmentsDisplay = 'No attachments';
+            if (ticket['attachments'] != null) {
+              if (ticket['attachments'] is List) {
+                final attachments = List<dynamic>.from(ticket['attachments']);
+                if (attachments.isNotEmpty) {
+                  attachmentsDisplay = attachments
+                      .map((attachment) {
+                        if (attachment is Map) {
+                          return attachment['original_name']?.toString() ?? '';
+                        } else if (attachment is String) {
+                          return attachment;
+                        }
+                        return '';
+                      })
+                      .where((name) => name.isNotEmpty)
+                      .join(', ');
+                }
+              } else if (ticket['attachments'] is String) {
+                attachmentsDisplay = ticket['attachments'];
               }
-              // Use getNickname for display
-              final serviceLineNumber = ticket['subscription']?.toString();
-              final subscriptionNickname = getNickname(
-                _subscriptions,
-                serviceLineNumber,
-              );
-              return {
-                'id': ticket['id'],
-                'type': ticket['type'] ?? 'N/A',
-                'contact': contactName,
-                'contact_id': ticket['contact'],
-                'subscription': subscriptionNickname,
-                'serviceLineNumber': serviceLineNumber,
-                'description': ticket['description'] ?? 'No description',
-                'attachments': attachmentsDisplay,
+            }
+            String displayStatus;
+            String backendStatus =
+                (ticket['status'] ?? 'open').toString().toLowerCase().trim();
+            switch (backendStatus) {
+              case 'open':
+                displayStatus = 'OPEN';
+                break;
+              case 'in progress':
+              case 'in_progress':
+              case 'inprogress':
+                displayStatus = 'IN PROGRESS';
+                break;
+              case 'resolved':
+                displayStatus = 'RESOLVED';
+                break;
+              case 'closed':
+                displayStatus = 'CLOSED';
+                break;
+              default:
+                displayStatus = backendStatus.toUpperCase();
+            }
+            // Use getNickname for display
+            final serviceLineNumber = ticket['subscription']?.toString();
+            final subscriptionNickname = getNickname(
+              _subscriptions,
+              serviceLineNumber,
+            );
+            return {
+              'id': ticket['id'],
+              'type': ticket['type'] ?? 'N/A',
+              'contact': contactName,
+              'contact_id': ticket['contact'],
+              'subscription': subscriptionNickname,
+              'serviceLineNumber': serviceLineNumber,
+              'description': ticket['description'] ?? 'No description',
+              'attachments': attachmentsDisplay,
+              'status': displayStatus,
+              'created_at': createdAt,
+              'created_at_raw': parsedDate,
+              'user_id': ticket['user_id'],
+              'full_data': {
+                ...ticket,
                 'status': displayStatus,
                 'created_at': createdAt,
-                'created_at_raw': parsedDate,
-                'user_id': ticket['user_id'],
-                'full_data': {
-                  ...ticket,
-                  'status': displayStatus,
-                  'created_at': createdAt,
-                  'attachments': ticket['attachments'] ?? [],
-                  'subscription_nickname': subscriptionNickname,
-                  'serviceLineNumber': serviceLineNumber,
-                },
-              };
-            }),
-          );
-          _tickets.sort((a, b) {
-            final dateA = a['created_at_raw'] as DateTime?;
-            final dateB = b['created_at_raw'] as DateTime?;
-            if (dateA == null || dateB == null) return 0;
-            return dateB.compareTo(dateA);
-          });
+                'attachments': ticket['attachments'] ?? [],
+                'subscription_nickname': subscriptionNickname,
+                'serviceLineNumber': serviceLineNumber,
+              },
+            };
+          }),
+        );
+        // Merge in-progress status from SharedPreferences
+        final inProgressIds = await _getInProgressTicketIds();
+        for (var ticket in loadedTickets) {
+          if (inProgressIds.contains(ticket['id'].toString())) {
+            ticket['status'] = 'IN PROGRESS';
+            if (ticket['full_data'] != null) {
+              ticket['full_data']['status'] = 'IN PROGRESS';
+            }
+          }
+        }
+        // Optionally: Add in-progress tickets from local storage if not present
+        // (if you have a method to get full ticket data from local storage, add here)
+        setState(() {
+          _tickets = loadedTickets;
           _filteredTickets = List.from(_tickets);
           _isLoading = false;
         });
@@ -332,6 +341,13 @@ class _TicketScreenState extends State<TicketScreen> {
             backgroundColor: Colors.green,
           ),
         );
+
+        if (newStatus.toUpperCase() == 'IN PROGRESS') {
+          await _setTicketInProgress(ticketId);
+        } else if (newStatus.toUpperCase() == 'RESOLVED' ||
+            newStatus.toUpperCase() == 'CLOSED') {
+          await _removeTicketInProgress(ticketId);
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -341,6 +357,30 @@ class _TicketScreenState extends State<TicketScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _saveInProgressTicketIds(List<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('in_progress_ticket_ids', ids);
+  }
+
+  Future<List<String>> _getInProgressTicketIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('in_progress_ticket_ids') ?? [];
+  }
+
+  Future<void> _setTicketInProgress(String ticketId) async {
+    List<String> ids = await _getInProgressTicketIds();
+    if (!ids.contains(ticketId)) {
+      ids.add(ticketId);
+      await _saveInProgressTicketIds(ids);
+    }
+  }
+
+  Future<void> _removeTicketInProgress(String ticketId) async {
+    List<String> ids = await _getInProgressTicketIds();
+    ids.remove(ticketId);
+    await _saveInProgressTicketIds(ids);
   }
 
   void _showNewTicketModal() async {

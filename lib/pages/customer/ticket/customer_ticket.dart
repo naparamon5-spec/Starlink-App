@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'customer_ticket_modal.dart';
 import 'customer_view.dart';
 import '../../end-user/ticket/ticket_modal.dart';
+import 'dart:convert';
 
 class CustomerTicketScreen extends StatefulWidget {
   final bool showAppBar;
@@ -199,9 +200,9 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                       (ticket['status'] ?? '').toString().toLowerCase().trim();
                   bool isOpenOrInProgress =
                       backendStatus == 'open' ||
-                      backendStatus == 'in progress' ||
                       backendStatus == 'in_progress' ||
-                      backendStatus == 'inprogress';
+                      backendStatus == 'in_progress' ||
+                      backendStatus == 'in_progress';
                   return isUserRelated && isOpenOrInProgress;
                 })
                 .map((ticket) {
@@ -276,6 +277,42 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
           _filteredTickets = _tickets;
           _isLoading = false;
         });
+
+        // Ensure merging of in-progress status from SharedPreferences after loading tickets
+        final inProgressIds = await _getInProgressTicketIds();
+        for (var ticket in _tickets) {
+          if (inProgressIds.contains(ticket['id'].toString())) {
+            ticket['Status'] = 'IN PROGRESS';
+            if (ticket['full_data'] != null) {
+              ticket['full_data']['status'] = 'IN PROGRESS';
+            }
+          }
+        }
+
+        // In _loadTickets, after fetching and updating _tickets, merge in-progress tickets from SharedPreferences if not present
+        final inProgressTickets = await _getInProgressTicketsData();
+        for (var ticket in inProgressTickets) {
+          if (!_tickets.any(
+            (t) => t['id'].toString() == ticket['id'].toString(),
+          )) {
+            // Map fields to display structure
+            String displayStatus =
+                ticket['status']?.toString()?.toUpperCase() ?? 'IN PROGRESS';
+            if (displayStatus == 'IN_PROGRESS') displayStatus = 'IN PROGRESS';
+            _tickets.add({
+              'id': ticket['id'],
+              'Status': displayStatus,
+              'Ticket Type': ticket['type'] ?? 'N/A',
+              'Contact': ticket['contact_name'] ?? 'N/A',
+              'Subscription': ticket['subscription'] ?? 'N/A',
+              'Description': ticket['description'] ?? 'No description',
+              'Created At': ticket['created_at'] ?? 'N/A',
+              'Attachments': ticket['attachments'] ?? 'No attachments',
+              'full_data': ticket['full_data'] ?? ticket,
+            });
+          }
+        }
+        _filteredTickets = _tickets;
       } else {
         throw Exception(response['message'] ?? 'Failed to load tickets');
       }
@@ -1150,5 +1187,62 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
       default:
         return Icons.help_outline;
     }
+  }
+
+  Future<void> _saveInProgressTicketIds(List<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('in_progress_ticket_ids', ids);
+  }
+
+  Future<List<String>> _getInProgressTicketIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('in_progress_ticket_ids') ?? [];
+  }
+
+  Future<void> _setTicketInProgress(String ticketId) async {
+    List<String> ids = await _getInProgressTicketIds();
+    if (!ids.contains(ticketId)) {
+      ids.add(ticketId);
+      await _saveInProgressTicketIds(ids);
+    }
+  }
+
+  Future<void> _removeTicketInProgress(String ticketId) async {
+    List<String> ids = await _getInProgressTicketIds();
+    ids.remove(ticketId);
+    await _saveInProgressTicketIds(ids);
+  }
+
+  Future<void> _saveInProgressTicketData(Map<String, dynamic> ticket) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> rawList =
+        prefs.getStringList('in_progress_tickets_data') ?? [];
+    // Remove any existing entry for this ticket
+    rawList.removeWhere((item) {
+      final data = jsonDecode(item);
+      return data['id'].toString() == ticket['id'].toString();
+    });
+    rawList.add(jsonEncode(ticket));
+    await prefs.setStringList('in_progress_tickets_data', rawList);
+  }
+
+  Future<void> _removeInProgressTicketData(String ticketId) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> rawList =
+        prefs.getStringList('in_progress_tickets_data') ?? [];
+    rawList.removeWhere((item) {
+      final data = jsonDecode(item);
+      return data['id'].toString() == ticketId;
+    });
+    await prefs.setStringList('in_progress_tickets_data', rawList);
+  }
+
+  Future<List<Map<String, dynamic>>> _getInProgressTicketsData() async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> rawList =
+        prefs.getStringList('in_progress_tickets_data') ?? [];
+    return rawList
+        .map((item) => Map<String, dynamic>.from(jsonDecode(item)))
+        .toList();
   }
 }

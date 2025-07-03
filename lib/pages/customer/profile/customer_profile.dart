@@ -236,7 +236,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     if (shouldLogout == true) {
       try {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.clear();
+        await prefs.remove('user_id');
+        await prefs.remove('token');
+        // Add other session keys here if needed
         if (!mounted) return;
         Navigator.pushReplacement(
           context,

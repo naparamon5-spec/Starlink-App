@@ -236,7 +236,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // If user confirms logout, proceed with logout
     if (shouldLogout == true) {
       try {
-        await _prefs.clear();
+        await _prefs.remove('user_id');
+        await _prefs.remove('token');
+        // Add other session keys here if needed
         if (!mounted) return;
         Navigator.pushReplacement(
           context,

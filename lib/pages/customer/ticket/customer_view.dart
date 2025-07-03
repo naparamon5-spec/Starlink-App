@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class CustomerViewScreen extends StatefulWidget {
   final Map<String, dynamic> ticket;
@@ -159,7 +160,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                   } else if (backendStatus == 'resolved' ||
                       backendStatus == 'done' ||
                       backendStatus == 'completed') {
-                    displayStatus = 'RESOLVE';
+                    displayStatus = 'RESOLVED';
                   } else if (backendStatus == 'closed' ||
                       backendStatus == 'close') {
                     displayStatus = 'CLOSED';
@@ -233,6 +234,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
             widget.ticket['full_data']['status'] = 'IN PROGRESS';
           }
         });
+        await _saveInProgressTicketData(widget.ticket);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -247,6 +249,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
             'status': 'IN PROGRESS',
             'id': widget.ticket['id'].toString(),
           });
+
+          await _setTicketInProgress(widget.ticket['id'].toString());
         }
       } else {
         throw Exception(response['message'] ?? 'Failed to accept ticket');
@@ -293,6 +297,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
             'shouldRefresh': true,
             'forceRefresh': true,
           });
+
+          await _removeTicketInProgress(widget.ticket['id'].toString());
         }
       } else {
         throw Exception(response['message'] ?? 'Failed to resolve ticket');
@@ -337,6 +343,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
             'status': 'CLOSED',
             'id': widget.ticket['id'].toString(),
           });
+
+          await _removeTicketInProgress(widget.ticket['id'].toString());
         }
       } else {
         throw Exception(response['message'] ?? 'Failed to close ticket');
@@ -382,6 +390,43 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         );
       }
     }
+  }
+
+  Future<void> _saveInProgressTicketIds(List<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('in_progress_ticket_ids', ids);
+  }
+
+  Future<List<String>> _getInProgressTicketIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('in_progress_ticket_ids') ?? [];
+  }
+
+  Future<void> _setTicketInProgress(String ticketId) async {
+    List<String> ids = await _getInProgressTicketIds();
+    if (!ids.contains(ticketId)) {
+      ids.add(ticketId);
+      await _saveInProgressTicketIds(ids);
+    }
+  }
+
+  Future<void> _removeTicketInProgress(String ticketId) async {
+    List<String> ids = await _getInProgressTicketIds();
+    ids.remove(ticketId);
+    await _saveInProgressTicketIds(ids);
+  }
+
+  Future<void> _saveInProgressTicketData(Map<String, dynamic> ticket) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> rawList =
+        prefs.getStringList('in_progress_tickets_data') ?? [];
+    // Remove any existing entry for this ticket
+    rawList.removeWhere((item) {
+      final data = jsonDecode(item);
+      return data['id'].toString() == ticket['id'].toString();
+    });
+    rawList.add(jsonEncode(ticket));
+    await prefs.setStringList('in_progress_tickets_data', rawList);
   }
 
   @override
@@ -648,7 +693,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                 ),
               ),
             if ((_isAccepted || status == 'IN PROGRESS') &&
-                status != 'RESOLVE' &&
+                status != 'RESOLVED' &&
                 status != 'CLOSED') ...[
               const SizedBox(height: 16),
               Row(
