@@ -412,7 +412,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             icon: Icons.edit,
                             label: 'Edit Profile',
                             onPressed: () async {
-                              await Navigator.push(
+                              final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder:
@@ -421,6 +421,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                 ),
                               );
+                              // Update UI with returned data if available
+                              if (result != null &&
+                                  result is Map<String, dynamic>) {
+                                _updateProfileData(
+                                  Map<String, String>.from(result),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.check_circle,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        const Text(
+                                          'Profile updated successfully!',
+                                          style: TextStyle(fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
+                                    backgroundColor: const Color(0xFF133343),
+                                    duration: const Duration(seconds: 2),
+                                    behavior: SnackBarBehavior.floating,
+                                    margin: const EdgeInsets.all(16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                );
+                              }
                               setState(() {
                                 _isLoading = true;
                               });

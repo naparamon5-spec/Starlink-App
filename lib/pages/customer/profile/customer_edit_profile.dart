@@ -150,29 +150,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             'firstName': _firstNameController.text,
             'lastName': _lastNameController.text,
             'middleName': _middleNameController.text,
-            'profileImagePath': _savedImagePath,
+            'profileImagePath': _savedImagePath ?? '',
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Profile updated successfully!',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ],
-              ),
-              backgroundColor: const Color(0xFF133343),
-              duration: const Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.all(16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -491,17 +470,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   label: 'Email',
                   icon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your email';
-                    }
-                    if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                    ).hasMatch(value)) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
-                  },
                   readOnly: true,
                 ),
 
@@ -510,7 +478,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _saveProfile,
+                    onPressed: _isImageLoading ? null : _saveProfile,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF133343),
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -518,14 +486,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text(
-                      'Save Changes',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child:
+                        _isImageLoading
+                            ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                            : const Text(
+                              'Save Changes',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                   ),
                 ),
               ],
