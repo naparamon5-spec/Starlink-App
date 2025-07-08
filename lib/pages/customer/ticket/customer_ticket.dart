@@ -303,7 +303,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
               'id': ticket['id'],
               'Status': displayStatus,
               'Ticket Type': ticket['type'] ?? 'N/A',
-              'Contact': ticket['contact_name'] ?? 'N/A',
+              'Contact': ticket['contact'] ?? 'N/A',
               'Subscription': ticket['subscription'] ?? 'N/A',
               'Description': ticket['description'] ?? 'No description',
               'Created At': ticket['created_at'] ?? 'N/A',

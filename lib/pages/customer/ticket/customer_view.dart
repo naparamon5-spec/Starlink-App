@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../services/api_service.dart';
+import '../../../services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
@@ -236,6 +237,17 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         });
         await _saveInProgressTicketData(widget.ticket);
 
+        // Create notification for ticket acceptance
+        final ticketId = widget.ticket['id'].toString();
+        final ticketType = widget.ticket['type'] ?? 'Unknown';
+        final customerName = widget.ticket['contact_name'] ?? 'Customer';
+
+        await NotificationService.createTicketAcceptanceNotification(
+          ticketId: ticketId,
+          ticketType: ticketType,
+          customerName: customerName,
+        );
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -281,6 +293,17 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
             widget.ticket['full_data']['status'] = 'RESOLVED';
           }
         });
+
+        // Create notification for ticket resolution
+        final ticketId = widget.ticket['id'].toString();
+        final ticketType = widget.ticket['type'] ?? 'Unknown';
+        final customerName = widget.ticket['contact_name'] ?? 'Customer';
+
+        await NotificationService.createTicketResolutionNotification(
+          ticketId: ticketId,
+          ticketType: ticketType,
+          customerName: customerName,
+        );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -329,6 +352,17 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
             widget.ticket['full_data']['status'] = 'closed';
           }
         });
+
+        // Create notification for ticket closure
+        final ticketId = widget.ticket['id'].toString();
+        final ticketType = widget.ticket['type'] ?? 'Unknown';
+        final customerName = widget.ticket['contact_name'] ?? 'Customer';
+
+        await NotificationService.createTicketClosureNotification(
+          ticketId: ticketId,
+          ticketType: ticketType,
+          customerName: customerName,
+        );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

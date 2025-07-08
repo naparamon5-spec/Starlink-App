@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../services/notification_service.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/notification_provider.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -19,69 +22,28 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _loadNotifications() async {
-    // Simulate loading delay
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Sample notifications data
-    setState(() {
-      _notifications = [
-        {
-          'id': 1,
-          'type': 'ticket',
-          'title': 'Ticket Status Update',
-          'message': 'Your ticket #1234 has been resolved',
-          'timestamp': DateTime.now().subtract(const Duration(minutes: 5)),
-          'isRead': false,
-          'icon': Icons.confirmation_number,
-          'color': Colors.blue,
-        },
-        {
-          'id': 2,
-          'type': 'system',
-          'title': 'System Maintenance',
-          'message': 'Scheduled maintenance on June 15, 2024',
-          'timestamp': DateTime.now().subtract(const Duration(hours: 2)),
-          'isRead': true,
-          'icon': Icons.system_update,
-          'color': Colors.orange,
-        },
-        {
-          'id': 3,
-          'type': 'billing',
-          'title': 'Payment Successful',
-          'message': 'Your payment of \$99.99 has been processed',
-          'timestamp': DateTime.now().subtract(const Duration(days: 1)),
-          'isRead': true,
-          'icon': Icons.payment,
-          'color': Colors.green,
-        },
-      ];
-      _isLoading = false;
-    });
-  }
-
-  String _getTimeAgo(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
+    setState(() => _isLoading = true);
+    try {
+      final notifications = await NotificationService.getNotifications();
+      setState(() {
+        _notifications = notifications;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading notifications: $e');
+      setState(() {
+        _notifications = [];
+        _isLoading = false;
+      });
     }
   }
 
-  void _markAsRead(int notificationId) {
-    setState(() {
-      final index = _notifications.indexWhere((n) => n['id'] == notificationId);
-      if (index != -1) {
-        _notifications[index]['isRead'] = true;
-      }
-    });
+  Future<void> _markAsRead(int notificationId) async {
+    await Provider.of<NotificationProvider>(
+      context,
+      listen: false,
+    ).markAsRead(notificationId);
+    await _loadNotifications();
   }
 
   void _clearAllNotifications() {
@@ -99,17 +61,34 @@ class _NotificationsPageState extends State<NotificationsPage> {
                 child: const Text('Cancel'),
               ),
               TextButton(
-                onPressed: () {
-                  setState(() {
-                    _notifications.clear();
-                  });
+                onPressed: () async {
+                  await Provider.of<NotificationProvider>(
+                    context,
+                    listen: false,
+                  ).clearAll();
                   Navigator.pop(context);
+                  await _loadNotifications();
                 },
                 child: const Text('Clear'),
               ),
             ],
           ),
     );
+  }
+
+  String _getTimeAgo(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
   }
 
   @override
@@ -187,23 +166,41 @@ class _NotificationsPageState extends State<NotificationsPage> {
                         color: Colors.white,
                       ),
                     ),
-                    onDismissed: (direction) {
-                      setState(() {
-                        _notifications.removeAt(index);
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('${notification['title']} dismissed'),
-                          action: SnackBarAction(
-                            label: 'Undo',
-                            onPressed: () {
-                              setState(() {
-                                _notifications.insert(index, notification);
-                              });
-                            },
-                          ),
-                        ),
+                    onDismissed: (direction) async {
+                      final deletedNotification = notification;
+                      await NotificationService.deleteNotification(
+                        notification['id'],
                       );
+                      await Provider.of<NotificationProvider>(
+                        context,
+                        listen: false,
+                      ).refresh();
+                      await _loadNotifications();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${notification['title']} dismissed'),
+                            action: SnackBarAction(
+                              label: 'Undo',
+                              onPressed: () async {
+                                await NotificationService.createNotification(
+                                  title: deletedNotification['title'],
+                                  message: deletedNotification['message'],
+                                  type: deletedNotification['type'],
+                                  icon: deletedNotification['icon'],
+                                  color: deletedNotification['color'],
+                                  data: deletedNotification['data'],
+                                );
+                                await Provider.of<NotificationProvider>(
+                                  context,
+                                  listen: false,
+                                ).refresh();
+                                await _loadNotifications();
+                              },
+                            ),
+                          ),
+                        );
+                      }
                     },
                     child: Card(
                       elevation: notification['isRead'] ? 0 : 2,

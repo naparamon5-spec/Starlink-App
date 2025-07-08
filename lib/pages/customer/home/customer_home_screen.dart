@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../components/Table.dart';
+import '../../../components/notification_badge.dart';
 import '../../../services/api_service.dart';
+import '../../../services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../ticket/customer_ticket_screen.dart';
 import '../ticket/customer_ticket.dart';
@@ -27,6 +29,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   String? _userRole;
   bool _isLoading = true;
   int? _userId;
+  int _notificationCount = 0;
   List<Map<String, dynamic>> _subscriptions = [];
   List<Map<String, dynamic>> _billingCycles = [];
 
@@ -34,6 +37,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _loadNotificationCount();
   }
 
   Future<void> _loadUserData() async {
@@ -157,6 +161,19 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     }
   }
 
+  Future<void> _loadNotificationCount() async {
+    try {
+      final count = await NotificationService.getUnreadCount();
+      if (mounted) {
+        setState(() {
+          _notificationCount = count;
+        });
+      }
+    } catch (e) {
+      print('Error loading notification count: $e');
+    }
+  }
+
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
@@ -274,39 +291,22 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                         ),
                       ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Stack(
-                        children: [
-                          const Icon(
-                            Icons.notifications_outlined,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                          Positioned(
-                            right: 0,
-                            top: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Text(
-                                '2',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                    NotificationBadge(
+                      badgeColor: Colors.red,
+                      textColor: Colors.white,
+                      badgeSize: 20,
+                      fontSize: 10,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.notifications_outlined,
+                          color: Colors.white,
+                          size: 28,
+                        ),
                       ),
                     ),
                   ],
@@ -328,7 +328,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'You have 2 new notifications',
+                          _notificationCount == 0
+                              ? 'No new notifications'
+                              : 'You have $_notificationCount new notification${_notificationCount == 1 ? '' : 's'}',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.9),
                             fontSize: 14,
