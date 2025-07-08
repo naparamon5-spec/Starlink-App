@@ -14,6 +14,8 @@ class NotificationsPage extends StatefulWidget {
 class _NotificationsPageState extends State<NotificationsPage> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _notifications = [];
+  bool _selectionMode = false;
+  Set<int> _selectedNotificationIds = {};
 
   @override
   void initState() {
@@ -28,14 +30,63 @@ class _NotificationsPageState extends State<NotificationsPage> {
       setState(() {
         _notifications = notifications;
         _isLoading = false;
+        _selectedNotificationIds.clear();
+        _selectionMode = false;
       });
     } catch (e) {
       print('Error loading notifications: $e');
       setState(() {
         _notifications = [];
         _isLoading = false;
+        _selectedNotificationIds.clear();
+        _selectionMode = false;
       });
     }
+  }
+
+  void _enterSelectionMode() {
+    setState(() {
+      _selectionMode = true;
+      _selectedNotificationIds.clear();
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selectedNotificationIds.clear();
+    });
+  }
+
+  void _toggleSelectAll(bool? value) {
+    setState(() {
+      if (value == true) {
+        _selectedNotificationIds =
+            _notifications.map<int>((n) => n['id'] as int).toSet();
+      } else {
+        _selectedNotificationIds.clear();
+      }
+    });
+  }
+
+  void _toggleSelectNotification(int id) {
+    setState(() {
+      if (_selectedNotificationIds.contains(id)) {
+        _selectedNotificationIds.remove(id);
+      } else {
+        _selectedNotificationIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _deleteSelectedNotifications() async {
+    final idsToDelete = _selectedNotificationIds.toList();
+    for (final id in idsToDelete) {
+      await NotificationService.deleteNotification(id);
+    }
+    await Provider.of<NotificationProvider>(context, listen: false).refresh();
+    await _loadNotifications();
+    _exitSelectionMode();
   }
 
   Future<void> _markAsRead(int notificationId) async {
@@ -62,10 +113,16 @@ class _NotificationsPageState extends State<NotificationsPage> {
               ),
               TextButton(
                 onPressed: () async {
+                  // Delete each notification individually
+                  for (final notification in _notifications) {
+                    await NotificationService.deleteNotification(
+                      notification['id'],
+                    );
+                  }
                   await Provider.of<NotificationProvider>(
                     context,
                     listen: false,
-                  ).clearAll();
+                  ).refresh();
                   Navigator.pop(context);
                   await _loadNotifications();
                 },
@@ -95,14 +152,34 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Notifications',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
-        ),
+        leading:
+            _selectionMode
+                ? IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: _exitSelectionMode,
+                  tooltip: 'Cancel',
+                )
+                : null,
+        title:
+            _selectionMode
+                ? Text(
+                  _selectedNotificationIds.length == 0
+                      ? 'Select'
+                      : '${_selectedNotificationIds.length} selected',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                )
+                : const Text(
+                  'Notifications',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
         centerTitle: true,
         elevation: 0,
         backgroundColor: const Color(0xFF133343),
@@ -111,11 +188,20 @@ class _NotificationsPageState extends State<NotificationsPage> {
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
         ),
         actions: [
-          if (_notifications.isNotEmpty)
+          if (_selectionMode)
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: Colors.white),
+              onPressed:
+                  _selectedNotificationIds.isNotEmpty
+                      ? _deleteSelectedNotifications
+                      : null,
+              tooltip: 'Delete selected',
+            )
+          else if (_notifications.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              onPressed: _clearAllNotifications,
-              tooltip: 'Clear all notifications',
+              onPressed: _enterSelectionMode,
+              tooltip: 'Select notifications',
             ),
         ],
       ),
@@ -154,9 +240,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
                 itemCount: _notifications.length,
                 itemBuilder: (context, index) {
                   final notification = _notifications[index];
+                  final id = notification['id'] as int;
                   return Dismissible(
-                    key: Key(notification['id'].toString()),
-                    direction: DismissDirection.endToStart,
+                    key: Key(id.toString()),
+                    direction:
+                        _selectionMode
+                            ? DismissDirection.none
+                            : DismissDirection.endToStart,
                     background: Container(
                       alignment: Alignment.centerRight,
                       padding: const EdgeInsets.only(right: 16),
@@ -166,42 +256,46 @@ class _NotificationsPageState extends State<NotificationsPage> {
                         color: Colors.white,
                       ),
                     ),
-                    onDismissed: (direction) async {
-                      final deletedNotification = notification;
-                      await NotificationService.deleteNotification(
-                        notification['id'],
-                      );
-                      await Provider.of<NotificationProvider>(
-                        context,
-                        listen: false,
-                      ).refresh();
-                      await _loadNotifications();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${notification['title']} dismissed'),
-                            action: SnackBarAction(
-                              label: 'Undo',
-                              onPressed: () async {
-                                await NotificationService.createNotification(
-                                  title: deletedNotification['title'],
-                                  message: deletedNotification['message'],
-                                  type: deletedNotification['type'],
-                                  icon: deletedNotification['icon'],
-                                  color: deletedNotification['color'],
-                                  data: deletedNotification['data'],
+                    onDismissed:
+                        _selectionMode
+                            ? null
+                            : (direction) async {
+                              final deletedNotification = notification;
+                              await NotificationService.deleteNotification(id);
+                              await Provider.of<NotificationProvider>(
+                                context,
+                                listen: false,
+                              ).refresh();
+                              await _loadNotifications();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      '${notification['title']} dismissed',
+                                    ),
+                                    action: SnackBarAction(
+                                      label: 'Undo',
+                                      onPressed: () async {
+                                        await NotificationService.createNotification(
+                                          title: deletedNotification['title'],
+                                          message:
+                                              deletedNotification['message'],
+                                          type: deletedNotification['type'],
+                                          icon: deletedNotification['icon'],
+                                          color: deletedNotification['color'],
+                                          data: deletedNotification['data'],
+                                        );
+                                        await Provider.of<NotificationProvider>(
+                                          context,
+                                          listen: false,
+                                        ).refresh();
+                                        await _loadNotifications();
+                                      },
+                                    ),
+                                  ),
                                 );
-                                await Provider.of<NotificationProvider>(
-                                  context,
-                                  listen: false,
-                                ).refresh();
-                                await _loadNotifications();
-                              },
-                            ),
-                          ),
-                        );
-                      }
-                    },
+                              }
+                            },
                     child: Card(
                       elevation: notification['isRead'] ? 0 : 2,
                       margin: const EdgeInsets.only(bottom: 12),
@@ -216,13 +310,28 @@ class _NotificationsPageState extends State<NotificationsPage> {
                         ),
                       ),
                       child: InkWell(
-                        onTap: () => _markAsRead(notification['id']),
+                        onTap:
+                            _selectionMode
+                                ? () => _toggleSelectNotification(id)
+                                : () => _markAsRead(id),
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              if (_selectionMode)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 12),
+                                  child: Checkbox(
+                                    value: _selectedNotificationIds.contains(
+                                      id,
+                                    ),
+                                    onChanged:
+                                        (value) =>
+                                            _toggleSelectNotification(id),
+                                  ),
+                                ),
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -280,7 +389,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                   ],
                                 ),
                               ),
-                              if (!notification['isRead'])
+                              if (!_selectionMode && !notification['isRead'])
                                 Container(
                                   width: 8,
                                   height: 8,
