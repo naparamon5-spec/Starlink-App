@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 class NotificationService {
   static const String _notificationsKey = 'app_notifications';
@@ -224,5 +225,64 @@ class NotificationService {
         'action': 'ticket_closed',
       },
     );
+  }
+
+  // BACKEND-BASED CUSTOMER NOTIFICATIONS
+  static const String baseUrl =
+      'https://starlink.ardentnetworks.com.ph/api.php';
+
+  // Fetch notifications for a specific user (customer)
+  static Future<List<Map<String, dynamic>>> getCustomerNotifications(
+    int userId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl?action=get_notifications&user_id=$userId'),
+    );
+    final data = json.decode(response.body);
+    if (data['status'] == 'success') {
+      return List<Map<String, dynamic>>.from(data['data']);
+    }
+    throw Exception(data['message'] ?? 'Failed to fetch notifications');
+  }
+
+  // Create a notification for a customer
+  static Future<void> createCustomerNotification(
+    Map<String, dynamic> notification,
+  ) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl?action=create_notification'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(notification),
+    );
+    final data = json.decode(response.body);
+    if (data['status'] != 'success') {
+      throw Exception(data['message'] ?? 'Failed to create notification');
+    }
+  }
+
+  // Mark notification as read
+  static Future<void> markCustomerNotificationRead(int id) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl?action=mark_notification_read'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'id': id}),
+    );
+    final data = json.decode(response.body);
+    if (data['status'] != 'success') {
+      throw Exception(data['message'] ?? 'Failed to mark as read');
+    }
+  }
+
+  // Delete notification
+  static Future<void> deleteCustomerNotification(int id) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl?action=delete_notification'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'id': id}),
+    );
+    final data = json.decode(response.body);
+    if (data['status'] != 'success') {
+      throw Exception(data['message'] ?? 'Failed to delete notification');
+    }
   }
 }

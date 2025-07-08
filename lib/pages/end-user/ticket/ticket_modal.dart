@@ -4,6 +4,7 @@ import '../../../services/api_service.dart';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
+import '../../../services/notification_service.dart';
 
 class NewTicketModal extends StatefulWidget {
   final Function(Map<String, dynamic>) onConfirm;
@@ -205,6 +206,24 @@ class _NewTicketModalState extends State<NewTicketModal> {
     });
   }
 
+  // Helper to fetch customer user ID by EU code
+  Future<int?> _fetchCustomerUserIdByEuCode(String euCode) async {
+    try {
+      // Try to get the customer by EU code (assuming you have such an endpoint)
+      final response = await ApiService.getContactsByEuCode(euCode);
+      if (response['status'] == 'success' && response['data'] != null) {
+        // Assume the first contact is the customer (adjust as needed)
+        final contacts = List<Map<String, dynamic>>.from(response['data']);
+        if (contacts.isNotEmpty && contacts[0]['customer_user_id'] != null) {
+          return int.tryParse(contacts[0]['customer_user_id'].toString());
+        }
+      }
+    } catch (e) {
+      print('Failed to fetch customer user id by eu code: $e');
+    }
+    return null;
+  }
+
   void _submitTicket() async {
     if (_selectedTicketType != null &&
         _selectedContactId != null &&
@@ -315,6 +334,47 @@ class _NewTicketModalState extends State<NewTicketModal> {
             } catch (e) {
               // Handle upload error silently
             }
+          }
+
+          // Notify the customer (account owner) after ticket creation
+          try {
+            int? customerUserId = _selectedSubscription?['customer_user_id'];
+            if (customerUserId == null) {
+              // Try to get from contacts or fetch from backend
+              String? euCode;
+              if (_subscriptions.isNotEmpty &&
+                  _subscriptions[0]['eu_code'] != null) {
+                euCode = _subscriptions[0]['eu_code'];
+              } else if (_contacts.isNotEmpty &&
+                  _contacts[0]['eu_code'] != null) {
+                euCode = _contacts[0]['eu_code'];
+              }
+              if (euCode != null) {
+                customerUserId = await _fetchCustomerUserIdByEuCode(euCode);
+              }
+            }
+            if (customerUserId != null) {
+              await NotificationService.createCustomerNotification({
+                'user_id': customerUserId,
+                'title': 'New Ticket Created',
+                'message':
+                    'A new ticket (#$ticketId) was created by an end-user.',
+                'type': 'ticket_created',
+                'icon': 'confirmation_number',
+                'color': '#2196F3',
+                'data': {
+                  'ticket_id': ticketId,
+                  'ticket_type': _selectedTicketType,
+                  'contact_name': _selectedContactName,
+                  'subscription': _selectedSubscription?['nickname'],
+                  'description': _descriptionController.text,
+                },
+              });
+            } else {
+              print('Customer user ID not found, notification not sent.');
+            }
+          } catch (e) {
+            print('Failed to notify customer: $e');
           }
 
           // Format the ticket data to match the expected structure
