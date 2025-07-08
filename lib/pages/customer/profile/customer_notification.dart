@@ -191,16 +191,28 @@ class _CustomerNotificationScreenState
                 actions: [
                   if (_selectionMode)
                     IconButton(
-                      icon: Icon(Icons.delete_outline, color: Colors.white),
+                      icon: const Icon(
+                        Icons.mark_email_read_outlined,
+                        color: Colors.white,
+                      ),
                       onPressed:
                           _selectedNotificationIds.isNotEmpty
-                              ? _deleteSelectedNotifications
+                              ? () async {
+                                for (final id in _selectedNotificationIds) {
+                                  await Provider.of<NotificationProvider>(
+                                    context,
+                                    listen: false,
+                                  ).markAsRead(id);
+                                }
+                                await _loadNotifications();
+                                _exitSelectionMode();
+                              }
                               : null,
-                      tooltip: 'Delete selected',
+                      tooltip: 'Mark selected as read',
                     )
                   else if (_notifications.isNotEmpty)
                     IconButton(
-                      icon: const Icon(Icons.delete_outline),
+                      icon: const Icon(Icons.mark_email_read_outlined),
                       onPressed: _enterSelectionMode,
                       tooltip: 'Select notifications',
                     ),
