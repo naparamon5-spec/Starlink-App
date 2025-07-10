@@ -11,6 +11,8 @@ import '../profile/customer_profile.dart';
 import '../profile/customer_notification.dart';
 import '../ticket/customer_ticket_modal.dart';
 import 'customer_details.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/notification_provider.dart';
 
 class CustomerHomeScreen extends StatefulWidget {
   final String loginMessage;
@@ -37,7 +39,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   void initState() {
     super.initState();
     _loadUserData();
-    _loadNotificationCount();
+    // Use provider to refresh notification count from backend
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<NotificationProvider>(
+        context,
+        listen: false,
+      );
+      provider.refresh();
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -158,19 +167,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       );
       // Don't throw the error, just log it and continue
       // This prevents the entire subscription loading from failing
-    }
-  }
-
-  Future<void> _loadNotificationCount() async {
-    try {
-      final count = await NotificationService.getUnreadCount();
-      if (mounted) {
-        setState(() {
-          _notificationCount = count;
-        });
-      }
-    } catch (e) {
-      print('Error loading notification count: $e');
     }
   }
 
@@ -327,14 +323,19 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          _notificationCount == 0
-                              ? 'No new notifications'
-                              : 'You have $_notificationCount new notification${_notificationCount == 1 ? '' : 's'}',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
-                            fontSize: 14,
-                          ),
+                        child: Consumer<NotificationProvider>(
+                          builder: (context, provider, _) {
+                            final count = provider.unreadCount;
+                            return Text(
+                              count == 0
+                                  ? 'No new notifications'
+                                  : 'You have $count new notification${count == 1 ? '' : 's'}',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 14,
+                              ),
+                            );
+                          },
                         ),
                       ),
                       TextButton(

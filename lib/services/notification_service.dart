@@ -141,13 +141,27 @@ class NotificationService {
     }
   }
 
-  // Get unread count
-  static Future<int> getUnreadCount() async {
+  // Get unread count from backend for customer
+  static Future<int> getUnreadCount({int? userId}) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getInt(_unreadCountKey) ?? 0;
+      // If userId is not provided, get it from SharedPreferences
+      int? uid = userId;
+      if (uid == null) {
+        final prefs = await SharedPreferences.getInstance();
+        uid = prefs.getInt('user_id');
+      }
+      if (uid == null) return 0;
+      final notifications = await getCustomerNotifications(uid);
+      final unreadCount =
+          notifications.where((n) {
+            final isRead = n['is_read'] ?? n['isRead'] ?? false;
+            if (isRead is int) return isRead == 0; // unread if 0
+            if (isRead is bool) return !isRead; // unread if false
+            return true; // treat as unread if unknown
+          }).length;
+      return unreadCount;
     } catch (e) {
-      print('Error getting unread count: $e');
+      print('Error getting unread count from backend: $e');
       return 0;
     }
   }
