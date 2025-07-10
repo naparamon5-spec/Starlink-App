@@ -95,63 +95,23 @@ class _CustomerNotificationScreenState
         final notifications =
             await NotificationService.getCustomerNotifications(customerUserId!);
 
-        // If no notifications exist, create a test notification
-        if (notifications.isEmpty) {
-          try {
-            await NotificationService.createCustomerNotification({
-              'title': 'Welcome to Starlink App',
-              'message':
-                  'Your notification system is working! This is a test notification.',
-              'type': 'system',
-              'icon': 'info',
-              'color': '#2196F3',
-              'data': {'test': true},
-            });
-            // Reload notifications after creating test notification
-            final updatedNotifications =
-                await NotificationService.getCustomerNotifications(
-                  customerUserId!,
-                );
-            setState(() {
-              _notifications =
-                  updatedNotifications
-                      .map(
-                        (n) => {
-                          ...n,
-                          'isRead': n['isRead'] ?? n['is_read'] == 1,
-                          'icon': parseIcon(n['icon']),
-                          'color': parseColor(n['color']),
-                          'timestamp': parseTimestamp(
-                            n['created_at'] ?? n['timestamp'],
-                          ),
-                        },
-                      )
-                      .toList();
-            });
-          } catch (e) {
-            print('Error creating test notification: $e');
-            setState(() {
-              _notifications = [];
-            });
-          }
-        } else {
-          setState(() {
-            _notifications =
-                notifications
-                    .map(
-                      (n) => {
-                        ...n,
-                        'isRead': n['isRead'] ?? n['is_read'] == 1,
-                        'icon': parseIcon(n['icon']),
-                        'color': parseColor(n['color']),
-                        'timestamp': parseTimestamp(
-                          n['created_at'] ?? n['timestamp'],
-                        ),
-                      },
-                    )
-                    .toList();
-          });
-        }
+        // Remove the test notification creation logic
+        setState(() {
+          _notifications =
+              notifications
+                  .map(
+                    (n) => {
+                      ...n,
+                      'isRead': n['isRead'] ?? n['is_read'] == 1,
+                      'icon': parseIcon(n['icon']),
+                      'color': parseColor(n['color']),
+                      'timestamp': parseTimestamp(
+                        n['created_at'] ?? n['timestamp'],
+                      ),
+                    },
+                  )
+                  .toList();
+        });
       } else {
         setState(() {
           _notifications = [];
