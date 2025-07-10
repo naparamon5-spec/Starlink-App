@@ -89,35 +89,80 @@ class _CustomerNotificationScreenState
   }
 
   Future<void> _loadNotifications() async {
-    if (customerUserId == null) return;
     setState(() => _isLoading = true);
     try {
-      final notificationsRaw =
-          await NotificationService.getCustomerNotifications(customerUserId!);
-      final notifications =
-          notificationsRaw.map((n) {
-            return {
-              ...n,
-              'color': parseColor(n['color']),
-              'icon': parseIcon(n['icon']),
-              'timestamp': parseTimestamp(n['created_at'] ?? n['timestamp']),
-              'isRead': n['is_read'] == 1 || n['isRead'] == true,
-            };
-          }).toList();
-      notifications.sort((a, b) => b['timestamp'].compareTo(a['timestamp']));
+      if (customerUserId != null) {
+        final notifications =
+            await NotificationService.getCustomerNotifications(customerUserId!);
+
+        // If no notifications exist, create a test notification
+        if (notifications.isEmpty) {
+          try {
+            await NotificationService.createCustomerNotification({
+              'title': 'Welcome to Starlink App',
+              'message':
+                  'Your notification system is working! This is a test notification.',
+              'type': 'system',
+              'icon': 'info',
+              'color': '#2196F3',
+              'data': {'test': true},
+            });
+            // Reload notifications after creating test notification
+            final updatedNotifications =
+                await NotificationService.getCustomerNotifications(
+                  customerUserId!,
+                );
+            setState(() {
+              _notifications =
+                  updatedNotifications
+                      .map(
+                        (n) => {
+                          ...n,
+                          'icon': parseIcon(n['icon']),
+                          'color': parseColor(n['color']),
+                          'timestamp': parseTimestamp(
+                            n['created_at'] ?? n['timestamp'],
+                          ),
+                        },
+                      )
+                      .toList();
+            });
+          } catch (e) {
+            print('Error creating test notification: $e');
+            setState(() {
+              _notifications = [];
+            });
+          }
+        } else {
+          setState(() {
+            _notifications =
+                notifications
+                    .map(
+                      (n) => {
+                        ...n,
+                        'icon': parseIcon(n['icon']),
+                        'color': parseColor(n['color']),
+                        'timestamp': parseTimestamp(
+                          n['created_at'] ?? n['timestamp'],
+                        ),
+                      },
+                    )
+                    .toList();
+          });
+        }
+      } else {
+        setState(() {
+          _notifications = [];
+        });
+      }
       setState(() {
-        _notifications = notifications;
         _isLoading = false;
-        _selectedNotificationIds.clear();
-        _selectionMode = false;
       });
     } catch (e) {
       print('Error loading notifications: $e');
       setState(() {
         _notifications = [];
         _isLoading = false;
-        _selectedNotificationIds.clear();
-        _selectionMode = false;
       });
     }
   }
@@ -171,7 +216,10 @@ class _CustomerNotificationScreenState
   }
 
   Future<void> _markAsRead(int notificationId) async {
-    await NotificationService.markCustomerNotificationRead(notificationId);
+    await Provider.of<NotificationProvider>(
+      context,
+      listen: false,
+    ).markAsRead(notificationId);
     await _loadNotifications();
   }
 
@@ -191,12 +239,10 @@ class _CustomerNotificationScreenState
               ),
               TextButton(
                 onPressed: () async {
-                  // Delete each notification individually
-                  for (final notification in _notifications) {
-                    await NotificationService.deleteCustomerNotification(
-                      notification['id'],
-                    );
-                  }
+                  await Provider.of<NotificationProvider>(
+                    context,
+                    listen: false,
+                  ).clearAll();
                   Navigator.pop(context);
                   await _loadNotifications();
                 },
@@ -288,209 +334,218 @@ class _CustomerNotificationScreenState
                 ],
               )
               : null,
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _ticketNotifications.isEmpty
-              ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.notifications_off_outlined,
-                      size: 64,
-                      color: Colors.grey[400],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No ticket notifications',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
+      body: RefreshIndicator(
+        onRefresh: _loadNotifications,
+        child:
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _notifications.isEmpty
+                ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.notifications_off_outlined,
+                        size: 64,
+                        color: Colors.grey[400],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'You\'re all caught up!',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-                    ),
-                  ],
-                ),
-              )
-              : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _ticketNotifications.length,
-                itemBuilder: (context, index) {
-                  final notification = _ticketNotifications[index];
-                  final id = notification['id'] as int;
-                  return Dismissible(
-                    key: Key(id.toString()),
-                    direction:
-                        _selectionMode
-                            ? DismissDirection.none
-                            : DismissDirection.endToStart,
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 16),
-                      color: Colors.red,
-                      child: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.white,
-                      ),
-                    ),
-                    onDismissed:
-                        _selectionMode
-                            ? null
-                            : (direction) async {
-                              final deletedNotification = notification;
-                              await NotificationService.deleteCustomerNotification(
-                                id,
-                              );
-                              await _loadNotifications();
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      '${notification['title']} dismissed',
-                                    ),
-                                    action: SnackBarAction(
-                                      label: 'Undo',
-                                      onPressed: () async {
-                                        // This undo logic needs to be implemented
-                                        // For now, it will just re-add the notification
-                                        // if the backend supports it.
-                                        // await NotificationService.createNotification(
-                                        //   title: deletedNotification['title'],
-                                        //   message:
-                                        //       deletedNotification['message'],
-                                        //   type: deletedNotification['type'],
-                                        //   icon: deletedNotification['icon'],
-                                        //   color: deletedNotification['color'],
-                                        //   data: deletedNotification['data'],
-                                        // );
-                                        // await Provider.of<NotificationProvider>(
-                                        //   context,
-                                        //   listen: false,
-                                        // ).refresh();
-                                        // await _loadNotifications();
-                                      },
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                    child: Card(
-                      elevation: notification['isRead'] ? 0 : 2,
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color:
-                              notification['isRead']
-                                  ? Colors.grey[200]!
-                                  : notification['color'].withOpacity(0.5),
-                          width: notification['isRead'] ? 1 : 2,
+                      const SizedBox(height: 16),
+                      Text(
+                        'No notifications',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                      child: InkWell(
-                        onTap:
-                            _selectionMode
-                                ? () => _toggleSelectNotification(id)
-                                : () => _markAsRead(id),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (_selectionMode)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 12),
-                                  child: Checkbox(
-                                    value: _selectedNotificationIds.contains(
-                                      id,
-                                    ),
-                                    onChanged:
-                                        (value) =>
-                                            _toggleSelectNotification(id),
-                                  ),
-                                ),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: notification['color'].withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  notification['icon'],
-                                  color: notification['color'],
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            notification['title'],
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight:
-                                                  notification['isRead']
-                                                      ? FontWeight.normal
-                                                      : FontWeight.bold,
-                                              color:
-                                                  notification['isRead']
-                                                      ? Colors.grey[600]
-                                                      : Colors.black,
-                                            ),
-                                          ),
-                                        ),
-                                        Text(
-                                          _getTimeAgo(
-                                            notification['timestamp'],
-                                          ),
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[500],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      notification['message'],
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey[600],
+                      const SizedBox(height: 8),
+                      Text(
+                        'You\'re all caught up!',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                      ),
+                    ],
+                  ),
+                )
+                : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _notifications.length,
+                  itemBuilder: (context, index) {
+                    final notification = _notifications[index];
+                    final id = notification['id'] as int;
+                    return Dismissible(
+                      key: Key(id.toString()),
+                      direction:
+                          _selectionMode
+                              ? DismissDirection.none
+                              : DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 16),
+                        color: Colors.red,
+                        child: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.white,
+                        ),
+                      ),
+                      onDismissed:
+                          _selectionMode
+                              ? null
+                              : (direction) async {
+                                final deletedNotification = notification;
+                                await NotificationService.deleteNotification(
+                                  notification['id'],
+                                );
+                                await Provider.of<NotificationProvider>(
+                                  context,
+                                  listen: false,
+                                ).refresh();
+                                await _loadNotifications();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        '${notification['title']} dismissed',
+                                      ),
+                                      action: SnackBarAction(
+                                        label: 'Undo',
+                                        onPressed: () async {
+                                          await NotificationService.createNotification(
+                                            title: deletedNotification['title'],
+                                            message:
+                                                deletedNotification['message'],
+                                            type: deletedNotification['type'],
+                                            icon: deletedNotification['icon'],
+                                            color: deletedNotification['color'],
+                                            data: deletedNotification['data'],
+                                          );
+                                          await Provider.of<
+                                            NotificationProvider
+                                          >(context, listen: false).refresh();
+                                          await _loadNotifications();
+                                        },
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
-                              if (!_selectionMode && !notification['isRead'])
+                                  );
+                                }
+                              },
+                      child: Card(
+                        elevation: (notification['isRead'] ?? false) ? 0 : 2,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color:
+                                (notification['isRead'] ?? false)
+                                    ? Colors.grey[200]!
+                                    : notification['color'].withOpacity(0.5),
+                            width: (notification['isRead'] ?? false) ? 1 : 2,
+                          ),
+                        ),
+                        child: InkWell(
+                          onTap:
+                              _selectionMode
+                                  ? () => _toggleSelectNotification(id)
+                                  : () => _markAsRead(id),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_selectionMode)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 12),
+                                    child: Checkbox(
+                                      value: _selectedNotificationIds.contains(
+                                        id,
+                                      ),
+                                      onChanged:
+                                          (value) =>
+                                              _toggleSelectNotification(id),
+                                    ),
+                                  ),
                                 Container(
-                                  width: 8,
-                                  height: 8,
-                                  margin: const EdgeInsets.only(left: 8),
+                                  padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
+                                    color: notification['color'].withOpacity(
+                                      0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    notification['icon'],
                                     color: notification['color'],
-                                    shape: BoxShape.circle,
+                                    size: 24,
                                   ),
                                 ),
-                            ],
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              notification['title'],
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight:
+                                                    (notification['isRead'] ??
+                                                            false)
+                                                        ? FontWeight.normal
+                                                        : FontWeight.bold,
+                                                color:
+                                                    (notification['isRead'] ??
+                                                            false)
+                                                        ? Colors.grey[600]
+                                                        : Colors.black,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            _getTimeAgo(
+                                              notification['timestamp'],
+                                            ),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[500],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        notification['message'],
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (!_selectionMode &&
+                                    !(notification['isRead'] ?? false))
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    margin: const EdgeInsets.only(left: 8),
+                                    decoration: BoxDecoration(
+                                      color: notification['color'],
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
+      ),
     );
   }
 }

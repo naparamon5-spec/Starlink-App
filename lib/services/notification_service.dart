@@ -1,7 +1,11 @@
 import 'dart:convert';
+import 'dart:io' show Platform, HttpClient, X509Certificate;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
+import 'package:flutter/foundation.dart';
+import '../config/ssl_config.dart';
 
 class NotificationService {
   static const String _notificationsKey = 'app_notifications';
@@ -228,61 +232,207 @@ class NotificationService {
   }
 
   // BACKEND-BASED CUSTOMER NOTIFICATIONS
-  static const String baseUrl =
-      'https://starlink.ardentnetworks.com.ph/api.php';
+  static String get baseUrl {
+    return 'http://10.0.2.2/starlink_app/backend/routes/notifications.php';
+  }
+
+  // Create a custom HTTP client that uses our SSL configuration
+  static http.Client get _client {
+    final httpClient =
+        HttpClient()..connectionTimeout = const Duration(seconds: 15);
+
+    return IOClient(httpClient);
+  }
 
   // Fetch notifications for a specific user (customer)
   static Future<List<Map<String, dynamic>>> getCustomerNotifications(
     int userId,
   ) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl?action=get_notifications&user_id=$userId'),
-    );
-    final data = json.decode(response.body);
-    if (data['status'] == 'success') {
-      return List<Map<String, dynamic>>.from(data['data']);
+    try {
+      // Get stored token from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      final headers = <String, String>{'Content-Type': 'application/json'};
+
+      // Add authorization header if token exists
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await _client.get(
+        Uri.parse('$baseUrl?action=get_notifications&user_id=$userId'),
+        headers: headers,
+      );
+
+      // Check if response is valid JSON
+      if (response.statusCode == 200) {
+        try {
+          final data = json.decode(response.body);
+          if (data['status'] == 'success') {
+            return List<Map<String, dynamic>>.from(data['data']);
+          } else {
+            throw Exception(data['message'] ?? 'Failed to fetch notifications');
+          }
+        } catch (e) {
+          // If JSON parsing fails, it might be HTML error page
+          print('Response body: ${response.body}');
+          if (response.body.contains('<!doctype html>')) {
+            throw Exception(
+              'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
+            );
+          }
+          throw Exception('Invalid response format from server: $e');
+        }
+      } else {
+        throw Exception(
+          'HTTP ${response.statusCode}: ${response.reasonPhrase}',
+        );
+      }
+    } catch (e) {
+      print('Error in getCustomerNotifications: $e');
+      // Return empty list instead of throwing to prevent app crash
+      return [];
     }
-    throw Exception(data['message'] ?? 'Failed to fetch notifications');
   }
 
   // Create a notification for a customer
   static Future<void> createCustomerNotification(
     Map<String, dynamic> notification,
   ) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl?action=create_notification'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode(notification),
-    );
-    final data = json.decode(response.body);
-    if (data['status'] != 'success') {
-      throw Exception(data['message'] ?? 'Failed to create notification');
+    try {
+      // Get stored token from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      final headers = <String, String>{'Content-Type': 'application/json'};
+
+      // Add authorization header if token exists
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await _client.post(
+        Uri.parse('$baseUrl?action=create_notification'),
+        headers: headers,
+        body: json.encode(notification),
+      );
+
+      if (response.statusCode == 200) {
+        try {
+          final data = json.decode(response.body);
+          if (data['status'] != 'success') {
+            throw Exception(data['message'] ?? 'Failed to create notification');
+          }
+        } catch (e) {
+          print('Response body:  [31m${response.body} [0m');
+          if (response.body.contains('<!doctype html>')) {
+            throw Exception(
+              'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
+            );
+          }
+          throw Exception('Invalid response format from server: $e');
+        }
+      } else {
+        throw Exception(
+          'HTTP ${response.statusCode}: ${response.reasonPhrase}',
+        );
+      }
+    } catch (e) {
+      print('Error in createCustomerNotification: $e');
+      throw Exception('Failed to create notification: $e');
     }
   }
 
   // Mark notification as read
   static Future<void> markCustomerNotificationRead(int id) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl?action=mark_notification_read'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({'id': id}),
-    );
-    final data = json.decode(response.body);
-    if (data['status'] != 'success') {
-      throw Exception(data['message'] ?? 'Failed to mark as read');
+    try {
+      // Get stored token from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      final headers = <String, String>{'Content-Type': 'application/json'};
+
+      // Add authorization header if token exists
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await _client.post(
+        Uri.parse('$baseUrl?action=mark_notification_read'),
+        headers: headers,
+        body: json.encode({'id': id}),
+      );
+
+      if (response.statusCode == 200) {
+        try {
+          final data = json.decode(response.body);
+          if (data['status'] != 'success') {
+            throw Exception(data['message'] ?? 'Failed to mark as read');
+          }
+        } catch (e) {
+          print('Response body: ${response.body}');
+          if (response.body.contains('<!doctype html>')) {
+            throw Exception(
+              'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
+            );
+          }
+          throw Exception('Invalid response format from server: $e');
+        }
+      } else {
+        throw Exception(
+          'HTTP ${response.statusCode}: ${response.reasonPhrase}',
+        );
+      }
+    } catch (e) {
+      print('Error in markCustomerNotificationRead: $e');
+      throw Exception('Failed to mark notification as read: $e');
     }
   }
 
   // Delete notification
   static Future<void> deleteCustomerNotification(int id) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl?action=delete_notification'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({'id': id}),
-    );
-    final data = json.decode(response.body);
-    if (data['status'] != 'success') {
-      throw Exception(data['message'] ?? 'Failed to delete notification');
+    try {
+      // Get stored token from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      final headers = <String, String>{'Content-Type': 'application/json'};
+
+      // Add authorization header if token exists
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await _client.post(
+        Uri.parse('$baseUrl?action=delete_notification'),
+        headers: headers,
+        body: json.encode({'id': id}),
+      );
+
+      if (response.statusCode == 200) {
+        try {
+          final data = json.decode(response.body);
+          if (data['status'] != 'success') {
+            throw Exception(data['message'] ?? 'Failed to delete notification');
+          }
+        } catch (e) {
+          print('Response body:  [31m${response.body} [0m');
+          if (response.body.contains('<!doctype html>')) {
+            throw Exception(
+              'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
+            );
+          }
+          throw Exception('Invalid response format from server: $e');
+        }
+      } else {
+        throw Exception(
+          'HTTP ${response.statusCode}: ${response.reasonPhrase}',
+        );
+      }
+    } catch (e) {
+      print('Error in deleteCustomerNotification: $e');
+      throw Exception('Failed to delete notification: $e');
     }
   }
 }

@@ -309,16 +309,16 @@ class _NotificationsPageState extends State<NotificationsPage> {
                               }
                             },
                     child: Card(
-                      elevation: notification['isRead'] ? 0 : 2,
+                      elevation: (notification['isRead'] ?? false) ? 0 : 2,
                       margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                         side: BorderSide(
                           color:
-                              notification['isRead']
+                              (notification['isRead'] ?? false)
                                   ? Colors.grey[200]!
                                   : notification['color'].withOpacity(0.5),
-                          width: notification['isRead'] ? 1 : 2,
+                          width: (notification['isRead'] ?? false) ? 1 : 2,
                         ),
                       ),
                       child: InkWell(
@@ -369,11 +369,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                             style: TextStyle(
                                               fontSize: 16,
                                               fontWeight:
-                                                  notification['isRead']
+                                                  (notification['isRead'] ??
+                                                          false)
                                                       ? FontWeight.normal
                                                       : FontWeight.bold,
                                               color:
-                                                  notification['isRead']
+                                                  (notification['isRead'] ??
+                                                          false)
                                                       ? Colors.grey[600]
                                                       : Colors.black,
                                             ),
@@ -401,7 +403,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                   ],
                                 ),
                               ),
-                              if (!_selectionMode && !notification['isRead'])
+                              if (!_selectionMode &&
+                                  !(notification['isRead'] ?? false))
                                 Container(
                                   width: 8,
                                   height: 8,
