@@ -390,6 +390,52 @@ class NotificationService {
     }
   }
 
+  // Mark notification as unread
+  static Future<void> markCustomerNotificationUnread(int id) async {
+    try {
+      // Get stored token from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      final headers = <String, String>{'Content-Type': 'application/json'};
+
+      // Add authorization header if token exists
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await _client.post(
+        Uri.parse('$baseUrl?action=mark_notification_unread'),
+        headers: headers,
+        body: json.encode({'id': id}),
+      );
+
+      if (response.statusCode == 200) {
+        try {
+          final data = json.decode(response.body);
+          if (data['status'] != 'success') {
+            throw Exception(data['message'] ?? 'Failed to mark as unread');
+          }
+        } catch (e) {
+          print('Response body: ${response.body}');
+          if (response.body.contains('<!doctype html>')) {
+            throw Exception(
+              'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
+            );
+          }
+          throw Exception('Invalid response format from server: $e');
+        }
+      } else {
+        throw Exception(
+          'HTTP ${response.statusCode}: ${response.reasonPhrase}',
+        );
+      }
+    } catch (e) {
+      print('Error in markCustomerNotificationUnread: $e');
+      throw Exception('Failed to mark notification as unread: $e');
+    }
+  }
+
   // Delete notification
   static Future<void> deleteCustomerNotification(int id) async {
     try {

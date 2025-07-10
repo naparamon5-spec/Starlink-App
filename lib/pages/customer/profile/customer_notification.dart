@@ -216,11 +216,38 @@ class _CustomerNotificationScreenState
   }
 
   Future<void> _markAsRead(int notificationId) async {
-    await Provider.of<NotificationProvider>(
-      context,
-      listen: false,
-    ).markAsRead(notificationId);
-    await _loadNotifications();
+    // Find the notification to check its current read status
+    final notification = _notifications.firstWhere(
+      (n) => n['id'] == notificationId,
+      orElse: () => {},
+    );
+
+    if (notification.isNotEmpty) {
+      final isCurrentlyRead = notification['isRead'] ?? false;
+
+      if (isCurrentlyRead) {
+        // If currently read, mark as unread
+        await NotificationService.markCustomerNotificationUnread(
+          notificationId,
+        );
+      } else {
+        // If currently unread, mark as read
+        await NotificationService.markCustomerNotificationRead(notificationId);
+      }
+
+      // Update the local state immediately for better UX
+      setState(() {
+        final index = _notifications.indexWhere(
+          (n) => n['id'] == notificationId,
+        );
+        if (index != -1) {
+          _notifications[index]['isRead'] = !isCurrentlyRead;
+        }
+      });
+
+      // Refresh the notification provider
+      await Provider.of<NotificationProvider>(context, listen: false).refresh();
+    }
   }
 
   void _clearAllNotifications() {
