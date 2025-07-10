@@ -118,6 +118,7 @@ class _CustomerNotificationScreenState
                       .map(
                         (n) => {
                           ...n,
+                          'isRead': n['isRead'] ?? n['is_read'] == 1,
                           'icon': parseIcon(n['icon']),
                           'color': parseColor(n['color']),
                           'timestamp': parseTimestamp(
@@ -140,6 +141,7 @@ class _CustomerNotificationScreenState
                     .map(
                       (n) => {
                         ...n,
+                        'isRead': n['isRead'] ?? n['is_read'] == 1,
                         'icon': parseIcon(n['icon']),
                         'color': parseColor(n['color']),
                         'timestamp': parseTimestamp(
@@ -225,28 +227,17 @@ class _CustomerNotificationScreenState
     if (notification.isNotEmpty) {
       final isCurrentlyRead = notification['isRead'] ?? false;
 
-      if (isCurrentlyRead) {
-        // If currently read, mark as unread
-        await NotificationService.markCustomerNotificationUnread(
-          notificationId,
-        );
-      } else {
-        // If currently unread, mark as read
+      if (!isCurrentlyRead) {
+        // Only mark as read if currently unread
         await NotificationService.markCustomerNotificationRead(notificationId);
+        // Refresh the notification provider and reload notifications from backend
+        await Provider.of<NotificationProvider>(
+          context,
+          listen: false,
+        ).refresh();
+        await _loadNotifications();
       }
-
-      // Update the local state immediately for better UX
-      setState(() {
-        final index = _notifications.indexWhere(
-          (n) => n['id'] == notificationId,
-        );
-        if (index != -1) {
-          _notifications[index]['isRead'] = !isCurrentlyRead;
-        }
-      });
-
-      // Refresh the notification provider
-      await Provider.of<NotificationProvider>(context, listen: false).refresh();
+      // If already read, do nothing
     }
   }
 
