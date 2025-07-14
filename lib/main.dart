@@ -18,14 +18,6 @@ void main() async {
   );
   // Set up SSL configuration based on environment
   HttpOverrides.global = SSLConfig.httpOverrides;
-  // Create a test notification to verify the system works
-  await NotificationService.createNotification(
-    title: 'Welcome to Starlink App',
-    message: 'Your notification system is working!',
-    type: 'system',
-    icon: Icons.notifications_active,
-    color: Colors.blue,
-  );
   runApp(
     MultiProvider(
       providers: [
