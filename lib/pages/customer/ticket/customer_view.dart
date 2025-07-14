@@ -237,16 +237,36 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         });
         await _saveInProgressTicketData(widget.ticket);
 
-        // Create notification for ticket acceptance
-        final ticketId = widget.ticket['id'].toString();
-        final ticketType = widget.ticket['type'] ?? 'Unknown';
-        final customerName = widget.ticket['contact_name'] ?? 'Customer';
-
-        await NotificationService.createTicketAcceptanceNotification(
-          ticketId: ticketId,
-          ticketType: ticketType,
-          customerName: customerName,
+        // Store notification in the database for ticket acceptance
+        print('DEBUG: Ticket object: ${widget.ticket}');
+        final recipientUserId =
+            widget.ticket['user_id'] ??
+            (widget.ticket['full_data'] != null
+                ? widget.ticket['full_data']['user_id']
+                : null) ??
+            widget.ticket['contact'] ??
+            widget.ticket['customer_id'];
+        print('DEBUG: Using recipientUserId: $recipientUserId');
+        final acceptancePayload = {
+          'user_id': recipientUserId,
+          'title': 'Ticket Accepted',
+          'message':
+              'Ticket #${widget.ticket['id']} (${widget.ticket['type']}) has been accepted by ${widget.ticket['contact_name'] ?? 'Customer'}',
+          'type': 'ticket_accepted',
+          'icon': 'check_circle',
+          'color': '#4CAF50',
+          'data': {
+            'ticket_id': widget.ticket['id'],
+            'ticket_type': widget.ticket['type'],
+            'customer_name': widget.ticket['contact_name'],
+            'action': 'ticket_accepted',
+          },
+        };
+        print(
+          'DEBUG: Acceptance notification payload: ' +
+              acceptancePayload.toString(),
         );
+        await NotificationService.createCustomerNotification(acceptancePayload);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -294,16 +314,35 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
           }
         });
 
-        // Create notification for ticket resolution
-        final ticketId = widget.ticket['id'].toString();
-        final ticketType = widget.ticket['type'] ?? 'Unknown';
-        final customerName = widget.ticket['contact_name'] ?? 'Customer';
-
-        await NotificationService.createTicketResolutionNotification(
-          ticketId: ticketId,
-          ticketType: ticketType,
-          customerName: customerName,
+        // Store notification in the database for ticket resolution
+        print('DEBUG: Ticket object: ${widget.ticket}');
+        final resolveRecipientUserId =
+            widget.ticket['user_id'] ??
+            (widget.ticket['full_data'] != null
+                ? widget.ticket['full_data']['user_id']
+                : null) ??
+            widget.ticket['contact'] ??
+            widget.ticket['customer_id'];
+        print('DEBUG: Using recipientUserId: $resolveRecipientUserId');
+        final resolvePayload = {
+          'user_id': resolveRecipientUserId,
+          'title': 'Ticket Resolved',
+          'message':
+              'Ticket #${widget.ticket['id']} (${widget.ticket['type']}) has been resolved by ${widget.ticket['contact_name'] ?? 'Customer'}',
+          'type': 'ticket_resolved',
+          'icon': 'task_alt',
+          'color': '#2196F3',
+          'data': {
+            'ticket_id': widget.ticket['id'],
+            'ticket_type': widget.ticket['type'],
+            'customer_name': widget.ticket['contact_name'],
+            'action': 'ticket_resolved',
+          },
+        };
+        print(
+          'DEBUG: Resolve notification payload: ' + resolvePayload.toString(),
         );
+        await NotificationService.createCustomerNotification(resolvePayload);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -353,16 +392,33 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
           }
         });
 
-        // Create notification for ticket closure
-        final ticketId = widget.ticket['id'].toString();
-        final ticketType = widget.ticket['type'] ?? 'Unknown';
-        final customerName = widget.ticket['contact_name'] ?? 'Customer';
-
-        await NotificationService.createTicketClosureNotification(
-          ticketId: ticketId,
-          ticketType: ticketType,
-          customerName: customerName,
-        );
+        // Store notification in the database for ticket closure
+        print('DEBUG: Ticket object: ${widget.ticket}');
+        final closeRecipientUserId =
+            widget.ticket['user_id'] ??
+            (widget.ticket['full_data'] != null
+                ? widget.ticket['full_data']['user_id']
+                : null) ??
+            widget.ticket['contact'] ??
+            widget.ticket['customer_id'];
+        print('DEBUG: Using recipientUserId: $closeRecipientUserId');
+        final closePayload = {
+          'user_id': closeRecipientUserId,
+          'title': 'Ticket Closed',
+          'message':
+              'Ticket #${widget.ticket['id']} (${widget.ticket['type']}) has been closed by ${widget.ticket['contact_name'] ?? 'Customer'}',
+          'type': 'ticket_closed',
+          'icon': 'cancel',
+          'color': '#F44336',
+          'data': {
+            'ticket_id': widget.ticket['id'],
+            'ticket_type': widget.ticket['type'],
+            'customer_name': widget.ticket['contact_name'],
+            'action': 'ticket_closed',
+          },
+        };
+        print('DEBUG: Close notification payload: ' + closePayload.toString());
+        await NotificationService.createCustomerNotification(closePayload);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

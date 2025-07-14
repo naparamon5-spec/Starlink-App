@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../services/notification_service.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/notification_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -26,6 +27,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Future<void> _loadNotifications() async {
     setState(() => _isLoading = true);
     try {
+      // For backend integration, use the backend version of getNotifications
+      // final prefs = await SharedPreferences.getInstance();
+      // final userId = prefs.getInt('user_id');
+      // if (userId == null) throw Exception('User not logged in');
+      // final notifications = await NotificationService.getNotifications(userId);
       final notifications = await NotificationService.getNotifications();
       setState(() {
         _notifications = notifications;
