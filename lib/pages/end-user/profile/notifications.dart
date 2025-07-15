@@ -5,6 +5,30 @@ import 'package:provider/provider.dart';
 import '../../../providers/notification_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+Color hexToColor(String hex) {
+  hex = hex.replaceAll('#', '');
+  if (hex.length == 6) {
+    hex = 'FF$hex'; // add alpha if missing
+  }
+  return Color(int.parse(hex, radix: 16));
+}
+
+IconData iconFromString(String iconName) {
+  switch (iconName) {
+    case 'check_circle':
+      return Icons.check_circle;
+    case 'task_alt':
+      return Icons.task_alt;
+    case 'cancel':
+      return Icons.cancel;
+    case 'confirmation_number':
+      return Icons.confirmation_number;
+    // Add more mappings as needed
+    default:
+      return Icons.notifications; // fallback icon
+  }
+}
+
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
 
@@ -27,14 +51,26 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Future<void> _loadNotifications() async {
     setState(() => _isLoading = true);
     try {
-      // For backend integration, use the backend version of getNotifications
-      // final prefs = await SharedPreferences.getInstance();
-      // final userId = prefs.getInt('user_id');
-      // if (userId == null) throw Exception('User not logged in');
-      // final notifications = await NotificationService.getNotifications(userId);
-      final notifications = await NotificationService.getNotifications();
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('user_id');
+      if (userId == null) throw Exception('User not logged in');
+      final notifications = await NotificationService.getCustomerNotifications(
+        userId,
+      );
       setState(() {
-        _notifications = notifications;
+        _notifications =
+            notifications.map((n) {
+              return {
+                ...n,
+                'timestamp':
+                    n['timestamp'] != null
+                        ? (n['timestamp'] is DateTime
+                            ? n['timestamp']
+                            : DateTime.tryParse(n['timestamp'].toString()) ??
+                                DateTime.now())
+                        : DateTime.now(),
+              };
+            }).toList();
         _isLoading = false;
         _selectedNotificationIds.clear();
         _selectionMode = false;
@@ -356,7 +392,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           color:
                               (notification['isRead'] ?? false)
                                   ? Colors.grey[200]!
-                                  : notification['color'].withOpacity(0.5),
+                                  : hexToColor(
+                                    notification['color'],
+                                  ).withOpacity(0.5),
                           width: (notification['isRead'] ?? false) ? 1 : 2,
                         ),
                       ),
@@ -386,12 +424,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: notification['color'].withOpacity(0.1),
+                                  color: hexToColor(
+                                    notification['color'],
+                                  ).withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
-                                  notification['icon'],
-                                  color: notification['color'],
+                                  iconFromString(notification['icon']),
+                                  color: hexToColor(notification['color']),
                                   size: 24,
                                 ),
                               ),
@@ -449,7 +489,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                   height: 8,
                                   margin: const EdgeInsets.only(left: 8),
                                   decoration: BoxDecoration(
-                                    color: notification['color'],
+                                    color: hexToColor(notification['color']),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
