@@ -187,22 +187,19 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
           _tickets = List<Map<String, dynamic>>.from(
             response['data']
                 .where((ticket) {
-                  // Convert IDs to strings for comparison
-                  String ticketContact = ticket['contact']?.toString() ?? '';
+                  String ticketContact = ticket['contact_id']?.toString() ?? '';
                   String ticketUserId = ticket['user_id']?.toString() ?? '';
                   String currentUserId = _userId.toString();
-                  // Show tickets where this user is either the contact or the creator
                   bool isUserRelated =
                       ticketContact == currentUserId ||
                       ticketUserId == currentUserId;
-                  // Only include tickets with status OPEN or IN PROGRESS
                   String backendStatus =
                       (ticket['status'] ?? '').toString().toLowerCase().trim();
                   bool isOpenOrInProgress =
                       backendStatus == 'open' ||
                       backendStatus == 'in_progress' ||
-                      backendStatus == 'in_progress' ||
-                      backendStatus == 'in_progress';
+                      backendStatus == 'in progress' ||
+                      backendStatus == 'inprogress';
                   return isUserRelated && isOpenOrInProgress;
                 })
                 .map((ticket) {
@@ -303,7 +300,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
               'id': ticket['id'],
               'Status': displayStatus,
               'Ticket Type': ticket['type'] ?? 'N/A',
-              'Contact': ticket['contact'] ?? 'N/A',
+              'Contact': ticket['contact_name'] ?? 'N/A',
               'Subscription': ticket['subscription'] ?? 'N/A',
               'Description': ticket['description'] ?? 'No description',
               'Created At': ticket['created_at'] ?? 'N/A',
