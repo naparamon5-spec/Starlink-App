@@ -248,7 +248,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
 
         // Create the ticket with attachments
         final newTicket = {
-          'user_id': _selectedContactId,
+          'user_id': widget.userId,
           'type': _selectedTicketType,
           'contact': _selectedContactId,
           'contact_name': _selectedContactName ?? _selectedContactId ?? '',
@@ -392,7 +392,7 @@ class _NewTicketModalState extends State<NewTicketModal> {
               'status': 'OPEN',
               'created_at': DateTime.now().toString(),
               'attachments': attachmentsData,
-              'user_id': _selectedContactId,
+              'user_id': widget.userId,
               'contact': _selectedContactId,
               'contact_name': _selectedContactName ?? '',
               'type': _selectedTicketType,

@@ -148,33 +148,11 @@ class _TicketScreenState extends State<TicketScreen> {
                 displayStatus = backendStatus.toUpperCase();
               }
 
-              // Compose contact name: prefer user_name, then name, then first_name + last_name
+              // Compose contact name: use contact_name or contact field from backend
               String contactName =
-                  (ticket['user_name'] != null &&
-                          ticket['user_name'].toString().trim().isNotEmpty)
-                      ? ticket['user_name']
-                      : (ticket['name'] != null &&
-                          ticket['name'].toString().trim().isNotEmpty)
-                      ? ticket['name']
-                      : (((ticket['first_name'] ?? '') +
-                                  ((ticket['last_name'] != null &&
-                                          ticket['last_name']
-                                              .toString()
-                                              .trim()
-                                              .isNotEmpty)
-                                      ? ' ' + ticket['last_name']
-                                      : ''))
-                              .trim()
-                              .isNotEmpty
-                          ? ((ticket['first_name'] ?? '') +
-                              ((ticket['last_name'] != null &&
-                                      ticket['last_name']
-                                          .toString()
-                                          .trim()
-                                          .isNotEmpty)
-                                  ? ' ' + ticket['last_name']
-                                  : ''))
-                          : 'Not Assigned');
+                  ticket['contact_name']?.toString() ??
+                  ticket['contact']?.toString() ??
+                  'Not Assigned';
 
               final processedTicket = {
                 'id': ticket['id'],
@@ -336,7 +314,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               Expanded(
                                 child: _buildDetailItem(
                                   'Contact',
-                                  fullData['user_name']?.toString() ??
+                                  fullData['contact_name']?.toString() ??
                                       'Not Assigned',
                                 ),
                               ),
@@ -1082,7 +1060,8 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                           Expanded(
                             child: _buildDetailItem(
                               'Contact',
-                              _ticket['full_data']?['user_name']?.toString() ??
+                              _ticket['full_data']?['contact_name']
+                                      ?.toString() ??
                                   'Not Assigned',
                             ),
                           ),
