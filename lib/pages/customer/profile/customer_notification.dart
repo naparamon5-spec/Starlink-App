@@ -71,6 +71,8 @@ class _CustomerNotificationScreenState
   bool _selectionMode = false;
   Set<int> _selectedNotificationIds = {};
   int? customerUserId;
+  // Add toggle state
+  bool _showOnlyTickets = false;
 
   @override
   void initState() {
@@ -248,6 +250,9 @@ class _CustomerNotificationScreenState
 
   @override
   Widget build(BuildContext context) {
+    // Choose which notifications to show based on toggle
+    final notificationsToShow =
+        _showOnlyTickets ? _ticketNotifications : _notifications;
     return Scaffold(
       appBar:
           widget.showAppBar
@@ -310,6 +315,34 @@ class _CustomerNotificationScreenState
                       tooltip: 'Select notifications',
                     ),
                 ],
+                // Add toggle button
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(48),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('All'),
+                        selected: !_showOnlyTickets,
+                        onSelected: (selected) {
+                          setState(() {
+                            _showOnlyTickets = false;
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('Tickets'),
+                        selected: _showOnlyTickets,
+                        onSelected: (selected) {
+                          setState(() {
+                            _showOnlyTickets = true;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               )
               : null,
       body: RefreshIndicator(
@@ -317,7 +350,7 @@ class _CustomerNotificationScreenState
         child:
             _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _notifications.isEmpty
+                : notificationsToShow.isEmpty
                 ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -346,9 +379,9 @@ class _CustomerNotificationScreenState
                 )
                 : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: _notifications.length,
+                  itemCount: notificationsToShow.length,
                   itemBuilder: (context, index) {
-                    final notification = _notifications[index];
+                    final notification = notificationsToShow[index];
                     final id = notification['id'] as int;
                     return Dismissible(
                       key: Key(id.toString()),
