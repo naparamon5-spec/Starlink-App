@@ -14,6 +14,56 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
+// Modern ListTile for Profile Actions
+class _ProfileActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? iconColor;
+  final Color? textColor;
+
+  const _ProfileActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.iconColor,
+    this.textColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: (iconColor ?? Theme.of(context).primaryColor)
+            .withOpacity(0.1),
+        child: Icon(icon, color: iconColor ?? Theme.of(context).primaryColor),
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontWeight: FontWeight.w500,
+          color: textColor ?? Colors.black87,
+        ),
+      ),
+      trailing: Icon(
+        Icons.arrow_forward_ios,
+        size: 16,
+        color: Colors.grey[400],
+      ),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      hoverColor: Colors.grey[100],
+    );
+  }
+}
+
+// Divider for between tiles
+Widget _buildDivider() => Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 16),
+  child: Divider(height: 1, color: Colors.grey[200]),
+);
+
 class _ProfileScreenState extends State<ProfileScreen> {
   late SharedPreferences _prefs;
   String _position = 'Loading...';
@@ -407,113 +457,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       const SizedBox(height: 24),
 
-                      // Action Buttons - Vertically arranged
-                      Column(
-                        children: [
-                          _ActionButton(
-                            icon: Icons.edit,
-                            label: 'Edit Profile',
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => EditProfileScreen(
-                                        onProfileUpdated: _updateProfileData,
-                                      ),
-                                ),
-                              );
-                              // Update UI with returned data if available
-                              if (result != null &&
-                                  result is Map<String, dynamic>) {
-                                _updateProfileData(
-                                  Map<String, String>.from(result),
-                                );
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.check_circle,
-                                          color: Colors.white,
+                      // Modern Action List
+                      Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        margin: EdgeInsets.zero,
+                        child: Column(
+                          children: [
+                            _ProfileActionTile(
+                              icon: Icons.edit,
+                              label: 'Edit Profile',
+                              onTap: () async {
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => EditProfileScreen(
+                                          onProfileUpdated: _updateProfileData,
                                         ),
-                                        const SizedBox(width: 12),
-                                        const Text(
-                                          'Profile updated successfully!',
-                                          style: TextStyle(fontSize: 16),
-                                        ),
-                                      ],
-                                    ),
-                                    backgroundColor: const Color(0xFF133343),
-                                    duration: const Duration(seconds: 2),
-                                    behavior: SnackBarBehavior.floating,
-                                    margin: const EdgeInsets.all(16),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
                                   ),
                                 );
-                              }
-                              setState(() {
-                                _isLoading = true;
-                              });
-                              await _loadProfileData();
-                            },
-                            backgroundColor: Colors.grey[300] ?? Colors.grey,
-                            iconColor: Colors.black87,
-                            textColor: Colors.black87,
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          _ActionButton(
-                            icon: Icons.security,
-                            label: 'Security Settings',
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) =>
-                                          const SecuritySettingsScreen(),
-                                ),
-                              );
-                            },
-                            backgroundColor: Colors.grey[300] ?? Colors.grey,
-                            iconColor: Colors.black87,
-                            textColor: Colors.black87,
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          _ActionButton(
-                            icon: Icons.notifications_active,
-                            label: 'Notification',
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => const NotificationsPage(),
-                                ),
-                              );
-                            },
-                            backgroundColor: Colors.grey[300] ?? Colors.grey,
-                            iconColor: Colors.black87,
-                            textColor: Colors.black87,
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          _ActionButton(
-                            icon: Icons.logout,
-                            label: 'Logout',
-                            onPressed: _handleLogout,
-                            backgroundColor: Colors.grey[300] ?? Colors.grey,
-                            iconColor: Colors.black87,
-                            textColor: Colors.black87,
-                          ),
-                        ],
+                                // Update UI with returned data if available
+                                if (result != null &&
+                                    result is Map<String, dynamic>) {
+                                  _updateProfileData(
+                                    Map<String, String>.from(result),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.check_circle,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          const Text(
+                                            'Profile updated successfully!',
+                                            style: TextStyle(fontSize: 16),
+                                          ),
+                                        ],
+                                      ),
+                                      backgroundColor: const Color(0xFF133343),
+                                      duration: const Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
+                                      margin: const EdgeInsets.all(16),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  );
+                                }
+                                setState(() {
+                                  _isLoading = true;
+                                });
+                                await _loadProfileData();
+                              },
+                            ),
+                            _buildDivider(),
+                            _ProfileActionTile(
+                              icon: Icons.security,
+                              label: 'Security Settings',
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) =>
+                                            const SecuritySettingsScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                            _buildDivider(),
+                            _ProfileActionTile(
+                              icon: Icons.notifications_active,
+                              label: 'Notification',
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => const NotificationsPage(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Logout button separated and styled
+                      Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        margin: EdgeInsets.zero,
+                        child: _ProfileActionTile(
+                          icon: Icons.logout,
+                          label: 'Logout',
+                          iconColor: Colors.red[400],
+                          textColor: Colors.red[400],
+                          onTap: _handleLogout,
+                        ),
                       ),
                     ],
                   ),
@@ -564,55 +613,6 @@ class _InfoItem extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-// Component for action buttons
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final Color backgroundColor;
-  final Color iconColor;
-  final Color textColor;
-
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    required this.backgroundColor,
-    required this.iconColor,
-    required this.textColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: backgroundColor,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          elevation: 2,
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: iconColor),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: textColor,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
