@@ -62,6 +62,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
             notifications.map((n) {
               return {
                 ...n,
+                'isRead': n['isRead'] ?? n['is_read'] == 1, // Robust mapping
+                'color': hexToColor(n['color']),
                 'timestamp':
                     n['timestamp'] != null
                         ? (n['timestamp'] is DateTime
@@ -132,43 +134,37 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _markAsRead(int notificationId) async {
-    // Find the notification to check its current read status
-    final notification = _notifications.firstWhere(
-      (n) => n['id'] == notificationId,
-      orElse: () => {},
-    );
-
-    if (notification.isNotEmpty) {
-      final isCurrentlyRead = notification['isRead'] ?? false;
-
-      if (isCurrentlyRead) {
-        // If currently read, mark as unread
-        await NotificationService.markAsRead(notificationId);
-        // Update the local state immediately for better UX
-        setState(() {
-          final index = _notifications.indexWhere(
-            (n) => n['id'] == notificationId,
+    final index = _notifications.indexWhere((n) => n['id'] == notificationId);
+    if (index != -1) {
+      final isCurrentlyRead = _notifications[index]['isRead'] ?? false;
+      // Optimistically update UI
+      setState(() {
+        _notifications[index]['isRead'] = !isCurrentlyRead;
+      });
+      try {
+        if (!isCurrentlyRead) {
+          await NotificationService.markCustomerNotificationRead(
+            notificationId,
           );
-          if (index != -1) {
-            _notifications[index]['isRead'] = false;
-          }
-        });
-      } else {
-        // If currently unread, mark as read
-        await NotificationService.markAsRead(notificationId);
-        // Update the local state immediately for better UX
-        setState(() {
-          final index = _notifications.indexWhere(
-            (n) => n['id'] == notificationId,
+        } else {
+          await NotificationService.markCustomerNotificationUnread(
+            notificationId,
           );
-          if (index != -1) {
-            _notifications[index]['isRead'] = true;
-          }
+        }
+        await Provider.of<NotificationProvider>(
+          context,
+          listen: false,
+        ).refresh();
+        // Do NOT call _loadNotifications() here
+      } catch (e) {
+        // Revert change if backend fails
+        setState(() {
+          _notifications[index]['isRead'] = isCurrentlyRead;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update notification status.')),
+        );
       }
-
-      // Refresh the notification provider
-      await Provider.of<NotificationProvider>(context, listen: false).refresh();
     }
   }
 
@@ -385,6 +381,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
                             },
                     child: Card(
                       elevation: (notification['isRead'] ?? false) ? 0 : 2,
+                      color:
+                          (notification['isRead'] ?? false)
+                              ? Colors.grey[200]
+                              : Colors.white,
                       margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -392,9 +392,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           color:
                               (notification['isRead'] ?? false)
                                   ? Colors.grey[200]!
-                                  : hexToColor(
-                                    notification['color'],
-                                  ).withOpacity(0.5),
+                                  : notification['color'].withOpacity(0.5),
                           width: (notification['isRead'] ?? false) ? 1 : 2,
                         ),
                       ),
@@ -424,14 +422,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: hexToColor(
-                                    notification['color'],
-                                  ).withOpacity(0.1),
+                                  color: notification['color'].withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
                                   iconFromString(notification['icon']),
-                                  color: hexToColor(notification['color']),
+                                  color: notification['color'],
                                   size: 24,
                                 ),
                               ),
@@ -489,7 +485,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                   height: 8,
                                   margin: const EdgeInsets.only(left: 8),
                                   decoration: BoxDecoration(
-                                    color: hexToColor(notification['color']),
+                                    color: notification['color'],
                                     shape: BoxShape.circle,
                                   ),
                                 ),

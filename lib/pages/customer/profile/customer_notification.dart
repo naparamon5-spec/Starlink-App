@@ -180,26 +180,24 @@ class _CustomerNotificationScreenState
   }
 
   Future<void> _markAsRead(int notificationId) async {
-    // Find the notification to check its current read status
-    final notification = _notifications.firstWhere(
-      (n) => n['id'] == notificationId,
-      orElse: () => {},
-    );
-
-    if (notification.isNotEmpty) {
-      final isCurrentlyRead = notification['isRead'] ?? false;
-
+    // Find the notification index
+    final index = _notifications.indexWhere((n) => n['id'] == notificationId);
+    if (index != -1) {
+      final isCurrentlyRead = _notifications[index]['isRead'] ?? false;
+      // Optimistically update UI
+      setState(() {
+        _notifications[index]['isRead'] = !isCurrentlyRead;
+      });
       if (!isCurrentlyRead) {
-        // Only mark as read if currently unread
         await NotificationService.markCustomerNotificationRead(notificationId);
-        // Refresh the notification provider and reload notifications from backend
-        await Provider.of<NotificationProvider>(
-          context,
-          listen: false,
-        ).refresh();
-        await _loadNotifications();
+      } else {
+        await NotificationService.markCustomerNotificationUnread(
+          notificationId,
+        );
       }
-      // If already read, do nothing
+      // Refresh the notification provider and list
+      await Provider.of<NotificationProvider>(context, listen: false).refresh();
+      await _loadNotifications();
     }
   }
 
