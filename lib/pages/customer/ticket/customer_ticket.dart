@@ -29,26 +29,8 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   int _currentPage = 1;
 
   // Updated filter options to match backend ticket_type values
-  final List<String> _filterOptions = [
-    'All',
-    'Billing',
-    'Connection Issue',
-    'Request for Off/On',
-    'Request for Reactivate',
-    'Request for Deactivate',
-    'Device/Kit/Router Issue',
-  ];
-
-  // Mapping frontend filter options to backend ticket_type for accurate filtering
-  final Map<String, String> _filterToTicketType = {
-    'All': 'All',
-    'Billing': 'Billing',
-    'Connection Issue': 'Connection Issue',
-    'Request for Off/On': 'Request for Off/On',
-    'Request for Reactivate': 'Request for Reactivate',
-    'Request for Deactivate': 'Request for Deactivate',
-    'Device/Kit/Router Issue': 'Device/Kit/Router Issue',
-  };
+  List<String> _filterOptions = ['All'];
+  Map<String, String> _filterToTicketType = {'All': 'All'};
 
   final List<String> _tableHeaders = [
     'Status',
@@ -64,6 +46,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _loadCategories();
     _searchController.addListener(_handleSearch);
   }
 
@@ -89,9 +72,33 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     }
   }
 
+  Future<void> _loadCategories() async {
+    try {
+      final categoriesData = await ApiService.getCategories();
+      if (categoriesData['status'] == 'success' &&
+          categoriesData['data'] != null) {
+        final categories = List<Map<String, dynamic>>.from(
+          categoriesData['data'],
+        );
+        setState(() {
+          _filterOptions = [
+            'All',
+            ...categories.map((c) => c['name'].toString()),
+          ];
+          _filterToTicketType = {'All': 'All'};
+          for (final c in categories) {
+            _filterToTicketType[c['name'].toString()] = c['name'].toString();
+          }
+        });
+      }
+    } catch (e) {
+      // fallback: keep default filter options
+    }
+  }
+
   void _handleSearch() {
     final query = _searchController.text.toLowerCase();
-    final selectedStatus = _selectedFilter;
+    final selectedType = _selectedFilter;
 
     setState(() {
       _filteredTickets =
@@ -101,6 +108,18 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
             final isOpenOrInProgress =
                 status == 'OPEN' || status == 'IN PROGRESS';
             if (!isOpenOrInProgress) return false;
+            // Filter by ticket type using mapping, ignore case and whitespace
+            bool matchesFilter = true;
+            if (selectedType != 'All') {
+              final ticketType =
+                  (ticket['Ticket Type']?.toString() ?? '')
+                      .toLowerCase()
+                      .trim();
+              final filterType =
+                  (_filterToTicketType[selectedType]?.toLowerCase().trim() ??
+                      '');
+              matchesFilter = ticketType == filterType;
+            }
             // Filter by search query
             bool matchesQuery = true;
             if (query.isNotEmpty) {
@@ -109,7 +128,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                 return value.contains(query);
               });
             }
-            return matchesQuery;
+            return matchesFilter && matchesQuery;
           }).toList();
       // Reset to first page when search/filter changes
       _currentPage = 1;
