@@ -19,6 +19,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _showValidation = false;
   bool _isLoading = false;
   String? _errorMessage;
+  String? _emailError;
+  String? _passwordError;
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -38,6 +40,8 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _showValidation = true;
       _errorMessage = null;
+      _emailError = null;
+      _passwordError = null;
     });
 
     if (_formKey.currentState!.validate() && _isAgreedToTerms) {
@@ -128,9 +132,17 @@ class _LoginScreenState extends State<LoginScreen> {
             );
           }
         } else {
+          final msg = response['message']?.toString().toLowerCase() ?? '';
           setState(() {
-            _errorMessage = response['message'];
+            if (msg.contains('email not found')) {
+              _emailError = response['message'];
+            } else if (msg.contains('incorrect password')) {
+              _passwordError = response['message'];
+            } else {
+              _errorMessage = response['message'];
+            }
           });
+          return;
         }
       } catch (e) {
         setState(() {
@@ -224,6 +236,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontSize: 12,
                       ),
                       errorMaxLines: 2,
+                      errorText: _emailError,
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -297,6 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           });
                         },
                       ),
+                      errorText: _passwordError,
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
