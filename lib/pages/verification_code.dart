@@ -286,7 +286,7 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
                   textAlign: TextAlign.center,
                   maxLength: 6,
                   style: const TextStyle(
-                    fontSize: 24,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 8,
                   ),
