@@ -7,6 +7,8 @@ import 'ticket_modal.dart';
 import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ticket.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/notification_provider.dart';
 
 class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key});
@@ -66,6 +68,14 @@ class _TicketScreenState extends State<TicketScreen> {
     _loadUserData();
     _loadSubscriptionsAndTickets();
     _searchController.addListener(_handleSearch);
+    // Ensure notification count is refreshed when screen is shown
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<NotificationProvider>(
+        context,
+        listen: false,
+      );
+      provider.refresh();
+    });
   }
 
   @override
