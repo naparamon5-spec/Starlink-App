@@ -556,9 +556,11 @@ class _ProfileActionTile extends StatelessWidget {
       ),
       title: Text(
         label,
-        style: TextStyle(
+        style: const TextStyle(
           fontWeight: FontWeight.w500,
-          color: textColor ?? Colors.black87,
+          fontSize: 16,
+          // No fontFamily specified, matches _InfoItem and default app font
+          color: Colors.black87,
         ),
       ),
       trailing: Icon(
