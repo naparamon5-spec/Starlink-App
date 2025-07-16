@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
@@ -24,7 +27,13 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     super.dispose();
   }
 
-  void _saveSecuritySettings() {
+  // Helper to get user_id from SharedPreferences
+  Future<int?> getUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('user_id');
+  }
+
+  void _saveSecuritySettings() async {
     if (_formKey.currentState!.validate()) {
       if (_newPasswordController.text != _confirmPasswordController.text) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -33,11 +42,52 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         return;
       }
 
-      // Here you would typically update the password in your backend
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password updated successfully')),
-      );
-      Navigator.pop(context);
+      final userId = await getUserId();
+      if (userId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User not found. Please log in again.')),
+        );
+        return;
+      }
+
+      try {
+        final response = await http.post(
+          Uri.parse(
+            // IMPORTANT: Replace with your actual backend URL!
+            // For Android emulator use: http://10.0.2.2/starlink_app/routes/change_password.php
+            // For real device use: http://<your-computer-ip>/starlink_app/routes/change_password.php
+            'http://10.0.2.2/starlink_app/backend/routes/change_password.php',
+          ),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'user_id': userId,
+            'current_password': _currentPasswordController.text,
+            'new_password': _newPasswordController.text,
+          }),
+        );
+
+        // Debug print
+        print('Status code: ${response.statusCode}');
+        print('Response body: ${response.body}');
+
+        final data = jsonDecode(response.body);
+
+        if (data['success']) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(data['message'])));
+          Navigator.pop(context);
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(data['message'])));
+        }
+      } catch (e) {
+        print('Exception: ${e.toString()}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('An error occurred. Please try again.')),
+        );
+      }
     }
   }
 
