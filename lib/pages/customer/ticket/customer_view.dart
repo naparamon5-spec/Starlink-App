@@ -266,7 +266,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
           'DEBUG: Acceptance notification payload: ' +
               acceptancePayload.toString(),
         );
-        await NotificationService.createCustomerNotification(acceptancePayload);
+        // await NotificationService.createCustomerNotification(acceptancePayload);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -342,7 +342,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         print(
           'DEBUG: Resolve notification payload: ' + resolvePayload.toString(),
         );
-        await NotificationService.createCustomerNotification(resolvePayload);
+        // await NotificationService.createCustomerNotification(resolvePayload);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -418,7 +418,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
           },
         };
         print('DEBUG: Close notification payload: ' + closePayload.toString());
-        await NotificationService.createCustomerNotification(closePayload);
+        // await NotificationService.createCustomerNotification(closePayload);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
