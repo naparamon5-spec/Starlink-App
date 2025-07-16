@@ -31,26 +31,8 @@ class _TicketScreenState extends State<TicketScreen> {
   int _currentPage = 1;
 
   // Updated filter options to match backend ticket_type values
-  final List<String> _filterOptions = [
-    'All',
-    'Billing',
-    'Connection Issue',
-    'Request for Off/On',
-    'Request for Reactivate',
-    'Request for Deactivate',
-    'Device/Kit/Router Issue',
-  ];
-
-  // Mapping frontend filter options to backend ticket_type for accurate filtering
-  final Map<String, String> _filterToTicketType = {
-    'All': 'All',
-    'Billing': 'Billing',
-    'Connection Issue': 'Connection Issue',
-    'Request for Off/On': 'Request for Off/On',
-    'Request for Reactivate': 'Request for Reactivate',
-    'Request for Deactivate': 'Request for Deactivate',
-    'Device/Kit/Router Issue': 'Device/Kit/Router Issue',
-  };
+  List<String> _filterOptions = ['All'];
+  Map<String, String> _filterToTicketType = {'All': 'All'};
 
   final List<String> _tableHeaders = [
     'Ticket Type',
@@ -66,7 +48,7 @@ class _TicketScreenState extends State<TicketScreen> {
   void initState() {
     super.initState();
     _loadUserData();
-    _loadSubscriptionsAndTickets();
+    _loadCategoriesAndTickets();
     _searchController.addListener(_handleSearch);
     // Ensure notification count is refreshed when screen is shown
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -99,19 +81,27 @@ class _TicketScreenState extends State<TicketScreen> {
     setState(() {
       _filteredTickets =
           _tickets.where((ticket) {
-            // Filter by ticket type
+            // Filter by ticket type using mapping, ignore case and whitespace
             bool matchesFilter = true;
             if (selectedTicketType != 'All') {
-              final ticketType = ticket['type']?.toString().toLowerCase() ?? '';
-              matchesFilter = ticketType == selectedTicketType.toLowerCase();
+              final ticketType =
+                  (ticket['type']?.toString() ?? '').toLowerCase().trim();
+              final filterType =
+                  (_filterToTicketType[selectedTicketType]
+                          ?.toLowerCase()
+                          .trim() ??
+                      '');
+              matchesFilter = ticketType == filterType;
             }
 
-            // Filter by search query
+            // Filter by search query (search all fields)
             bool matchesQuery = true;
             if (query.isNotEmpty) {
-              matchesQuery =
-                  ticket['type']?.toString().toLowerCase().contains(query) ??
-                  false;
+              matchesQuery = ticket.values.any(
+                (value) =>
+                    value != null &&
+                    value.toString().toLowerCase().contains(query),
+              );
             }
 
             return matchesFilter && matchesQuery;
@@ -176,6 +166,32 @@ class _TicketScreenState extends State<TicketScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _loadCategoriesAndTickets() async {
+    // Fetch ticket categories for filter
+    try {
+      final categoriesData = await ApiService.getCategories();
+      if (categoriesData['status'] == 'success' &&
+          categoriesData['data'] != null) {
+        final categories = List<Map<String, dynamic>>.from(
+          categoriesData['data'],
+        );
+        setState(() {
+          _filterOptions = [
+            'All',
+            ...categories.map((c) => c['name'].toString()),
+          ];
+          _filterToTicketType = {'All': 'All'};
+          for (final c in categories) {
+            _filterToTicketType[c['name'].toString()] = c['name'].toString();
+          }
+        });
+      }
+    } catch (e) {
+      // fallback: keep default filter options
+    }
+    await _loadSubscriptionsAndTickets();
   }
 
   Future<void> _loadSubscriptionsAndTickets() async {
