@@ -30,7 +30,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     try {
       // Send verification code directly
       final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/forgot_password.php'),
+        Uri.parse('${ApiService.baseUrl}/routes/forgot_password.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
