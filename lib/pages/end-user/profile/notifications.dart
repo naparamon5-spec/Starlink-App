@@ -60,17 +60,20 @@ class _NotificationsPageState extends State<NotificationsPage> {
       setState(() {
         _notifications =
             notifications.map((n) {
+              // Use 'created_at' from backend as the timestamp
+              DateTime? parsedTimestamp;
+              if (n['created_at'] != null) {
+                try {
+                  parsedTimestamp = DateTime.parse(n['created_at'].toString());
+                } catch (_) {
+                  parsedTimestamp = null;
+                }
+              }
               return {
                 ...n,
                 'isRead': n['isRead'] ?? n['is_read'] == 1, // Robust mapping
                 'color': hexToColor(n['color']),
-                'timestamp':
-                    n['timestamp'] != null
-                        ? (n['timestamp'] is DateTime
-                            ? n['timestamp']
-                            : DateTime.tryParse(n['timestamp'].toString()) ??
-                                DateTime.now())
-                        : DateTime.now(),
+                'timestamp': parsedTimestamp,
               };
             }).toList();
         _isLoading = false;
@@ -204,7 +207,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
     );
   }
 
-  String _getTimeAgo(DateTime timestamp) {
+  String _getTimeAgo(DateTime? timestamp) {
+    if (timestamp == null) return 'Unknown time';
     final now = DateTime.now();
     final difference = now.difference(timestamp);
 
