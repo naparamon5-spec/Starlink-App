@@ -368,7 +368,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                           message:
                                               deletedNotification['message'],
                                           type: deletedNotification['type'],
-                                          icon: deletedNotification['icon'],
+                                          iconName: deletedNotification['icon'],
                                           color: deletedNotification['color'],
                                           data: deletedNotification['data'],
                                         );

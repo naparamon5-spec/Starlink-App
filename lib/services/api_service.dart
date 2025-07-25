@@ -8,8 +8,8 @@ import '../config/ssl_config.dart';
 class ApiService {
   // Get the appropriate base URL based on the platform
   static String get baseUrl {
-    //return 'https://api.lamco.com.ph/starlinkAPI';
-    return 'http://10.0.2.2/starlink_app/backend';
+    return 'https://api.lamco.com.ph/starlinkAPI';
+    // return 'http://10.0.2.2/starlink_app/backend';
   }
 
   // Create a custom HTTP client that uses our SSL configuration

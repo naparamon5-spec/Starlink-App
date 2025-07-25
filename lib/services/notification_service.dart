@@ -16,7 +16,7 @@ class NotificationService {
     required String title,
     required String message,
     required String type,
-    required IconData icon,
+    required String iconName, // now a string
     required Color color,
     Map<String, dynamic>? data,
   }) async {
@@ -31,7 +31,7 @@ class NotificationService {
         'message': message,
         'timestamp': DateTime.now().toIso8601String(),
         'isRead': false,
-        'icon': icon.codePoint,
+        'icon': iconName, // store icon name as string
         'color': color.value,
         'data': data,
       };
@@ -50,6 +50,28 @@ class NotificationService {
     }
   }
 
+  // Helper to map icon name string to IconData
+  static IconData iconFromString(String iconName) {
+    switch (iconName) {
+      case 'check_circle':
+        return Icons.check_circle;
+      case 'task_alt':
+        return Icons.task_alt;
+      case 'cancel':
+        return Icons.cancel;
+      case 'confirmation_number':
+        return Icons.confirmation_number;
+      case 'info':
+        return Icons.info;
+      case 'warning':
+        return Icons.warning;
+      case 'notifications':
+        return Icons.notifications;
+      default:
+        return Icons.notifications;
+    }
+  }
+
   // Get all notifications
   static Future<List<Map<String, dynamic>>> getNotifications() async {
     try {
@@ -60,7 +82,7 @@ class NotificationService {
         final data = jsonDecode(notification) as Map<String, dynamic>;
         return {
           ...data,
-          'icon': IconData(data['icon'] as int, fontFamily: 'MaterialIcons'),
+          'icon': iconFromString(data['icon'] as String),
           'color': Color(data['color'] as int),
           'timestamp': DateTime.parse(data['timestamp'] as String),
         };
@@ -190,7 +212,7 @@ class NotificationService {
       message:
           'Ticket #$ticketId ($ticketType) has been accepted by $customerName',
       type: 'ticket_acceptance',
-      icon: Icons.check_circle,
+      iconName: 'check_circle',
       color: Colors.green,
       data: {
         'ticket_id': ticketId,
@@ -212,7 +234,7 @@ class NotificationService {
       message:
           'Ticket #$ticketId ($ticketType) has been resolved by $customerName',
       type: 'ticket_resolution',
-      icon: Icons.task_alt,
+      iconName: 'task_alt',
       color: Colors.blue,
       data: {
         'ticket_id': ticketId,
@@ -234,7 +256,7 @@ class NotificationService {
       message:
           'Ticket #$ticketId ($ticketType) has been closed by $customerName',
       type: 'ticket_closure',
-      icon: Icons.cancel,
+      iconName: 'cancel',
       color: Colors.red,
       data: {
         'ticket_id': ticketId,

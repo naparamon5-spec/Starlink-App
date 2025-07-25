@@ -20,27 +20,25 @@ Color parseColor(dynamic color) {
 }
 
 // Helper to parse icon from string
-IconData parseIcon(dynamic icon) {
-  if (icon is int) return IconData(icon, fontFamily: 'MaterialIcons');
-  if (icon is String) {
-    switch (icon) {
-      case 'check_circle':
-        return Icons.check_circle;
-      case 'task_alt':
-        return Icons.task_alt;
-      case 'cancel':
-        return Icons.cancel;
-      case 'confirmation_number':
-        return Icons.confirmation_number;
-      case 'info':
-        return Icons.info;
-      case 'warning':
-        return Icons.warning;
-      default:
-        return Icons.notifications;
-    }
+IconData parseIcon(String icon) {
+  switch (icon) {
+    case 'check_circle':
+      return Icons.check_circle;
+    case 'task_alt':
+      return Icons.task_alt;
+    case 'cancel':
+      return Icons.cancel;
+    case 'confirmation_number':
+      return Icons.confirmation_number;
+    case 'info':
+      return Icons.info;
+    case 'warning':
+      return Icons.warning;
+    case 'notifications':
+      return Icons.notifications;
+    default:
+      return Icons.notifications;
   }
-  return Icons.notifications;
 }
 
 // Helper to parse timestamp
@@ -423,7 +421,8 @@ class _CustomerNotificationScreenState
                                             message:
                                                 deletedNotification['message'],
                                             type: deletedNotification['type'],
-                                            icon: deletedNotification['icon'],
+                                            iconName:
+                                                deletedNotification['icon'],
                                             color: deletedNotification['color'],
                                             data: deletedNotification['data'],
                                           );
@@ -482,7 +481,7 @@ class _CustomerNotificationScreenState
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Icon(
-                                    notification['icon'],
+                                    parseIcon(notification['icon']),
                                     color: notification['color'],
                                     size: 24,
                                   ),
