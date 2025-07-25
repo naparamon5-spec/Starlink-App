@@ -2,7 +2,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 class SSLConfig {
-  static bool get isDevelopment => kDebugMode;
+  // TODO: Revert this to 'kDebugMode' before production!
+  static bool get isDevelopment => true; // Accept all certs TEMPORARILY
 
   static HttpOverrides get httpOverrides {
     if (isDevelopment) {
