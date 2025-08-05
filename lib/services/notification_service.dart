@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:flutter/foundation.dart';
-import '../config/ssl_config.dart';
+// import '../config/ssl_config.dart'; // Commented out as it’s not provided
 
 class NotificationService {
   static const String _notificationsKey = 'app_notifications';
@@ -25,14 +25,14 @@ class NotificationService {
       List<String> notifications = prefs.getStringList(_notificationsKey) ?? [];
 
       final notification = {
-        'id': DateTime.now().millisecondsSinceEpoch,
+        'id': DateTime.now().millisecondsSinceEpoch, // int
         'type': type,
         'title': title,
         'message': message,
         'timestamp': DateTime.now().toIso8601String(),
         'isRead': false,
         'icon': iconName, // store icon name as string
-        'color': color.value,
+        'color': color.value, // int
         'data': data,
       };
 
@@ -80,11 +80,29 @@ class NotificationService {
 
       return notifications.map((notification) {
         final data = jsonDecode(notification) as Map<String, dynamic>;
+        // Safely convert color from String or int to int
+        int colorValue;
+        if (data['color'] is String) {
+          colorValue =
+              int.tryParse(data['color']) ?? 0xFF000000; // Default to black
+        } else {
+          colorValue = data['color'] as int? ?? 0xFF000000;
+        }
+        // Ensure id is int
+        int id;
+        if (data['id'] is String) {
+          id = int.tryParse(data['id']) ?? 0;
+        } else {
+          id = data['id'] as int? ?? 0;
+        }
         return {
           ...data,
-          'icon': iconFromString(data['icon'] as String),
-          'color': Color(data['color'] as int),
-          'timestamp': DateTime.parse(data['timestamp'] as String),
+          'id': id,
+          'icon': iconFromString(data['icon'] as String? ?? 'notifications'),
+          'color': Color(colorValue),
+          'timestamp': DateTime.parse(
+            data['timestamp'] as String? ?? DateTime.now().toIso8601String(),
+          ),
         };
       }).toList();
     } catch (e) {
@@ -100,8 +118,15 @@ class NotificationService {
       List<String> notifications = prefs.getStringList(_notificationsKey) ?? [];
 
       for (int i = 0; i < notifications.length; i++) {
-        final data = jsonDecode(notifications[i]);
-        if (data['id'] == notificationId) {
+        final data = jsonDecode(notifications[i]) as Map<String, dynamic>;
+        // Handle id as String or int
+        int id;
+        if (data['id'] is String) {
+          id = int.tryParse(data['id']) ?? 0;
+        } else {
+          id = data['id'] as int? ?? 0;
+        }
+        if (id == notificationId) {
           data['isRead'] = true;
           notifications[i] = jsonEncode(data);
           break;
@@ -122,7 +147,7 @@ class NotificationService {
       List<String> notifications = prefs.getStringList(_notificationsKey) ?? [];
 
       for (int i = 0; i < notifications.length; i++) {
-        final data = jsonDecode(notifications[i]);
+        final data = jsonDecode(notifications[i]) as Map<String, dynamic>;
         data['isRead'] = true;
         notifications[i] = jsonEncode(data);
       }
@@ -141,8 +166,14 @@ class NotificationService {
       List<String> notifications = prefs.getStringList(_notificationsKey) ?? [];
 
       notifications.removeWhere((notification) {
-        final data = jsonDecode(notification);
-        return data['id'] == notificationId;
+        final data = jsonDecode(notification) as Map<String, dynamic>;
+        int id;
+        if (data['id'] is String) {
+          id = int.tryParse(data['id']) ?? 0;
+        } else {
+          id = data['id'] as int? ?? 0;
+        }
+        return id == notificationId;
       });
 
       await prefs.setStringList(_notificationsKey, notifications);
@@ -170,13 +201,22 @@ class NotificationService {
       int? uid = userId;
       if (uid == null) {
         final prefs = await SharedPreferences.getInstance();
-        uid = prefs.getInt('user_id');
+        // Handle user_id as String or int
+        final storedUserId = prefs.get('user_id');
+        if (storedUserId is String) {
+          uid = int.tryParse(storedUserId);
+        } else {
+          uid = storedUserId as int?;
+        }
+        if (uid == null) return 0;
       }
-      if (uid == null) return 0;
       final notifications = await getCustomerNotifications(uid);
       final unreadCount =
           notifications.where((n) {
             final isRead = n['is_read'] ?? n['isRead'] ?? false;
+            if (isRead is String) {
+              return int.tryParse(isRead) == 0; // unread if "0"
+            }
             if (isRead is int) return isRead == 0; // unread if 0
             if (isRead is bool) return !isRead; // unread if false
             return true; // treat as unread if unknown
@@ -269,14 +309,13 @@ class NotificationService {
 
   // BACKEND-BASED CUSTOMER NOTIFICATIONS
   static String get baseUrl {
-    return 'http://10.0.2.2/starlink_app/backend/routes/notifications.php';
+    return 'https://api.lamco.com.ph/api-starlink';
   }
 
   // Create a custom HTTP client that uses our SSL configuration
   static http.Client get _client {
     final httpClient =
         HttpClient()..connectionTimeout = const Duration(seconds: 15);
-
     return IOClient(httpClient);
   }
 
@@ -297,7 +336,7 @@ class NotificationService {
       }
 
       final response = await _client.get(
-        Uri.parse('$baseUrl?action=get_notifications&user_id=$userId'),
+        Uri.parse('$baseUrl/api.php?action=get_notifications&user_id=$userId'),
         headers: headers,
       );
 
@@ -306,12 +345,29 @@ class NotificationService {
         try {
           final data = json.decode(response.body);
           if (data['status'] == 'success') {
-            return List<Map<String, dynamic>>.from(data['data']);
+            // Convert id and other potential String fields to int
+            return List<Map<String, dynamic>>.from(data['data']).map((n) {
+              return {
+                ...n,
+                'id':
+                    n['id'] is String
+                        ? int.tryParse(n['id']) ?? 0
+                        : n['id'] as int? ?? 0,
+                'is_read':
+                    n['is_read'] is String
+                        ? int.tryParse(n['is_read']) ??
+                            (n['is_read'] == 'false' ? 0 : 1)
+                        : n['is_read'] is bool
+                        ? n['is_read']
+                            ? 1
+                            : 0
+                        : n['is_read'] as int? ?? 0,
+              };
+            }).toList();
           } else {
             throw Exception(data['message'] ?? 'Failed to fetch notifications');
           }
         } catch (e) {
-          // If JSON parsing fails, it might be HTML error page
           print('Response body: ${response.body}');
           if (response.body.contains('<!doctype html>')) {
             throw Exception(
@@ -327,7 +383,6 @@ class NotificationService {
       }
     } catch (e) {
       print('Error in getCustomerNotifications: $e');
-      // Return empty list instead of throwing to prevent app crash
       return [];
     }
   }
@@ -349,7 +404,7 @@ class NotificationService {
       }
 
       final response = await _client.post(
-        Uri.parse('$baseUrl?action=create_notification'),
+        Uri.parse('$baseUrl/api.php?action=create_notification'),
         headers: headers,
         body: json.encode(notification),
       );
@@ -361,7 +416,7 @@ class NotificationService {
             throw Exception(data['message'] ?? 'Failed to create notification');
           }
         } catch (e) {
-          print('Response body:  [31m${response.body} [0m');
+          print('Response body: ${response.body}');
           if (response.body.contains('<!doctype html>')) {
             throw Exception(
               'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
@@ -395,7 +450,7 @@ class NotificationService {
       }
 
       final response = await _client.post(
-        Uri.parse('$baseUrl?action=mark_notification_read'),
+        Uri.parse('$baseUrl/api.php?action=mark_notification_read'),
         headers: headers,
         body: json.encode({'id': id}),
       );
@@ -441,7 +496,7 @@ class NotificationService {
       }
 
       final response = await _client.post(
-        Uri.parse('$baseUrl?action=mark_notification_unread'),
+        Uri.parse('$baseUrl/api.php?action=mark_notification_unread'),
         headers: headers,
         body: json.encode({'id': id}),
       );
@@ -487,7 +542,7 @@ class NotificationService {
       }
 
       final response = await _client.post(
-        Uri.parse('$baseUrl?action=delete_notification'),
+        Uri.parse('$baseUrl/api.php?action=delete_notification'),
         headers: headers,
         body: json.encode({'id': id}),
       );
@@ -499,7 +554,7 @@ class NotificationService {
             throw Exception(data['message'] ?? 'Failed to delete notification');
           }
         } catch (e) {
-          print('Response body:  [31m${response.body} [0m');
+          print('Response body: ${response.body}');
           if (response.body.contains('<!doctype html>')) {
             throw Exception(
               'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
