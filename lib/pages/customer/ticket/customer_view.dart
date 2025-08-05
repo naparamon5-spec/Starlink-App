@@ -543,69 +543,44 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            _buildDetailItem('Ticket Type', fullData['type'] ?? 'N/A'),
+            const SizedBox(height: 16),
+            _buildDetailItem('Subscription', fullData['subscription'] ?? 'N/A'),
+            const SizedBox(height: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _buildDetailItem(
-                    'Ticket Type',
-                    fullData['type'] ?? 'N/A',
+                const Text(
+                  'Status',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF133343),
                   ),
                 ),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: _buildDetailItem(
-                    'Subscription',
-                    fullData['subscription'] ?? 'N/A',
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(status).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _getStatusColor(status)),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      color: _getStatusColor(status),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Status',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF133343),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(status).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: _getStatusColor(status)),
-                        ),
-                        child: Text(
-                          status,
-                          style: TextStyle(
-                            color: _getStatusColor(status),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: _buildDetailItem(
-                    'Created At',
-                    fullData['created_at'] ?? 'N/A',
-                  ),
-                ),
-              ],
-            ),
+            _buildDetailItem('Created At', fullData['created_at'] ?? 'N/A'),
             const SizedBox(height: 24),
             const Text(
               'Description',

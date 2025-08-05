@@ -1055,28 +1055,18 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildDetailItem(
-                              'Contact',
-                              _ticket['full_data']?['contact_name']
-                                      ?.toString() ??
-                                  'Not Assigned',
-                            ),
-                          ),
-
-                          const SizedBox(width: 24),
-                          Expanded(
-                            child: _buildDetailItem(
-                              'Subscription',
-                              getNickname(
-                                _subscriptions,
-                                _ticket['subscription']?.toString(),
-                              ),
-                            ),
-                          ),
-                        ],
+                      _buildDetailItem(
+                        'Contact',
+                        _ticket['full_data']?['contact_name']?.toString() ??
+                            'Not Assigned',
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDetailItem(
+                        'Subscription',
+                        getNickname(
+                          _subscriptions,
+                          _ticket['subscription']?.toString(),
+                        ),
                       ),
                       const SizedBox(height: 24),
                       const Text(

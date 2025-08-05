@@ -69,7 +69,6 @@ class _CustomerNotificationScreenState
   bool _selectionMode = false;
   Set<int> _selectedNotificationIds = {};
   int? customerUserId;
-  // Add toggle state
   bool _showOnlyTickets = false;
 
   @override
@@ -95,7 +94,6 @@ class _CustomerNotificationScreenState
         final notifications =
             await NotificationService.getCustomerNotifications(customerUserId!);
 
-        // Remove the test notification creation logic
         setState(() {
           _notifications =
               notifications
@@ -103,7 +101,10 @@ class _CustomerNotificationScreenState
                     (n) => {
                       ...n,
                       'isRead': n['isRead'] ?? n['is_read'] == 1,
-                      'icon': parseIcon(n['icon']),
+                      'icon': n['icon'], // Keep the original icon string
+                      'iconData': parseIcon(
+                        n['icon'] ?? 'notifications',
+                      ), // Store parsed IconData
                       'color': parseColor(n['color']),
                       'timestamp': parseTimestamp(
                         n['created_at'] ?? n['timestamp'],
@@ -129,7 +130,6 @@ class _CustomerNotificationScreenState
     }
   }
 
-  // If you want to show only ticket notifications, use this getter in your ListView:
   List<Map<String, dynamic>> get _ticketNotifications =>
       _notifications.where((n) => n['type'] == 'ticket_created').toList();
 
@@ -178,11 +178,9 @@ class _CustomerNotificationScreenState
   }
 
   Future<void> _markAsRead(int notificationId) async {
-    // Find the notification index
     final index = _notifications.indexWhere((n) => n['id'] == notificationId);
     if (index != -1) {
       final isCurrentlyRead = _notifications[index]['isRead'] ?? false;
-      // Optimistically update UI
       setState(() {
         _notifications[index]['isRead'] = !isCurrentlyRead;
       });
@@ -193,7 +191,6 @@ class _CustomerNotificationScreenState
           notificationId,
         );
       }
-      // Refresh the notification provider and list
       await Provider.of<NotificationProvider>(context, listen: false).refresh();
       await _loadNotifications();
     }
@@ -246,7 +243,6 @@ class _CustomerNotificationScreenState
 
   @override
   Widget build(BuildContext context) {
-    // Choose which notifications to show based on toggle
     final notificationsToShow =
         _showOnlyTickets ? _ticketNotifications : _notifications;
     return Scaffold(
@@ -311,7 +307,6 @@ class _CustomerNotificationScreenState
                       tooltip: 'Select notifications',
                     ),
                 ],
-                // Add toggle button
                 bottom: PreferredSize(
                   preferredSize: const Size.fromHeight(48),
                   child: Row(
@@ -422,7 +417,7 @@ class _CustomerNotificationScreenState
                                                 deletedNotification['message'],
                                             type: deletedNotification['type'],
                                             iconName:
-                                                deletedNotification['icon'],
+                                                deletedNotification['icon'], // Use the original icon string
                                             color: deletedNotification['color'],
                                             data: deletedNotification['data'],
                                           );
@@ -481,7 +476,7 @@ class _CustomerNotificationScreenState
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Icon(
-                                    parseIcon(notification['icon']),
+                                    notification['iconData'], // Use parsed IconData
                                     color: notification['color'],
                                     size: 24,
                                   ),
