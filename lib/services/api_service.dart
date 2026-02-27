@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:io' show Platform, HttpClient, X509Certificate;
+// dart:io is not available on web; only import what’s needed conditionally
+import 'dart:io' show HttpClient, X509Certificate;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:flutter/foundation.dart';
@@ -8,14 +9,26 @@ import '../config/ssl_config.dart';
 class ApiService {
   // Get the appropriate base URL based on the platform
   static String get baseUrl {
-    return 'https://api.lamco.com.ph/api-starlink';
+    // updated to new production API base url as requested
+    return 'https://starlink-api.ardentnetworks.com.ph/api';
+    // previous development URL:
+    // return 'https://api.lamco.com.ph/api-starlink';
     // return 'http://10.0.2.2/starlink_app/backend';
   }
 
-  // Create a custom HTTP client that uses our SSL configuration
+  // Create a custom HTTP client that uses our SSL configuration.
+  // On web we can’t use `dart:io` so fall back to the default client.
   static http.Client get _client {
+    if (kIsWeb) {
+      // Web browser enforces CORS; default client works
+      return http.Client();
+    }
+
+    // Mobile client
     final httpClient =
-        HttpClient()..connectionTimeout = const Duration(seconds: 15);
+        HttpClient()
+          ..connectionTimeout = const Duration(seconds: 15)
+          ..badCertificateCallback = (cert, host, port) => true; // dev only
 
     return IOClient(httpClient);
   }
@@ -59,56 +72,50 @@ class ApiService {
 
   // Login user
   static Future<Map<String, dynamic>> login(
-    String username,
+    String email,
     String password,
   ) async {
     try {
       final response = await _client
           .post(
-            Uri.parse('$baseUrl/routes/login.php'),
+            Uri.parse('$baseUrl/v1/auth/login'),
             headers: {'Content-Type': 'application/json'},
-            body: json.encode({'username': username, 'password': password}),
+            body: json.encode({'email': email, 'password': password}),
           )
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              return http.Response(
-                json.encode({
-                  'status': 'error',
-                  'message':
-                      'Connection timed out. Please check if XAMPP is running.',
-                }),
-                408,
-              );
-            },
-          );
+          .timeout(const Duration(seconds: 15));
 
-      final data = json.decode(response.body);
+      final Map<String, dynamic> data = json.decode(response.body);
 
-      // Validate response structure
-      if (data['status'] == 'success') {
-        if (data['user'] == null) {
-          throw Exception('Invalid response: Missing user data');
-        }
-
-        final user = data['user'] as Map<String, dynamic>;
-        if (user['id'] == null) {
-          throw Exception('Invalid response: Missing user ID');
-        }
-
-        // Check for either type or role
-        if (user['type'] == null && user['role'] == null) {
-          throw Exception('Invalid response: Missing user type/role');
-        }
+      // Some API responses wrap actual payload inside a "data" key.
+      // Unwrap it to keep callers unchanged.
+      if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
+        final inner = Map<String, dynamic>.from(data['data']);
+        // merge useful fields into top level for backward compatibility
+        data.addAll(inner);
       }
 
-      return data;
+      // if status not provided but HTTP 200, assume success
+      if (!data.containsKey('status') && response.statusCode == 200) {
+        data['status'] = 'success';
+      }
+
+      // Handle regular login with user object
+      if (data.containsKey('user')) {
+        if (data['user'] == null) {
+          throw Exception('Invalid response: user data missing');
+        }
+        return data; // now contains accessToken and user at top level
+      }
+
+      // Handle special end_user case
+      if (data.containsKey('userId') && data['flag'] == false) {
+        return data; // { userId, flag: false }
+      }
+
+      // If response structure is still unexpected
+      throw Exception('Unexpected response format: ${response.body}');
     } catch (e) {
-      return {
-        'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
-        'baseUrl': baseUrl,
-      };
+      return {'status': 'error', 'message': e.toString(), 'baseUrl': baseUrl};
     }
   }
 
@@ -612,9 +619,10 @@ class ApiService {
   // Forgot password with improved error handling
   static Future<Map<String, dynamic>> forgotPassword(String email) async {
     try {
+      // new endpoint path only requires an email field
       final response = await _client
           .post(
-            Uri.parse('$baseUrl/routes/forgot_password.php'),
+            Uri.parse('$baseUrl/v1/auth/request-reset-password'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',

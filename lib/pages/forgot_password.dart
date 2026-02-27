@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import '../services/api_service.dart';
 import 'verification_code.dart';
 
@@ -28,88 +26,53 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     });
 
     try {
-      // Send verification code directly
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/routes/forgot_password.php'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode({'email': email}),
-      );
-
-      print('Response status code: ${response.statusCode}'); // Debug print
-      print('Response body: ${response.body}'); // Debug print
+      // Send verification code
+      final data = await ApiService.forgotPassword(email);
 
       if (!mounted) return;
 
-      try {
-        final data = json.decode(response.body);
+      // Check if the request was successful
+      if (data['status'] == 'success' || data['success'] == true) {
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              data['message'] ?? 'Verification code sent successfully',
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
 
-        if (response.statusCode == 200) {
-          final status = data['status'] as String?;
-          final success = data['success'] as bool?;
-          final message = data['message'] as String?;
+        // Navigate to verification code page
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => VerificationCodeScreen(email: email),
+            ),
+          );
+        }
+      } else {
+        // Handle error response
+        final error =
+            data['message'] as String? ?? 'Failed to send verification code';
+        final errorLower = error.toLowerCase();
 
-          if (status == 'success' ||
-              success == true ||
-              message?.toLowerCase().contains(
-                    'verification code has been sent',
-                  ) ==
-                  true) {
-            // Show success message
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(message ?? 'Verification code sent successfully'),
-                backgroundColor: Colors.green,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-
-            // Navigate to verification code page
-            if (mounted) {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (context) => VerificationCodeScreen(email: email),
-                ),
-              );
-            }
-          } else {
-            final error =
-                data['message'] as String? ?? data['error'] as String?;
-            if (error != null) {
-              final errorLower = error.toLowerCase();
-              if (errorLower.contains('not found') ||
-                  errorLower.contains('not registered') ||
-                  errorLower.contains('does not exist')) {
-                setState(() {
-                  _errorMessage = 'This email is not registered in our system';
-                });
-              } else {
-                setState(() {
-                  _errorMessage = error;
-                });
-              }
-            } else {
-              setState(() {
-                _errorMessage = 'Failed to send verification code';
-              });
-            }
-          }
+        if (errorLower.contains('not found') ||
+            errorLower.contains('not registered') ||
+            errorLower.contains('does not exist')) {
+          setState(() {
+            _errorMessage = 'This email is not registered in our system';
+          });
         } else {
           setState(() {
-            _errorMessage = 'Server error. Please try again later.';
+            _errorMessage = error;
           });
         }
-      } catch (e) {
-        print('Error parsing response: $e'); // Debug print
-        setState(() {
-          _errorMessage = 'Invalid server response. Please try again.';
-        });
       }
     } catch (e) {
       print('Error during forgot password: $e'); // Debug print

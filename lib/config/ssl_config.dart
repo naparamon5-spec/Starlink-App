@@ -35,3 +35,8 @@ class ProductionHttpOverrides extends HttpOverrides {
       };
   }
 }
+
+// Setup function for SSL config
+void setupSSLConfig() {
+  HttpOverrides.global = SSLConfig.httpOverrides;
+}

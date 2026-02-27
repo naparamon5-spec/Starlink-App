@@ -309,7 +309,7 @@ class NotificationService {
 
   // BACKEND-BASED CUSTOMER NOTIFICATIONS
   static String get baseUrl {
-    return 'https://api.lamco.com.ph/api-starlink';
+    return 'https://starlink-api.ardentnetworks.com.ph/api/';
   }
 
   // Create a custom HTTP client that uses our SSL configuration

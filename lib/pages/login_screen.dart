@@ -44,117 +44,76 @@ class _LoginScreenState extends State<LoginScreen> {
       _passwordError = null;
     });
 
-    if (_formKey.currentState!.validate() && _isAgreedToTerms) {
-      setState(() {
-        _isLoading = true;
-      });
+    if (!_formKey.currentState!.validate() || !_isAgreedToTerms) return;
 
-      try {
-        final response = await ApiService.login(
-          _emailController.text,
-          _passwordController.text,
-        );
+    setState(() => _isLoading = true);
 
-        if (response['status'] == 'success') {
-          // Store user data in SharedPreferences
-          final prefs = await SharedPreferences.getInstance();
+    try {
+      final response = await ApiService.login(
+        _emailController.text,
+        _passwordController.text,
+      );
 
-          // Get user data from the nested user object
-          final user = response['user'] as Map<String, dynamic>?;
-          final userId = user?['id'];
-          final userType =
-              (user?['type'] ?? user?['role'])?.toString().toLowerCase();
+      print('Login response: $response'); // Debugging
 
-          if (userId == null) {
-            setState(() {
-              _errorMessage = 'Invalid response: Missing user ID';
-            });
-            return;
-          }
+      if (response['status'] == 'success' || response['flag'] == false) {
+        // Successful login
+        final userData = response['user'] ?? response['data'] ?? {};
+        final userId = userData['id'] ?? response['userId'];
+        final userType =
+            (userData['type'] ?? userData['role'] ?? 'end_user')
+                .toString()
+                .toLowerCase();
 
-          if (userType != 'end_user' && userType != 'customer') {
-            setState(() {
-              _errorMessage =
-                  'Invalid user type. Only end users and customers can access this app.';
-            });
-            return;
-          }
+        final prefs = await SharedPreferences.getInstance();
+        if (response['accessToken'] != null) {
+          await prefs.setString('accessToken', response['accessToken']);
+        }
+        if (userId != null) await prefs.setInt('user_id', userId);
+        if (userType != null) await prefs.setString('userType', userType);
+        await prefs.setString('email', _emailController.text);
 
-          // Store the user data
-          await prefs.setInt('user_id', userId);
-          await prefs.setString('email', _emailController.text);
-          await prefs.setString('userType', userType!);
+        // Store extra info
+        await prefs.setString('name', userData['full_name'] ?? '');
+        await prefs.setString('phone', userData['phone'] ?? '');
+        await prefs.setString('address', userData['address'] ?? '');
 
-          // Store user data based on type
-          if (userType == 'end_user') {
-            await prefs.setString(
-              'name',
-              user?['full_name'] ?? user?['name'] ?? '',
-            );
-            await prefs.setString('firstName', user?['first_name'] ?? '');
-            await prefs.setString('lastName', user?['last_name'] ?? '');
-            await prefs.setString('phone', user?['phone'] ?? '');
-            await prefs.setString('address', user?['address'] ?? '');
-          } else if (userType == 'customer') {
-            await prefs.setString(
-              'name',
-              user?['company_name'] ?? user?['name'] ?? '',
-            );
-            await prefs.setString('companyName', user?['company_name'] ?? '');
-            await prefs.setString('jobTitle', user?['job_title'] ?? '');
-            await prefs.setString('phone', user?['phone'] ?? '');
-            await prefs.setString('address', user?['address'] ?? '');
-          }
-
-          // Navigate to appropriate home screen based on user type
-          if (!mounted) return;
-
-          if (userType == 'end_user') {
-            await Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder:
-                    (context) => HomeScreen(
-                      userId: userId,
-                      loginMessage: response['message'] ?? 'Login successful',
-                    ),
-              ),
-            );
-          } else {
-            await Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder:
-                    (context) => CustomerHomeScreen(
-                      loginMessage: response['message'] ?? 'Login successful',
-                    ),
-              ),
-            );
-          }
+        // Navigate
+        if (!mounted) return;
+        if (userType == 'end_user') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => HomeScreen(
+                    userId: userId,
+                    loginMessage: 'Login successful',
+                  ),
+            ),
+          );
+        } else if (userType == 'customer') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => CustomerHomeScreen(loginMessage: 'Login successful'),
+            ),
+          );
         } else {
-          final msg = response['message']?.toString().toLowerCase() ?? '';
-          setState(() {
-            if (msg.contains('email not found')) {
-              _emailError = response['message'];
-            } else if (msg.contains('incorrect password')) {
-              _passwordError = response['message'];
-            } else {
-              _errorMessage = response['message'];
-            }
-          });
-          return;
+          setState(() => _errorMessage = 'Invalid user type.');
         }
-      } catch (e) {
-        setState(() {
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
-        });
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+      } else {
+        // Failed login
+        setState(
+          () =>
+              _errorMessage =
+                  response['message'] ?? 'Invalid login credentials',
+        );
       }
+    } catch (e) {
+      setState(() => _errorMessage = 'Error: ${e.toString()}');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
