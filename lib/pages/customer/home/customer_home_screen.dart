@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../components/Table.dart';
@@ -51,40 +52,71 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
   Future<void> _loadUserData() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getInt('user_id');
+      print('[DEBUG] CustomerHome: Loading user data from /me and /users/:id');
 
-      if (userId == null) {
-        throw Exception('User ID not found');
+      // First, get basic profile from /api/v1/auth/me
+      final profileResponse = await ApiService.getCurrentUserProfile();
+
+      if (profileResponse['status'] != 'success' ||
+          profileResponse['data'] == null) {
+        throw Exception(
+          profileResponse['message'] ?? 'Failed to fetch user profile',
+        );
       }
 
-      // Get data from API
-      final response = await ApiService.getCurrentUser(userId);
+      final meData = profileResponse['data'] as Map<String, dynamic>;
+      final idFromMe = meData['id'];
+      final idStr = idFromMe?.toString() ?? 'undefined';
 
-      if (response['status'] == 'success' && response['data'] != null) {
-        final userData = response['data'];
+      print(
+        '[DEBUG] CustomerHome: /me data -> id: $idFromMe, email: ${meData['email']}, role: ${meData['role']}',
+      );
 
-        setState(() {
-          _userId = userId; // Keep the original int userId
-          _userName = userData['name'];
-          _userFirstName = userData['first_name'];
-          _userEmail = userData['email'];
-          _userRole = userData['role'];
-          _isLoading = false;
-        });
+      // Then get detailed profile from /api/v1/users/:id
+      print(
+        '[DEBUG] CustomerHome: Loading detailed profile from /api/v1/users/$idStr',
+      );
+      final detailedResponse = await ApiService.getUserById(idStr);
 
-        // Save to SharedPreferences for offline access
-        await prefs.setInt('user_id', userId); // Save as int
-        await prefs.setString('name', _userName ?? '');
-        await prefs.setString('first_name', _userFirstName ?? '');
-        await prefs.setString('email', _userEmail ?? '');
-        await prefs.setString('role', _userRole ?? '');
-
-        // Load subscriptions after user data is loaded
-        await _loadSubscriptions();
+      Map<String, dynamic> userData = meData;
+      if (detailedResponse['status'] == 'success' &&
+          detailedResponse['data'] != null) {
+        userData = Map<String, dynamic>.from(detailedResponse['data']);
+        print(
+          '[DEBUG] CustomerHome: Detailed profile loaded: $userData',
+        );
       } else {
-        throw Exception(response['message'] ?? 'Failed to fetch user data');
+        print(
+          '[DEBUG] CustomerHome: Using /me data only, detailed profile failed: ${detailedResponse['message']}',
+        );
       }
+
+      final int? parsedId =
+          idFromMe is int ? idFromMe : int.tryParse(idStr);
+
+      setState(() {
+        _userId = parsedId;
+        _userName = userData['name'] ?? meData['name'];
+        _userFirstName =
+            userData['first_name'] ?? meData['first_name'] ?? _userName;
+        _userEmail = userData['email'] ?? meData['email'];
+        _userRole = userData['role'] ?? meData['role'];
+        _isLoading = false;
+      });
+
+      // Save to SharedPreferences for offline access
+      final prefs = await SharedPreferences.getInstance();
+      if (_userId != null) {
+        await prefs.setInt('user_id', _userId!);
+      }
+      await prefs.setString('name', _userName ?? '');
+      await prefs.setString('first_name', _userFirstName ?? '');
+      await prefs.setString('email', _userEmail ?? '');
+      await prefs.setString('role', _userRole ?? '');
+      await prefs.setString('userProfile', json.encode(userData));
+
+      // Load subscriptions after user data is loaded
+      await _loadSubscriptions();
     } catch (e) {
       print('Error loading user data: $e');
       // Fallback to SharedPreferences if there's an error

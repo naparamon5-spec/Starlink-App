@@ -30,7 +30,6 @@ class _TicketScreenState extends State<TicketScreen> {
   int _itemsPerPage = 6;
   int _currentPage = 1;
 
-  // Updated filter options to match backend ticket_type values
   List<String> _filterOptions = ['All'];
   Map<String, String> _filterToTicketType = {'All': 'All'};
 
@@ -50,7 +49,6 @@ class _TicketScreenState extends State<TicketScreen> {
     _loadUserData();
     _loadCategoriesAndTickets();
     _searchController.addListener(_handleSearch);
-    // Ensure notification count is refreshed when screen is shown
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<NotificationProvider>(
         context,
@@ -81,7 +79,6 @@ class _TicketScreenState extends State<TicketScreen> {
     setState(() {
       _filteredTickets =
           _tickets.where((ticket) {
-            // Filter by ticket type using mapping, ignore case and whitespace
             bool matchesFilter = true;
             if (selectedTicketType != 'All') {
               final ticketType =
@@ -94,7 +91,6 @@ class _TicketScreenState extends State<TicketScreen> {
               matchesFilter = ticketType == filterType;
             }
 
-            // Filter by search query (search all fields)
             bool matchesQuery = true;
             if (query.isNotEmpty) {
               matchesQuery = ticket.values.any(
@@ -107,7 +103,6 @@ class _TicketScreenState extends State<TicketScreen> {
             return matchesFilter && matchesQuery;
           }).toList();
 
-      // Reset to first page when search/filter changes
       _currentPage = 1;
     });
   }
@@ -168,168 +163,145 @@ class _TicketScreenState extends State<TicketScreen> {
     );
   }
 
-  Future<void> _loadCategoriesAndTickets() async {
-    // Fetch ticket categories for filter
+  Future<void> _loadSubscriptionsAndTickets() async {
     try {
-      final categoriesData = await ApiService.getCategories();
-      if (categoriesData['status'] == 'success' &&
-          categoriesData['data'] != null) {
-        final categories = List<Map<String, dynamic>>.from(
-          categoriesData['data'],
+      final subscriptions = await ApiService.getSubscriptions();
+      _subscriptions =
+          subscriptions.isNotEmpty
+              ? List<Map<String, dynamic>>.from(subscriptions)
+              : [];
+    } catch (e) {
+      debugPrint('Error loading subscriptions: $e');
+      _subscriptions = [];
+    }
+
+    await _loadTickets();
+  }
+
+  Future<void> _loadCategoriesAndTickets() async {
+    try {
+      // FIX: getCategories() returns Map<String, dynamic> — access ['status'] and ['data']
+      final categoriesResponse = await ApiService.getCategories();
+
+      if (categoriesResponse['status'] == 'success' &&
+          categoriesResponse['data'] != null) {
+        final categoryList = List<Map<String, dynamic>>.from(
+          (categoriesResponse['data'] as List)
+              .whereType<Map<String, dynamic>>(),
         );
+
         setState(() {
           _filterOptions = [
             'All',
-            ...categories.map((c) => c['name'].toString()),
+            ...categoryList
+                .map((c) => c['name']?.toString() ?? '')
+                .where((name) => name.isNotEmpty),
           ];
           _filterToTicketType = {'All': 'All'};
-          for (final c in categories) {
-            _filterToTicketType[c['name'].toString()] = c['name'].toString();
+          for (final c in categoryList) {
+            final name = c['name']?.toString() ?? '';
+            if (name.isNotEmpty) {
+              _filterToTicketType[name] = name;
+            }
           }
         });
       }
     } catch (e) {
-      // fallback: keep default filter options
+      debugPrint('Error loading categories: $e');
     }
-    await _loadSubscriptionsAndTickets();
-  }
 
-  Future<void> _loadSubscriptionsAndTickets() async {
-    // Fetch all subscriptions for mapping
-    final subsResponse = await ApiService.getSubscriptions();
-    if (subsResponse['status'] == 'success') {
-      _subscriptions = List<Map<String, dynamic>>.from(subsResponse['data']);
-    }
-    await _loadTickets();
+    await _loadSubscriptionsAndTickets();
   }
 
   Future<void> _loadTickets({bool forceRefresh = false}) async {
     if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
-      final response = await ApiService.getTickets();
-      if (response['status'] == 'success' && mounted) {
-        final agentsResponse = await ApiService.getAgents();
-        final agentMap = Map.fromEntries(
-          (agentsResponse['data'] as List).map(
-            (agent) =>
-                MapEntry(agent['id'].toString(), agent['name'] as String),
+      List<Map<String, dynamic>> allTickets = [];
+      int page = 1;
+      const int limit = 50;
+      bool hasMore = true;
+
+      while (hasMore) {
+        final response = await ApiService.getTickets(page: page, limit: limit);
+
+        if (response['status'] != 'success') {
+          throw Exception(response['message'] ?? 'Failed to load tickets');
+        }
+
+        final List<dynamic> data =
+            response['data'] is List ? response['data'] : [];
+
+        if (data.isEmpty) {
+          hasMore = false;
+        } else {
+          allTickets.addAll(
+            data.map((e) => Map<String, dynamic>.from(e)).toList(),
+          );
+          page++;
+        }
+      }
+
+      final contacts = await ApiService.getContacts();
+      final agentMap = Map.fromEntries(
+        contacts.map(
+          (contact) => MapEntry(
+            contact['id'].toString(),
+            contact['name']?.toString() ?? '',
           ),
-        );
-        if (!mounted) return;
-        List<Map<String, dynamic>>
-        loadedTickets = List<Map<String, dynamic>>.from(
-          response['data'].map((ticket) {
+        ),
+      );
+
+      final List<Map<String, dynamic>> loadedTickets =
+          allTickets.map((ticket) {
             String createdAt = ticket['created_at'] ?? 'N/A';
             DateTime? parsedDate;
+
             try {
               if (createdAt != 'N/A') {
                 parsedDate = DateTime.parse(createdAt);
                 createdAt =
-                    '${parsedDate.year}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.day.toString().padLeft(2, '0')} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}';
+                    '${parsedDate.year}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.day.toString().padLeft(2, '0')} '
+                    '${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}';
               }
-            } catch (e) {}
+            } catch (_) {}
+
             final contactId = ticket['contact']?.toString() ?? '';
-            final contactName = agentMap[contactId];
-            String attachmentsDisplay = 'No attachments';
-            if (ticket['attachments'] != null) {
-              if (ticket['attachments'] is List) {
-                final attachments = List<dynamic>.from(ticket['attachments']);
-                if (attachments.isNotEmpty) {
-                  attachmentsDisplay = attachments
-                      .map((attachment) {
-                        if (attachment is Map) {
-                          return attachment['original_name']?.toString() ?? '';
-                        } else if (attachment is String) {
-                          return attachment;
-                        }
-                        return '';
-                      })
-                      .where((name) => name.isNotEmpty)
-                      .join(', ');
-                }
-              } else if (ticket['attachments'] is String) {
-                attachmentsDisplay = ticket['attachments'];
-              }
-            }
-            String displayStatus;
-            String backendStatus =
-                (ticket['status'] ?? 'open').toString().toLowerCase().trim();
-            switch (backendStatus) {
-              case 'open':
-                displayStatus = 'OPEN';
-                break;
-              case 'in progress':
-              case 'in_progress':
-              case 'inprogress':
-                displayStatus = 'IN PROGRESS';
-                break;
-              case 'resolved':
-                displayStatus = 'RESOLVED';
-                break;
-              case 'closed':
-                displayStatus = 'CLOSED';
-                break;
-              default:
-                displayStatus = backendStatus.toUpperCase();
-            }
-            // Use getNickname for display
-            final serviceLineNumber = ticket['subscription']?.toString();
-            final subscriptionNickname = getNickname(
-              _subscriptions,
-              serviceLineNumber,
-            );
+            final contactName = agentMap[contactId] ?? '';
+
             return {
               'id': ticket['id'],
-              'type': ticket['type'] ?? 'N/A',
+              'type': ticket['ticket_type'] ?? ticket['type'] ?? 'N/A',
               'contact': contactName,
               'contact_id': ticket['contact'],
-              'subscription': subscriptionNickname,
-              'serviceLineNumber': serviceLineNumber,
-              'description': ticket['description'] ?? 'No description',
-              'attachments': attachmentsDisplay,
-              'status': displayStatus,
+              'subscription': ticket['subscription_id'] ?? '',
+              'description': ticket['description'] ?? '',
+              'attachments': ticket['attachments'] ?? [],
+              'status': (ticket['status'] ?? 'open').toString().toUpperCase(),
               'created_at': createdAt,
               'created_at_raw': parsedDate,
               'user_id': ticket['user_id'],
-              'full_data': {
-                ...ticket,
-                'status': displayStatus,
-                'created_at': createdAt,
-                'attachments': ticket['attachments'] ?? [],
-                'subscription_nickname': subscriptionNickname,
-                'serviceLineNumber': serviceLineNumber,
-              },
+              'full_data': ticket,
             };
-          }),
-        );
-        // Merge in-progress status from SharedPreferences
-        final inProgressIds = await _getInProgressTicketIds();
-        for (var ticket in loadedTickets) {
-          if (inProgressIds.contains(ticket['id'].toString())) {
-            ticket['status'] = 'IN PROGRESS';
-            if (ticket['full_data'] != null) {
-              ticket['full_data']['status'] = 'IN PROGRESS';
-            }
-          }
-        }
-        // Optionally: Add in-progress tickets from local storage if not present
-        // (if you have a method to get full ticket data from local storage, add here)
-        setState(() {
-          _tickets = loadedTickets;
-          _filteredTickets = List.from(_tickets);
-          _isLoading = false;
-        });
-      } else {
-        throw Exception(response['message'] ?? 'Failed to load tickets');
-      }
+          }).toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        _tickets = loadedTickets;
+        _filteredTickets = List.from(_tickets);
+        _isLoading = false;
+      });
     } catch (e) {
       if (!mounted) return;
+
       setState(() {
         _tickets = [];
         _filteredTickets = [];
         _isLoading = false;
       });
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error loading tickets: ${e.toString()}'),
@@ -344,21 +316,16 @@ class _TicketScreenState extends State<TicketScreen> {
       final response = await ApiService.updateTicketStatus(ticketId, newStatus);
       if (response['status'] == 'success') {
         setState(() {
-          // Update the ticket status in both lists
           for (var ticket in _tickets) {
             if (ticket['id'].toString() == ticketId) {
               ticket['status'] = newStatus.toUpperCase();
-              if (ticket['full_data'] != null) {
-                ticket['full_data']['status'] = newStatus.toUpperCase();
-              }
+              ticket['full_data']?['status'] = newStatus.toUpperCase();
             }
           }
           for (var ticket in _filteredTickets) {
             if (ticket['id'].toString() == ticketId) {
               ticket['status'] = newStatus.toUpperCase();
-              if (ticket['full_data'] != null) {
-                ticket['full_data']['status'] = newStatus.toUpperCase();
-              }
+              ticket['full_data']?['status'] = newStatus.toUpperCase();
             }
           }
         });
@@ -398,7 +365,7 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   Future<void> _setTicketInProgress(String ticketId) async {
-    List<String> ids = await _getInProgressTicketIds();
+    final ids = await _getInProgressTicketIds();
     if (!ids.contains(ticketId)) {
       ids.add(ticketId);
       await _saveInProgressTicketIds(ids);
@@ -406,9 +373,26 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   Future<void> _removeTicketInProgress(String ticketId) async {
-    List<String> ids = await _getInProgressTicketIds();
+    final ids = await _getInProgressTicketIds();
     ids.remove(ticketId);
     await _saveInProgressTicketIds(ids);
+  }
+
+  // FIX: added missing getNickname helper (was called as top-level function before)
+  String _getNickname(
+    List<Map<String, dynamic>> subscriptions,
+    String? serviceLineNumber,
+  ) {
+    if (serviceLineNumber == null || serviceLineNumber.isEmpty) return '';
+    try {
+      final match = subscriptions.firstWhere(
+        (s) => s['serviceLineNumber']?.toString() == serviceLineNumber,
+        orElse: () => {},
+      );
+      return match['nickname']?.toString() ?? serviceLineNumber;
+    } catch (_) {
+      return serviceLineNumber;
+    }
   }
 
   void _showNewTicketModal() async {
@@ -418,19 +402,19 @@ class _TicketScreenState extends State<TicketScreen> {
           (dialogContext) => NewTicketModal(
             userId: int.parse(_userId ?? '0'),
             onConfirm: (ticket) {
-              // Debug print to check contact_name
-              print(
-                'onConfirm ticket: Contact = \'${ticket['Contact']}\', contact_name = \'${ticket['full_data']?['contact_name']}\'',
+              debugPrint(
+                'onConfirm ticket: Contact = \'${ticket['Contact']}\', '
+                'contact_name = \'${ticket['full_data']?['contact_name']}\'',
               );
               if (ticket['id'] != null && mounted) {
                 setState(() {
                   final serviceLineNumber =
                       ticket['full_data']?['subscription']?.toString();
-                  final subscriptionNickname = getNickname(
+                  // FIX: use instance method instead of undefined top-level function
+                  final subscriptionNickname = _getNickname(
                     _subscriptions,
                     serviceLineNumber,
                   );
-                  // Always use contact_name if available
                   final contactName =
                       ticket['Contact'] ??
                       ticket['full_data']?['contact_name'] ??
@@ -465,10 +449,10 @@ class _TicketScreenState extends State<TicketScreen> {
                       'contact_name': contactName,
                     },
                   };
-                  print('newTicket contact: \'${newTicket['contact']}\'');
+                  debugPrint('newTicket contact: \'${newTicket['contact']}\'');
                   _tickets.insert(0, newTicket);
                   _filteredTickets = List.from(_tickets);
-                  _currentPage = 1; // Reset to first page to show new ticket
+                  _currentPage = 1;
                 });
               }
             },
@@ -477,10 +461,9 @@ class _TicketScreenState extends State<TicketScreen> {
             },
           ),
     );
+
     if (result != null && mounted) {
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() => _isLoading = true);
       try {
         await _loadTickets(forceRefresh: true);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -501,11 +484,7 @@ class _TicketScreenState extends State<TicketScreen> {
           );
         }
       } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -550,7 +529,7 @@ class _TicketScreenState extends State<TicketScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () {
-          print('Tapped ticket: ' + ticket.toString());
+          debugPrint('Tapped ticket: $ticket');
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -865,8 +844,8 @@ class _TicketScreenState extends State<TicketScreen> {
         backgroundColor: const Color(0xFF133343),
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: const Icon(Icons.add, color: Colors.white),
         tooltip: 'Create new ticket',
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }

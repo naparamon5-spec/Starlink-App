@@ -27,8 +27,9 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
   final List<PlatformFile> _attachedFiles = [];
 
   List<String> _ticketTypes = [];
+  // FIX: value is dynamic so it can hold int (contact id) returned by getCustomers()
   Map<String, dynamic> _contacts = {};
-  Map<String, String> _customerCodes = {}; // Store customer codes
+  Map<String, String> _customerCodes = {};
   List<String> _subscriptions = [];
 
   bool _isLoading = true;
@@ -48,13 +49,10 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
     });
 
     try {
-      // Fetch ticket categories
       await _fetchTicketCategories();
-
-      // Fetch customers
       await _fetchCustomers();
     } catch (e) {
-      print('Error in _fetchInitialData: $e');
+      debugPrint('Error in _fetchInitialData: $e');
       setState(() {
         _errorMessage = 'Error fetching data: ${e.toString()}';
       });
@@ -67,16 +65,19 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
 
   Future<void> _fetchTicketCategories() async {
     try {
+      // FIX: getCategories() now returns Map<String, dynamic> — use ['status'] / ['data']
       final categoriesData = await ApiService.getCategories();
       if (categoriesData['status'] == 'success' &&
           categoriesData['data'] != null) {
+        final List<dynamic> data = categoriesData['data'];
         setState(() {
-          _ticketTypes = List<String>.from(
-            categoriesData['data'].map((item) => item['name']),
-          );
+          _ticketTypes =
+              data.map((item) => item['name']?.toString() ?? '').toList();
         });
       } else {
-        throw Exception('Failed to load ticket categories');
+        throw Exception(
+          categoriesData['message'] ?? 'Failed to load ticket categories',
+        );
       }
     } catch (e) {
       throw Exception('Error fetching ticket categories: $e');
@@ -88,21 +89,21 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
       final customersData = await ApiService.getCustomers();
       if (customersData['status'] == 'success' &&
           customersData['data'] != null) {
+        final List<dynamic> customers = customersData['data'];
         setState(() {
           _contacts = Map.fromEntries(
-            (customersData['data'] as List).map(
+            customers.map(
               (customer) => MapEntry(
-                customer['name'] as String,
-                int.parse(customer['id'].toString()),
+                customer['name']?.toString() ?? '',
+                int.tryParse(customer['id'].toString()) ?? customer['id'],
               ),
             ),
           );
 
-          // Store customer codes if available
           _customerCodes = Map.fromEntries(
-            (customersData['data'] as List).map(
+            customers.map(
               (customer) => MapEntry(
-                customer['name'] as String,
+                customer['name']?.toString() ?? '',
                 customer['code']?.toString() ?? customer['id'].toString(),
               ),
             ),
@@ -124,56 +125,39 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
     });
 
     try {
-      // Try different API methods based on what's available
-      Map<String, dynamic> subscriptionsData;
-
-      try {
-        // First try with customer code parameter
-        subscriptionsData = await ApiService.getSubscriptionsByCustomerCode(
-          customerCode,
-        );
-      } catch (e) {
-        // If that fails, try without parameter (get all subscriptions)
-        subscriptionsData = await ApiService.getSubscriptionsByCustomerCode(
-          customerCode,
-        );
-      }
+      final subscriptionsData = await ApiService.getSubscriptionsByCustomerCode(
+        customerCode,
+      );
 
       if (subscriptionsData['status'] == 'success' &&
           subscriptionsData['data'] != null) {
         setState(() {
           _subscriptions = List<String>.from(
-            subscriptionsData['data'].map(
-              (item) => item['nickname'] ?? item['name'] ?? 'Unknown',
+            (subscriptionsData['data'] as List).map(
+              (item) =>
+                  item['nickname']?.toString() ??
+                  item['name']?.toString() ??
+                  'Unknown',
             ),
           );
         });
       } else {
-        // If no subscriptions found, show empty list
-        setState(() {
-          _subscriptions = [];
-        });
+        setState(() => _subscriptions = []);
       }
     } catch (e) {
-      print('Error fetching subscriptions: $e');
-      // Don't throw error, just show empty subscriptions
-      setState(() {
-        _subscriptions = [];
-      });
-
+      debugPrint('Error fetching subscriptions: $e');
+      setState(() => _subscriptions = []);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Could not load subscriptions for this customer'),
             backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 2),
+            duration: Duration(seconds: 2),
           ),
         );
       }
     } finally {
-      setState(() {
-        _isLoadingSubscriptions = false;
-      });
+      setState(() => _isLoadingSubscriptions = false);
     }
   }
 
@@ -198,7 +182,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
         allowedExtensions: ['pdf', 'docx', 'jpg', 'jpeg', 'png'],
         allowMultiple: true,
         withData: true,
-        onFileLoading: (FilePickerStatus status) => print(status),
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -210,7 +193,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
           }
         });
 
-        // Show success message
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -262,30 +244,30 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
     try {
       // Process attachments
       List<Map<String, dynamic>> attachmentsData = [];
-      if (_attachedFiles.isNotEmpty) {
-        for (var file in _attachedFiles) {
-          if (file.bytes != null) {
-            attachmentsData.add({
-              'name': file.name,
-              'data': base64Encode(file.bytes!),
-              'type': file.extension ?? '',
-              'size': file.size,
-            });
-          }
+      for (var file in _attachedFiles) {
+        if (file.bytes != null) {
+          attachmentsData.add({
+            'name': file.name,
+            'data': base64Encode(file.bytes!),
+            'type': file.extension ?? '',
+            'size': file.size,
+          });
         }
       }
 
-      // Get the contact ID as an integer
       final contactId = _contacts[_selectedContact];
       if (contactId == null) {
         throw Exception('Invalid contact selected');
       }
 
-      final newTicket = {
+      // FIX: build the Map that the positional createTicket(Map) overload expects
+      final newTicket = <String, dynamic>{
         'type': _selectedTicketType,
-        'contact': contactId,
+        'ticket_type': _selectedTicketType, // alias used by createTicketNamed
+        'contact': contactId.toString(),
         'contact_name': _selectedContact,
         'subscription': _selectedSubscription,
+        'subscription_id': _selectedSubscription, // alias
         'description': _descriptionController.text.trim(),
         'user_id': widget.userId,
         'status': 'open',
@@ -293,11 +275,10 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
         'attachments': attachmentsData,
         'attachments_display':
             _attachedFiles.isNotEmpty
-                ? _attachedFiles.map((file) => file.name).join(', ')
+                ? _attachedFiles.map((f) => f.name).join(', ')
                 : 'No attachments',
       };
 
-      // Show loading indicator
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -315,17 +296,15 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
         ),
       );
 
-      // Create the ticket using ApiService
+      // FIX: call the positional-Map overload — no named args needed
       final response = await ApiService.createTicket(newTicket);
 
-      // Clear the loading snackbar
       if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
 
       if (response['status'] == 'success') {
-        // Format the ticket data to match the expected structure
-        final formattedTicket = {
-          'id': response['data']['id'] ?? '',
+        final formattedTicket = <String, dynamic>{
+          'id': response['data']?['id'] ?? '',
           'Status': 'OPEN',
           'Ticket Type': newTicket['type'] ?? '',
           'Contact': newTicket['contact_name'] ?? '',
@@ -335,16 +314,14 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
           'Attachments': newTicket['attachments_display'] ?? 'No attachments',
           'full_data': {
             ...newTicket,
-            'id': response['data']['id'] ?? '',
+            'id': response['data']?['id'] ?? '',
             'status': 'OPEN',
             'created_at': DateTime.now().toString(),
-            'attachments': newTicket['attachments'] ?? [],
+            'attachments': attachmentsData,
           },
-          'forceRefresh':
-              true, // Add forceRefresh flag to trigger a full refresh
+          'forceRefresh': true,
         };
 
-        // Show success message
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -354,13 +331,9 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
           ),
         );
 
-        // Call the parent's onConfirm callback with the formatted ticket
         widget.onConfirm(formattedTicket);
 
-        // Close the modal and return the formatted ticket data
-        if (mounted) {
-          Navigator.of(context).pop(formattedTicket);
-        }
+        if (mounted) Navigator.of(context).pop(formattedTicket);
       } else {
         throw Exception(response['message'] ?? 'Failed to create ticket');
       }
@@ -413,7 +386,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title
                 Text(
                   'Create New Ticket',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -423,7 +395,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                 ),
                 const SizedBox(height: 20),
 
-                // Loading or Error State
                 if (_isLoading)
                   const Center(
                     child: Padding(
@@ -480,16 +451,16 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                     ),
                     value: _selectedTicketType,
                     items:
-                        _ticketTypes.map((type) {
-                          return DropdownMenuItem(
-                            value: type,
-                            child: Text(type),
-                          );
-                        }).toList(),
+                        _ticketTypes
+                            .map(
+                              (type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type),
+                              ),
+                            )
+                            .toList(),
                     onChanged: (value) {
-                      setState(() {
-                        _selectedTicketType = value;
-                      });
+                      setState(() => _selectedTicketType = value);
                     },
                   ),
                   const SizedBox(height: 12),
@@ -510,12 +481,14 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                     ),
                     value: _selectedContact,
                     items:
-                        _contacts.keys.map((contact) {
-                          return DropdownMenuItem(
-                            value: contact,
-                            child: Text(contact),
-                          );
-                        }).toList(),
+                        _contacts.keys
+                            .map(
+                              (contact) => DropdownMenuItem(
+                                value: contact,
+                                child: Text(contact),
+                              ),
+                            )
+                            .toList(),
                     onChanged: _onCustomerSelected,
                   ),
                   const SizedBox(height: 12),
@@ -563,23 +536,22 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                                 ),
                               ),
                             ]
-                            : _subscriptions.map((subscription) {
-                              return DropdownMenuItem(
-                                value: subscription,
-                                child: Text(
-                                  subscription,
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              );
-                            }).toList(),
+                            : _subscriptions
+                                .map(
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(
+                                      s,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
                     onChanged:
                         _isLoadingSubscriptions || _subscriptions.isEmpty
                             ? null
-                            : (value) {
-                              setState(() {
-                                _selectedSubscription = value;
-                              });
-                            },
+                            : (value) =>
+                                setState(() => _selectedSubscription = value),
                     isExpanded: true,
                     icon: const Icon(Icons.arrow_drop_down, size: 20),
                     dropdownColor: Colors.white,
@@ -602,10 +574,11 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                       ),
                     ),
                     maxLines: 4,
+                    onChanged: (_) => setState(() {}), // refresh form validity
                   ),
                   const SizedBox(height: 12),
 
-                  // Attachments
+                  // Attachments header
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -642,7 +615,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                   ),
                   const SizedBox(height: 6),
 
-                  // Display attached files
+                  // Attached files list
                   if (_attachedFiles.isNotEmpty) ...[
                     Container(
                       margin: const EdgeInsets.only(top: 6),
@@ -660,7 +633,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
                               _attachedFiles.asMap().entries.map((entry) {
                                 final index = entry.key;
                                 final file = entry.value;
-
                                 return Container(
                                   decoration: BoxDecoration(
                                     border: Border(
@@ -744,7 +716,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal> {
 
                   const SizedBox(height: 24),
 
-                  // Actions
+                  // Action buttons
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [

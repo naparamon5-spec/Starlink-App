@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import 'verification_code.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -33,33 +32,38 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
       // Check if the request was successful
       if (data['status'] == 'success' || data['success'] == true) {
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              data['message'] ?? 'Verification code sent successfully',
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        // Show dialog informing user that a reset link was sent, then
+        // return to the login page.
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (dialogContext) => AlertDialog(
+                title: const Text('Password Reset'),
+                content: Text(
+                  data['message'] ??
+                      'A password reset link has been sent to your email.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop(); // close dialog
+                      Navigator.of(context).pop(); // return to login page
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
         );
-
-        // Navigate to verification code page
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => VerificationCodeScreen(email: email),
-            ),
-          );
-        }
       } else {
         // Handle error response
-        final error =
+        var error =
             data['message'] as String? ?? 'Failed to send verification code';
+        // append details from API service if present (useful for debugging)
+        if (data.containsKey('details') && data['details'] != null) {
+          error = '$error\n(${data['details']})';
+        }
         final errorLower = error.toLowerCase();
 
         if (errorLower.contains('not found') ||

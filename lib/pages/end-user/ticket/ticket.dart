@@ -99,10 +99,13 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   Future<void> _loadSubscriptionsAndTickets() async {
-    // Fetch all subscriptions for mapping
-    final subsResponse = await ApiService.getSubscriptions();
-    if (subsResponse['status'] == 'success') {
-      _subscriptions = List<Map<String, dynamic>>.from(subsResponse['data']);
+    try {
+      // FIX: getSubscriptions() returns List<dynamic>, not Map<String,dynamic>
+      final subsList = await ApiService.getSubscriptions();
+      _subscriptions = subsList.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      // If subscriptions fail, continue with empty list so tickets still load
+      _subscriptions = [];
     }
     await _loadTickets();
   }
@@ -112,82 +115,81 @@ class _TicketScreenState extends State<TicketScreen> {
 
     setState(() => _isLoading = true);
     try {
+      // FIX: getTickets() throws on error, so wrap in try/catch properly
       final response = await ApiService.getTickets();
 
-      if (response['status'] == 'success' && mounted) {
-        setState(() {
-          _tickets = List<Map<String, dynamic>>.from(
-            response['data'].map((ticket) {
-              // Process attachments
-              String attachmentsDisplay = 'No attachments';
-              List<dynamic> attachments = [];
+      if (!mounted) return;
 
-              if (ticket['attachments'] != null) {
-                attachmentsDisplay = ticket['attachments'].toString();
-                attachments = [
-                  {'original_name': ticket['attachments']},
-                ];
-              }
+      setState(() {
+        _tickets = List<Map<String, dynamic>>.from(
+          response['data'].map((ticket) {
+            // Process attachments
+            String attachmentsDisplay = 'No attachments';
+            List<dynamic> attachments = [];
 
-              // Map backend status to display status
-              String displayStatus = 'OPEN';
-              String backendStatus =
-                  (ticket['status'] ?? 'open').toString().toLowerCase().trim();
+            if (ticket['attachments'] != null) {
+              attachmentsDisplay = ticket['attachments'].toString();
+              attachments = [
+                {'original_name': ticket['attachments']},
+              ];
+            }
 
-              if (backendStatus == 'open' || backendStatus == 'opened') {
-                displayStatus = 'OPEN';
-              } else if (backendStatus == 'in progress' ||
-                  backendStatus == 'in_progress' ||
-                  backendStatus == 'inprogress') {
-                displayStatus = 'IN PROGRESS';
-              } else if (backendStatus == 'resolved') {
-                displayStatus = 'RESOLVED';
-              } else if (backendStatus == 'closed') {
-                displayStatus = 'CLOSED';
-              } else {
-                displayStatus = backendStatus.toUpperCase();
-              }
+            // Map backend status to display status
+            String displayStatus = 'OPEN';
+            String backendStatus =
+                (ticket['status'] ?? 'open').toString().toLowerCase().trim();
 
-              // Compose contact name: use contact_name or contact field from backend
-              String contactName =
-                  ticket['contact_name']?.toString() ??
-                  ticket['contact']?.toString() ??
-                  'Not Assigned';
+            if (backendStatus == 'open' || backendStatus == 'opened') {
+              displayStatus = 'OPEN';
+            } else if (backendStatus == 'in progress' ||
+                backendStatus == 'in_progress' ||
+                backendStatus == 'inprogress') {
+              displayStatus = 'IN PROGRESS';
+            } else if (backendStatus == 'resolved') {
+              displayStatus = 'RESOLVED';
+            } else if (backendStatus == 'closed') {
+              displayStatus = 'CLOSED';
+            } else {
+              displayStatus = backendStatus.toUpperCase();
+            }
 
-              final processedTicket = {
-                'id': ticket['id'],
-                'Status': displayStatus,
-                'name': contactName,
-                'Contact': contactName,
-                'Subscription': getNickname(
+            // Compose contact name
+            String contactName =
+                ticket['contact_name']?.toString() ??
+                ticket['contact']?.toString() ??
+                'Not Assigned';
+
+            final processedTicket = {
+              'id': ticket['id'],
+              'Status': displayStatus,
+              'name': contactName,
+              'Contact': contactName,
+              'Subscription': getNickname(
+                _subscriptions,
+                ticket['subscription'],
+              ),
+              'Ticket Type': ticket['type'] ?? 'N/A',
+              'Attachments': attachmentsDisplay,
+              'full_data': {
+                ...ticket,
+                'created_at': _formatDate(ticket['created_at']),
+                'attachments': attachments,
+                'contact': ticket['user_id'],
+                'contact_name': contactName,
+                'status': displayStatus,
+                'subscription_nickname': getNickname(
                   _subscriptions,
                   ticket['subscription'],
                 ),
-                'Ticket Type': ticket['type'] ?? 'N/A',
-                'Attachments': attachmentsDisplay,
-                'full_data': {
-                  ...ticket,
-                  'created_at': _formatDate(ticket['created_at']),
-                  'attachments': attachments,
-                  'contact': ticket['user_id'],
-                  'contact_name': contactName,
-                  'status': displayStatus,
-                  'subscription_nickname': getNickname(
-                    _subscriptions,
-                    ticket['subscription'],
-                  ),
-                },
-              };
+              },
+            };
 
-              return processedTicket;
-            }),
-          );
-          _filteredTickets = _tickets;
-          _isLoading = false;
-        });
-      } else {
-        throw Exception(response['message'] ?? 'Failed to load tickets');
-      }
+            return processedTicket;
+          }),
+        );
+        _filteredTickets = _tickets;
+        _isLoading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -238,7 +240,6 @@ class _TicketScreenState extends State<TicketScreen> {
           }
         });
 
-        // Pop back to ticket list screen with updated status
         Navigator.pop(context, {
           'status': newStatus.toUpperCase(),
           'id': ticketId,
@@ -268,7 +269,7 @@ class _TicketScreenState extends State<TicketScreen> {
   void _showTicketDetails(Map<String, dynamic> ticket) {
     final fullData = ticket['full_data'] as Map<String, dynamic>;
 
-    print(fullData); // or debugPrint(fullData.toString());
+    debugPrint(fullData.toString());
 
     showDialog(
       context: context,
@@ -324,7 +325,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                   'Subscription',
                                   getNickname(
                                     _subscriptions,
-                                    fullData['subscription'],
+                                    fullData['subscription']?.toString(),
                                   ),
                                 ),
                               ),
@@ -391,7 +392,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               Expanded(
                                 child: _buildDetailItem(
                                   'Created At',
-                                  fullData['created_at'] ?? 'N/A',
+                                  fullData['created_at']?.toString() ?? 'N/A',
                                 ),
                               ),
                             ],
@@ -415,14 +416,14 @@ class _TicketScreenState extends State<TicketScreen> {
                               border: Border.all(color: Colors.grey[300]!),
                             ),
                             child: Text(
-                              fullData['description'] ?? 'No description',
+                              fullData['description']?.toString() ??
+                                  'No description',
                               style: const TextStyle(fontSize: 14),
                             ),
                           ),
                           if (fullData['attachments'] != null &&
-                              fullData['attachments']
-                                  .toString()
-                                  .isNotEmpty) ...[
+                              fullData['attachments'].toString().isNotEmpty &&
+                              fullData['attachments'].toString() != '[]') ...[
                             const SizedBox(height: 24),
                             const Text(
                               'Attachments',
@@ -462,7 +463,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                             fileName.split('.').last;
 
                                         final fileSize = _formatFileSize(
-                                          attachment['file_size'] as int?,
+                                          attachment['file_size'],
                                         );
 
                                         final fileId =
@@ -513,104 +514,11 @@ class _TicketScreenState extends State<TicketScreen> {
                                                   Icons.download,
                                                   color: Color(0xFF133343),
                                                 ),
-                                                onPressed: () async {
-                                                  if (fileId != null) {
-                                                    try {
-                                                      final response =
-                                                          await http.get(
-                                                            Uri.parse(
-                                                              '${ApiService.baseUrl}/api.php?action=download_attachment&attachment_id=$fileId',
-                                                            ),
-                                                          );
-
-                                                      if (response.statusCode ==
-                                                          200) {
-                                                        String?
-                                                        contentDisposition =
-                                                            response
-                                                                .headers['content-disposition'];
-                                                        String fileName =
-                                                            'downloaded_file';
-                                                        if (contentDisposition !=
-                                                            null) {
-                                                          final matches = RegExp(
-                                                            r'filename="(.+?)"',
-                                                          ).firstMatch(
-                                                            contentDisposition,
-                                                          );
-                                                          if (matches != null &&
-                                                              matches.groupCount >=
-                                                                  1) {
-                                                            fileName =
-                                                                matches.group(
-                                                                  1,
-                                                                )!;
-                                                          }
-                                                        }
-
-                                                        final directory =
-                                                            await getApplicationDocumentsDirectory();
-                                                        final file = File(
-                                                          '${directory.path}/$fileName',
-                                                        );
-                                                        await file.writeAsBytes(
-                                                          response.bodyBytes,
-                                                        );
-
-                                                        if (mounted) {
-                                                          ScaffoldMessenger.of(
-                                                            context,
-                                                          ).showSnackBar(
-                                                            SnackBar(
-                                                              content: Text(
-                                                                'File downloaded to: ${file.path}',
-                                                              ),
-                                                              duration:
-                                                                  const Duration(
-                                                                    seconds: 3,
-                                                                  ),
-                                                            ),
-                                                          );
-                                                        }
-                                                      } else {
-                                                        throw Exception(
-                                                          'Failed to download file',
-                                                        );
-                                                      }
-                                                    } catch (e) {
-                                                      if (mounted) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          SnackBar(
-                                                            content: Text(
-                                                              'Error downloading file: $e',
-                                                            ),
-                                                            backgroundColor:
-                                                                Colors.red,
-                                                            duration:
-                                                                const Duration(
-                                                                  seconds: 3,
-                                                                ),
-                                                          ),
-                                                        );
-                                                      }
-                                                    }
-                                                  } else {
-                                                    ScaffoldMessenger.of(
+                                                onPressed:
+                                                    () => _downloadAttachment(
                                                       context,
-                                                    ).showSnackBar(
-                                                      const SnackBar(
-                                                        content: Text(
-                                                          'Download not available for this file',
-                                                        ),
-                                                        duration: Duration(
-                                                          seconds: 2,
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
+                                                      fileId,
+                                                    ),
                                                 tooltip: 'Download file',
                                               ),
                                             ],
@@ -688,6 +596,64 @@ class _TicketScreenState extends State<TicketScreen> {
         await _loadTickets();
       }
     });
+  }
+
+  /// Shared download helper used in both dialog and details screen
+  Future<void> _downloadAttachment(BuildContext ctx, String? fileId) async {
+    if (fileId == null) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(
+          content: Text('Download not available for this file'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '${ApiService.baseUrl}/api.php?action=download_attachment&attachment_id=$fileId',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        String? contentDisposition = response.headers['content-disposition'];
+        String fileName = 'downloaded_file';
+        if (contentDisposition != null) {
+          final matches = RegExp(
+            r'filename="(.+?)"',
+          ).firstMatch(contentDisposition);
+          if (matches != null && matches.groupCount >= 1) {
+            fileName = matches.group(1)!;
+          }
+        }
+
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/$fileName');
+        await file.writeAsBytes(response.bodyBytes);
+
+        if (mounted) {
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(
+              content: Text('File downloaded to: ${file.path}'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Failed to download file');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: Text('Error downloading file: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   Color _getStatusColor(String status) {
@@ -959,9 +925,66 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
     }
   }
 
+  Future<void> _downloadAttachment(String? fileId) async {
+    if (fileId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Download not available for this file'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '${ApiService.baseUrl}/api.php?action=download_attachment&attachment_id=$fileId',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        String? contentDisposition = response.headers['content-disposition'];
+        String fileName = 'downloaded_file';
+        if (contentDisposition != null) {
+          final matches = RegExp(
+            r'filename="(.+?)"',
+          ).firstMatch(contentDisposition);
+          if (matches != null && matches.groupCount >= 1) {
+            fileName = matches.group(1)!;
+          }
+        }
+
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/$fileName');
+        await file.writeAsBytes(response.bodyBytes);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('File downloaded to: ${file.path}'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Failed to download file');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error downloading file: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    print('TicketDetailsScreen _ticket: ' + _ticket.toString());
+    debugPrint('TicketDetailsScreen _ticket: $_ticket');
     final status = _ticket['status']?.toString().toUpperCase() ?? 'N/A';
 
     return Scaffold(
@@ -1126,7 +1149,9 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            if (attachments != null && attachments.isNotEmpty) ...[
+            if (attachments != null &&
+                attachments.toString().isNotEmpty &&
+                attachments.toString() != '[]') ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -1205,86 +1230,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                                   Icons.download,
                                   color: Color(0xFF133343),
                                 ),
-                                onPressed: () async {
-                                  if (fileId != null) {
-                                    try {
-                                      final response = await http.get(
-                                        Uri.parse(
-                                          '${ApiService.baseUrl}/api.php?action=download_attachment&attachment_id=$fileId',
-                                        ),
-                                      );
-
-                                      if (response.statusCode == 200) {
-                                        String? contentDisposition =
-                                            response
-                                                .headers['content-disposition'];
-                                        String fileName = 'downloaded_file';
-                                        if (contentDisposition != null) {
-                                          final matches = RegExp(
-                                            r'filename="(.+?)"',
-                                          ).firstMatch(contentDisposition);
-                                          if (matches != null &&
-                                              matches.groupCount >= 1) {
-                                            fileName = matches.group(1)!;
-                                          }
-                                        }
-
-                                        final directory =
-                                            await getApplicationDocumentsDirectory();
-                                        final file = File(
-                                          '${directory.path}/$fileName',
-                                        );
-                                        await file.writeAsBytes(
-                                          response.bodyBytes,
-                                        );
-
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                'File downloaded to: ${file.path}',
-                                              ),
-                                              duration: const Duration(
-                                                seconds: 3,
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      } else {
-                                        throw Exception(
-                                          'Failed to download file',
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'Error downloading file: $e',
-                                            ),
-                                            backgroundColor: Colors.red,
-                                            duration: const Duration(
-                                              seconds: 3,
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Download not available for this file',
-                                        ),
-                                        duration: Duration(seconds: 2),
-                                      ),
-                                    );
-                                  }
-                                },
+                                onPressed: () => _downloadAttachment(fileId),
                                 tooltip: 'Download file',
                               ),
                             ],

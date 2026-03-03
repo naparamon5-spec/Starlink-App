@@ -4,7 +4,6 @@ import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'customer_ticket_modal.dart';
 import 'customer_view.dart';
-import '../../end-user/ticket/ticket_modal.dart';
 import 'dart:convert';
 
 class CustomerTicketScreen extends StatefulWidget {
@@ -28,7 +27,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   int _itemsPerPage = 6;
   int _currentPage = 1;
 
-  // Updated filter options to match backend ticket_type values
+  // Filter options populated from backend categories
   List<String> _filterOptions = ['All'];
   Map<String, String> _filterToTicketType = {'All': 'All'};
 
@@ -68,12 +67,13 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
         _loadTickets();
       }
     } catch (e) {
-      print('Error loading user data: $e');
+      debugPrint('Error loading user data: $e');
     }
   }
 
   Future<void> _loadCategories() async {
     try {
+      // getCategories() now returns Map<String, dynamic> with 'status' + 'data'
       final categoriesData = await ApiService.getCategories();
       if (categoriesData['status'] == 'success' &&
           categoriesData['data'] != null) {
@@ -93,6 +93,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
       }
     } catch (e) {
       // fallback: keep default filter options
+      debugPrint('Error loading categories: $e');
     }
   }
 
@@ -104,11 +105,12 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
       _filteredTickets =
           _tickets.where((ticket) {
             // Only show tickets with status OPEN or IN PROGRESS
-            final status = ticket['Status']?.toString()?.toUpperCase() ?? '';
+            final status = ticket['Status']?.toString().toUpperCase() ?? '';
             final isOpenOrInProgress =
                 status == 'OPEN' || status == 'IN PROGRESS';
             if (!isOpenOrInProgress) return false;
-            // Filter by ticket type using mapping, ignore case and whitespace
+
+            // Filter by ticket type
             bool matchesFilter = true;
             if (selectedType != 'All') {
               final ticketType =
@@ -120,6 +122,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                       '');
               matchesFilter = ticketType == filterType;
             }
+
             // Filter by search query
             bool matchesQuery = true;
             if (query.isNotEmpty) {
@@ -128,9 +131,10 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                 return value.contains(query);
               });
             }
+
             return matchesFilter && matchesQuery;
           }).toList();
-      // Reset to first page when search/filter changes
+
       _currentPage = 1;
     });
   }
@@ -148,7 +152,10 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     );
   }
 
-  int get _totalPages => (_filteredTickets.length / _itemsPerPage).ceil();
+  int get _totalPages =>
+      _filteredTickets.isEmpty
+          ? 1
+          : (_filteredTickets.length / _itemsPerPage).ceil();
 
   Widget _buildPaginationControls() {
     if (_filteredTickets.length <= _itemsPerPage)
@@ -202,56 +209,59 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
       final response = await ApiService.getTickets();
 
       if (response['status'] == 'success' && mounted) {
-        setState(() {
-          _tickets = List<Map<String, dynamic>>.from(
-            response['data']
+        final List<dynamic> rawData = response['data'] ?? [];
+
+        final List<Map<String, dynamic>> loadedTickets =
+            rawData
                 .where((ticket) {
-                  String ticketContact = ticket['contact_id']?.toString() ?? '';
-                  String ticketUserId = ticket['user_id']?.toString() ?? '';
-                  String currentUserId = _userId.toString();
-                  bool isUserRelated =
+                  final String ticketContact =
+                      ticket['contact_id']?.toString() ?? '';
+                  final String ticketUserId =
+                      ticket['user_id']?.toString() ?? '';
+                  final String currentUserId = _userId.toString();
+                  final bool isUserRelated =
                       ticketContact == currentUserId ||
                       ticketUserId == currentUserId;
-                  String backendStatus =
+
+                  final String backendStatus =
                       (ticket['status'] ?? '').toString().toLowerCase().trim();
-                  bool isOpenOrInProgress =
+                  final bool isOpenOrInProgress =
                       backendStatus == 'open' ||
                       backendStatus == 'in_progress' ||
                       backendStatus == 'in progress' ||
                       backendStatus == 'inprogress';
+
                   return isUserRelated && isOpenOrInProgress;
                 })
-                .map((ticket) {
+                .map<Map<String, dynamic>>((ticket) {
                   // Format attachments for display
                   String attachmentsDisplay = 'No attachments';
-                  if (ticket['attachments'] != null &&
-                      ticket['attachments'].isNotEmpty) {
-                    if (ticket['attachments'] is List) {
+                  final rawAttachments = ticket['attachments'];
+                  if (rawAttachments != null) {
+                    if (rawAttachments is List && rawAttachments.isNotEmpty) {
                       final fileNames =
-                          (ticket['attachments'] as List)
-                              .where((attachment) => attachment != null)
-                              .map((attachment) {
-                                if (attachment is Map) {
-                                  return attachment['name']?.toString() ?? '';
-                                }
+                          rawAttachments
+                              .where((a) => a != null)
+                              .map((a) {
+                                if (a is Map)
+                                  return a['name']?.toString() ?? '';
                                 return '';
                               })
-                              .where((name) => name.isNotEmpty)
+                              .where((n) => n.isNotEmpty)
                               .toList();
-                      attachmentsDisplay =
-                          fileNames.isNotEmpty
-                              ? fileNames.join(', ')
-                              : 'No attachments';
-                    } else if (ticket['attachments'] is String) {
-                      attachmentsDisplay = ticket['attachments'].toString();
+                      if (fileNames.isNotEmpty) {
+                        attachmentsDisplay = fileNames.join(', ');
+                      }
+                    } else if (rawAttachments is String &&
+                        rawAttachments.isNotEmpty) {
+                      attachmentsDisplay = rawAttachments;
                     }
                   }
 
                   // Map backend status to display status
-                  String displayStatus;
-                  String backendStatus =
+                  final String backendStatus =
                       (ticket['status'] ?? '').toString().toLowerCase().trim();
-
+                  String displayStatus;
                   switch (backendStatus) {
                     case 'open':
                       displayStatus = 'OPEN';
@@ -281,41 +291,36 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                     'Created At': _formatDate(ticket['created_at']),
                     'Attachments': attachmentsDisplay,
                     'full_data': {
-                      ...ticket,
+                      ...Map<String, dynamic>.from(ticket),
                       'created_at': _formatDate(ticket['created_at']),
-                      'attachments': ticket['attachments'] ?? [],
+                      'attachments': rawAttachments ?? [],
                       'status': displayStatus,
                       'raw_status': backendStatus,
                     },
                   };
-                }),
-          );
-          _filteredTickets = _tickets;
-          _isLoading = false;
-        });
+                })
+                .toList();
 
-        // Ensure merging of in-progress status from SharedPreferences after loading tickets
+        // Merge in-progress IDs from SharedPreferences
         final inProgressIds = await _getInProgressTicketIds();
-        for (var ticket in _tickets) {
+        for (var ticket in loadedTickets) {
           if (inProgressIds.contains(ticket['id'].toString())) {
             ticket['Status'] = 'IN PROGRESS';
-            if (ticket['full_data'] != null) {
-              ticket['full_data']['status'] = 'IN PROGRESS';
-            }
+            (ticket['full_data'] as Map<String, dynamic>)['status'] =
+                'IN PROGRESS';
           }
         }
 
-        // In _loadTickets, after fetching and updating _tickets, merge in-progress tickets from SharedPreferences if not present
+        // Merge any locally-stored in-progress tickets not returned by API
         final inProgressTickets = await _getInProgressTicketsData();
         for (var ticket in inProgressTickets) {
-          if (!_tickets.any(
+          if (!loadedTickets.any(
             (t) => t['id'].toString() == ticket['id'].toString(),
           )) {
-            // Map fields to display structure
             String displayStatus =
-                ticket['status']?.toString()?.toUpperCase() ?? 'IN PROGRESS';
+                ticket['status']?.toString().toUpperCase() ?? 'IN PROGRESS';
             if (displayStatus == 'IN_PROGRESS') displayStatus = 'IN PROGRESS';
-            _tickets.add({
+            loadedTickets.add({
               'id': ticket['id'],
               'Status': displayStatus,
               'Ticket Type': ticket['type'] ?? 'N/A',
@@ -328,12 +333,19 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
             });
           }
         }
-        _filteredTickets = _tickets;
+
+        if (mounted) {
+          setState(() {
+            _tickets = loadedTickets;
+            _filteredTickets = loadedTickets;
+            _isLoading = false;
+          });
+        }
       } else {
         throw Exception(response['message'] ?? 'Failed to load tickets');
       }
     } catch (e) {
-      print('Error loading tickets: $e');
+      debugPrint('Error loading tickets: $e');
       if (!mounted) return;
       setState(() {
         _tickets = [];
@@ -406,14 +418,14 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                               Expanded(
                                 child: _buildDetailItem(
                                   'Ticket Type',
-                                  fullData['type'] ?? 'N/A',
+                                  fullData['type']?.toString() ?? 'N/A',
                                 ),
                               ),
                               const SizedBox(width: 24),
                               Expanded(
                                 child: _buildDetailItem(
                                   'Subscription',
-                                  fullData['subscription'] ?? 'N/A',
+                                  fullData['subscription']?.toString() ?? 'N/A',
                                 ),
                               ),
                             ],
@@ -476,7 +488,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                               Expanded(
                                 child: _buildDetailItem(
                                   'Created At',
-                                  fullData['created_at'] ?? 'N/A',
+                                  fullData['created_at']?.toString() ?? 'N/A',
                                 ),
                               ),
                             ],
@@ -500,14 +512,14 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                               border: Border.all(color: Colors.grey[300]!),
                             ),
                             child: Text(
-                              fullData['description'] ?? 'No description',
+                              fullData['description']?.toString() ??
+                                  'No description',
                               style: const TextStyle(fontSize: 14),
                             ),
                           ),
                           if (fullData['attachments'] != null &&
-                              fullData['attachments']
-                                  .toString()
-                                  .isNotEmpty) ...[
+                              fullData['attachments'].toString().isNotEmpty &&
+                              fullData['attachments'].toString() != '[]') ...[
                             const SizedBox(height: 24),
                             const Text(
                               'Attachments',
@@ -541,9 +553,10 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                                             attachment['type']?.toString() ??
                                             '';
                                         final fileSize = _formatFileSize(
-                                          attachment['size'] as int?,
+                                          attachment['size'] is int
+                                              ? attachment['size'] as int
+                                              : null,
                                         );
-
                                         return Padding(
                                           padding: const EdgeInsets.only(
                                             bottom: 8.0,
@@ -628,25 +641,6 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                                             ),
                                           ),
                                         ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.download,
-                                            color: Color(0xFF133343),
-                                          ),
-                                          onPressed: () {
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'Download functionality coming soon',
-                                                ),
-                                                duration: Duration(seconds: 2),
-                                              ),
-                                            );
-                                          },
-                                          tooltip: 'Download file',
-                                        ),
                                       ],
                                     ),
                                   ],
@@ -715,13 +709,11 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     final result = await showDialog(
       context: context,
       builder:
-          (dialogContext) => NewTicketModal(
+          (dialogContext) => CustomerTicketModal(
             userId: _userId ?? 0,
             onConfirm: (ticket) {
-              // Immediately add the new ticket to the list
               if (ticket['id'] != null && mounted) {
                 setState(() {
-                  // Format the ticket data to match the structure expected by _loadTickets
                   final newTicket = {
                     'id': ticket['id'],
                     'Status': ticket['Status'] ?? 'OPEN',
@@ -751,11 +743,9 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                       'user_id': ticket['full_data']?['user_id'],
                     },
                   };
-
-                  // Insert at the beginning of the list
                   _tickets.insert(0, newTicket);
                   _filteredTickets = List.from(_tickets);
-                  _currentPage = 1; // Reset to first page to show new ticket
+                  _currentPage = 1;
                 });
               }
             },
@@ -765,23 +755,19 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
           ),
     );
 
-    // Reload tickets to ensure consistency with backend
     if (result != null && mounted) {
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() => _isLoading = true);
       try {
-        // Force refresh to get the latest data
         await _loadTickets();
-
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket created successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ticket created successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -793,11 +779,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
           );
         }
       } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -895,14 +877,14 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                           }
                         },
                         items:
-                            _filterOptions.map<DropdownMenuItem<String>>((
-                              String value,
-                            ) {
-                              return DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(value),
-                              );
-                            }).toList(),
+                            _filterOptions
+                                .map<DropdownMenuItem<String>>(
+                                  (String value) => DropdownMenuItem<String>(
+                                    value: value,
+                                    child: Text(value),
+                                  ),
+                                )
+                                .toList(),
                       ),
                     ),
                   ),
@@ -956,9 +938,9 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
         child: FloatingActionButton(
           onPressed: _showNewTicketModal,
           backgroundColor: const Color(0xFF133343),
-          child: const Icon(Icons.add, color: Colors.white),
           tooltip: 'Create new ticket',
           elevation: 10,
+          child: const Icon(Icons.add, color: Colors.white),
         ),
       ),
     );
@@ -997,9 +979,9 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
             ),
           ).then((result) {
             if (result != null && result is Map<String, dynamic>) {
-              // If the ticket was closed or done, remove it from this list
-              if (result['status']?.toString().toUpperCase() == 'CLOSED' ||
-                  result['status']?.toString().toUpperCase() == 'RESOLVED') {
+              final resultStatus =
+                  result['status']?.toString().toUpperCase() ?? '';
+              if (resultStatus == 'CLOSED' || resultStatus == 'RESOLVED') {
                 setState(() {
                   _tickets.removeWhere(
                     (t) => t['id'].toString() == result['id'].toString(),
@@ -1007,18 +989,15 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                   _filteredTickets = List.from(_tickets);
                 });
               } else {
-                // Update the ticket status in the list
                 setState(() {
-                  final ticketIndex = _tickets.indexWhere(
+                  final idx = _tickets.indexWhere(
                     (t) => t['id'].toString() == result['id'].toString(),
                   );
-                  if (ticketIndex != -1) {
-                    _tickets[ticketIndex]['Status'] = result['status'];
-                    if (_tickets[ticketIndex]['full_data'] != null) {
-                      _tickets[ticketIndex]['full_data']['status'] =
-                          result['status'];
-                    }
-                    // Update filtered tickets as well
+                  if (idx != -1) {
+                    _tickets[idx]['Status'] = result['status'];
+                    (_tickets[idx]['full_data']
+                            as Map<String, dynamic>)['status'] =
+                        result['status'];
                     _filteredTickets = List.from(_tickets);
                   }
                 });
@@ -1205,6 +1184,8 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     }
   }
 
+  // ── SharedPreferences helpers ─────────────────────────────────────────────
+
   Future<void> _saveInProgressTicketIds(List<String> ids) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('in_progress_ticket_ids', ids);
@@ -1233,7 +1214,6 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     final prefs = await SharedPreferences.getInstance();
     List<String> rawList =
         prefs.getStringList('in_progress_tickets_data') ?? [];
-    // Remove any existing entry for this ticket
     rawList.removeWhere((item) {
       final data = jsonDecode(item);
       return data['id'].toString() == ticket['id'].toString();

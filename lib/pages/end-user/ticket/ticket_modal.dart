@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../services/api_service.dart';
 import 'dart:convert';
-import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import '../../../services/notification_service.dart';
 
@@ -93,13 +92,19 @@ class _NewTicketModalState extends State<NewTicketModal> {
         );
       }
 
-      // Fetch ticket categories
+      // Fetch ticket categories — getCategories() returns Map<String, dynamic>
       final categoriesData = await ApiService.getCategories();
-      setState(() {
-        _ticketTypes = List<String>.from(
-          categoriesData['data'].map((item) => item['name']),
-        );
-      });
+      if (categoriesData['status'] == 'success' &&
+          categoriesData['data'] != null) {
+        final List<dynamic> categoryList = categoriesData['data'];
+        setState(() {
+          _ticketTypes =
+              categoryList
+                  .map<String>((item) => item['name']?.toString() ?? '')
+                  .where((name) => name.isNotEmpty)
+                  .toList();
+        });
+      }
 
       // Fetch contacts using EU code
       final contactsData = await ApiService.getContactsByEuCode(euCode);
@@ -209,10 +214,8 @@ class _NewTicketModalState extends State<NewTicketModal> {
   // Helper to fetch customer user ID by EU code
   Future<int?> _fetchCustomerUserIdByEuCode(String euCode) async {
     try {
-      // Try to get the customer by EU code (assuming you have such an endpoint)
       final response = await ApiService.getContactsByEuCode(euCode);
       if (response['status'] == 'success' && response['data'] != null) {
-        // Assume the first contact is the customer (adjust as needed)
         final contacts = List<Map<String, dynamic>>.from(response['data']);
         if (contacts.isNotEmpty && contacts[0]['customer_user_id'] != null) {
           return int.tryParse(contacts[0]['customer_user_id'].toString());
@@ -246,22 +249,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
           }
         }
 
-        // Create the ticket with attachments
-        final newTicket = {
-          'user_id': widget.userId,
-          'type': _selectedTicketType,
-          'contact': _selectedContactId,
-          'contact_name': _selectedContactName ?? _selectedContactId ?? '',
-          'subscription': _selectedSubscription?['serviceLineNumber'],
-          'subject': _selectedSubscription?['nickname'],
-          'description': _descriptionController.text,
-          'status': 'open',
-          'attachments': attachmentsData,
-          'attachments_display': _attachedFiles
-              .map((file) => file.name)
-              .join(', '),
-        };
-
         // Show loading indicator
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -280,8 +267,16 @@ class _NewTicketModalState extends State<NewTicketModal> {
           ),
         );
 
-        // Submit the ticket using ApiService
-        final response = await ApiService.createTicket(newTicket);
+        // Submit the ticket using ApiService.createTicketNamed (named params)
+        final response = await ApiService.createTicketNamed(
+          description: _descriptionController.text,
+          ticketType: _selectedTicketType!,
+          subscriptionId:
+              _selectedSubscription?['serviceLineNumber']?.toString() ?? '',
+          contact: _selectedContactId!,
+          nickname: _selectedSubscription?['nickname']?.toString() ?? '',
+          attachments: attachmentsData,
+        );
 
         // Debug print the response
         print('Ticket creation response:');
@@ -297,7 +292,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
           // Upload attachments to the specified API
           if (_attachedFiles.isNotEmpty) {
             try {
-              // Create multipart request
               final request = http.MultipartRequest(
                 'POST',
                 Uri.parse(
@@ -305,11 +299,9 @@ class _NewTicketModalState extends State<NewTicketModal> {
                 ),
               );
 
-              // Add basic fields
               request.fields['user_id'] = widget.userId.toString();
               request.fields['ticket_no'] = ticketId.toString();
 
-              // Add files
               for (var file in _attachedFiles) {
                 if (file.bytes != null) {
                   request.files.add(
@@ -322,15 +314,8 @@ class _NewTicketModalState extends State<NewTicketModal> {
                 }
               }
 
-              // Send the request
               final streamedResponse = await request.send();
-              final uploadResponse = await http.Response.fromStream(
-                streamedResponse,
-              );
-
-              if (uploadResponse.statusCode != 200) {
-                // Handle upload failure silently
-              }
+              await http.Response.fromStream(streamedResponse);
             } catch (e) {
               // Handle upload error silently
             }
@@ -340,7 +325,6 @@ class _NewTicketModalState extends State<NewTicketModal> {
           try {
             int? customerUserId = _selectedSubscription?['customer_user_id'];
             if (customerUserId == null) {
-              // Try to get from contacts or fetch from backend
               String? euCode;
               if (_subscriptions.isNotEmpty &&
                   _subscriptions[0]['eu_code'] != null) {
@@ -576,25 +560,18 @@ class _NewTicketModalState extends State<NewTicketModal> {
                                           .toString()
                                           .trim()
                                           .isNotEmpty)
-                                  ? contact['name']
+                                  ? contact['name'].toString()
                                   : (((contact['first_name'] ?? '') +
                                               ((contact['last_name'] != null &&
                                                       contact['last_name']
                                                           .toString()
                                                           .trim()
                                                           .isNotEmpty)
-                                                  ? ' ' + contact['last_name']
+                                                  ? ' ${contact['last_name']}'
                                                   : ''))
                                           .trim()
                                           .isNotEmpty
-                                      ? ((contact['first_name'] ?? '') +
-                                          ((contact['last_name'] != null &&
-                                                  contact['last_name']
-                                                      .toString()
-                                                      .trim()
-                                                      .isNotEmpty)
-                                              ? ' ' + contact['last_name']
-                                              : ''))
+                                      ? '${contact['first_name'] ?? ''}${(contact['last_name'] != null && contact['last_name'].toString().trim().isNotEmpty) ? ' ${contact['last_name']}' : ''}'
                                       : 'No Name');
                           return DropdownMenuItem(
                             value: contact['id'].toString(),
@@ -608,31 +585,28 @@ class _NewTicketModalState extends State<NewTicketModal> {
                           (c) => c['id'].toString() == value,
                           orElse: () => {},
                         );
+                        if (selected.isEmpty) {
+                          _selectedContactName = null;
+                          return;
+                        }
                         _selectedContactName =
                             (selected['name'] != null &&
                                     selected['name']
                                         .toString()
                                         .trim()
                                         .isNotEmpty)
-                                ? selected['name']
+                                ? selected['name'].toString()
                                 : (((selected['first_name'] ?? '') +
                                             ((selected['last_name'] != null &&
                                                     selected['last_name']
                                                         .toString()
                                                         .trim()
                                                         .isNotEmpty)
-                                                ? ' ' + selected['last_name']
+                                                ? ' ${selected['last_name']}'
                                                 : ''))
                                         .trim()
                                         .isNotEmpty
-                                    ? ((selected['first_name'] ?? '') +
-                                        ((selected['last_name'] != null &&
-                                                selected['last_name']
-                                                    .toString()
-                                                    .trim()
-                                                    .isNotEmpty)
-                                            ? ' ' + selected['last_name']
-                                            : ''))
+                                    ? '${selected['first_name'] ?? ''}${(selected['last_name'] != null && selected['last_name'].toString().trim().isNotEmpty) ? ' ${selected['last_name']}' : ''}'
                                     : 'No Name');
                       });
                     },

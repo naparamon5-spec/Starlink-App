@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'dart:convert';
 import 'end-user/home/home_screen.dart';
 import 'customer/home/customer_home_screen.dart';
+import 'admin/admin_home_screen.dart';
+import 'biller/biller_home_screen.dart';
+import 'agent/agent_home_screen.dart';
 import 'forgot_password.dart';
 import '../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'otp_verification_page.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -36,12 +41,25 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  /// Returns the correct home screen widget based on the user's role.
+  Widget _getScreenForRole(String role) {
+    switch (role.toLowerCase()) {
+      case 'admin':
+        return const AdminHomeScreen();
+      case 'biller':
+        return const BillerApp();
+      case 'agent':
+        return const AgentApp();
+      case 'customer':
+      default:
+        return CustomerHomeScreen(loginMessage: 'Login successful');
+    }
+  }
+
   Future<void> _handleLogin() async {
     setState(() {
       _showValidation = true;
       _errorMessage = null;
-      _emailError = null;
-      _passwordError = null;
     });
 
     if (!_formKey.currentState!.validate() || !_isAgreedToTerms) return;
@@ -54,56 +72,108 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
 
-      print('Login response: $response'); // Debugging
+      print('Login response: $response');
 
-      if (response['status'] == 'success' || response['flag'] == false) {
-        // Successful login
-        final userData = response['user'] ?? response['data'] ?? {};
-        final userId = userData['id'] ?? response['userId'];
-        final userType =
-            (userData['type'] ?? userData['role'] ?? 'end_user')
-                .toString()
-                .toLowerCase();
-
-        final prefs = await SharedPreferences.getInstance();
-        if (response['accessToken'] != null) {
-          await prefs.setString('accessToken', response['accessToken']);
-        }
-        if (userId != null) await prefs.setInt('user_id', userId);
-        if (userType != null) await prefs.setString('userType', userType);
-        await prefs.setString('email', _emailController.text);
-
-        // Store extra info
-        await prefs.setString('name', userData['full_name'] ?? '');
-        await prefs.setString('phone', userData['phone'] ?? '');
-        await prefs.setString('address', userData['address'] ?? '');
-
-        // Navigate
+      if (response.containsKey('userId') && response['flag'] == false) {
+        // This is an end_user — send to OTP verification
         if (!mounted) return;
-        if (userType == 'end_user') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (_) => HomeScreen(
-                    userId: userId,
-                    loginMessage: 'Login successful',
-                  ),
-            ),
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtpVerificationPage(email: _emailController.text),
+          ),
+        );
+      } else if (response.containsKey('accessToken')) {
+        print('[DEBUG] Login: Login successful, storing tokens');
+
+        final accessToken = response['accessToken'];
+        final refreshToken = response['refreshToken'];
+
+        if (accessToken != null) {
+          await ApiService.setAccessToken(accessToken.toString());
+          print('[DEBUG] Login: Access token stored');
+        }
+        if (refreshToken != null) {
+          await ApiService.setRefreshToken(refreshToken.toString());
+          print('[DEBUG] Login: Refresh token stored');
+        }
+
+        // Get user profile using /api/v1/auth/me
+        print('[DEBUG] Login: Loading user profile from /api/v1/auth/me');
+        final profileResponse = await ApiService.getCurrentUserProfile();
+
+        if (profileResponse['status'] == 'success' &&
+            profileResponse['data'] != null) {
+          final userData = profileResponse['data'];
+          print(
+            '[DEBUG] Login: Profile loaded — User ID: ${userData['id']}, '
+            'Email: ${userData['email']}, Role: ${userData['role']}',
           );
-        } else if (userType == 'customer') {
+
+          // Get detailed user profile using /api/v1/users/:id
+          final userId = userData['id']?.toString() ?? 'undefined';
+          print('[DEBUG] Login: Loading detailed profile for user $userId');
+          final detailedProfileResponse = await ApiService.getUserById(userId);
+
+          if (detailedProfileResponse['status'] == 'success' &&
+              detailedProfileResponse['data'] != null) {
+            final detailedUserData = detailedProfileResponse['data'];
+            print('[DEBUG] Login: Detailed profile loaded — $detailedUserData');
+
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('userProfile', json.encode(detailedUserData));
+            print('[DEBUG] Login: User profile stored in SharedPreferences');
+          } else {
+            print(
+              '[DEBUG] Login: Failed to load detailed profile: '
+              '${detailedProfileResponse['message']}',
+            );
+          }
+
+          // Determine role — prefer 'role', fall back to 'type'
+          final userRole =
+              (userData['role'] ?? userData['type'] ?? 'customer')
+                  .toString()
+                  .toLowerCase();
+
+          print('[DEBUG] Login: Navigating based on role: $userRole');
+
+          if (!mounted) return;
+
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder:
-                  (_) => CustomerHomeScreen(loginMessage: 'Login successful'),
-            ),
+            MaterialPageRoute(builder: (_) => _getScreenForRole(userRole)),
           );
         } else {
-          setState(() => _errorMessage = 'Invalid user type.');
+          print(
+            '[DEBUG] Login: Failed to load profile from /me: '
+            '${profileResponse['message']}',
+          );
+
+          // Fallback: use user data bundled in the login response
+          if (response.containsKey('user')) {
+            final userData = response['user'];
+            final userRole =
+                (userData['role'] ?? userData['type'] ?? 'customer')
+                    .toString()
+                    .toLowerCase();
+
+            print('[DEBUG] Login: Using fallback user data, role: $userRole');
+
+            if (!mounted) return;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => _getScreenForRole(userRole)),
+            );
+          } else {
+            setState(
+              () =>
+                  _errorMessage =
+                      'Failed to load user profile. Please try again.',
+            );
+          }
         }
       } else {
-        // Failed login
         setState(
           () =>
               _errorMessage =
