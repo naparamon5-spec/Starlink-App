@@ -2,48 +2,38 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../../services/api_service.dart';
 import 'sections/ticket/admin_tickets_page.dart';
+import 'sections/ticket/admin_ticket_details_page.dart';
 import 'sections/agent/admin_agents_page.dart';
 import 'sections/billing/admin_billing_page.dart';
 import 'sections/subscription/admin_subscriptions_page.dart';
+import 'sections/subscription/admin_subscription_details_page.dart';
 import 'sections/enduser/admin_end_users_page.dart';
 import 'profile/admin_edit_profile_page.dart';
 import 'profile/admin_manage_users_page.dart';
 import 'profile/admin_user_guide_page.dart';
 
-void main() {
-  runApp(const AdminHomeScreen());
-}
+// ── Design tokens (matching AdminBillingPage) ─────────────────────────────────
+const _primary = Color(0xFF0F62FE);
+const _success = Color(0xFF24A148);
+const _warning = Color(0xFFFF832B);
+const _danger = Color(0xFFDA1E28);
+const _ink = Color(0xFF161616);
+const _inkSecondary = Color(0xFF6F6F6F);
+const _inkTertiary = Color(0xFFA8A8A8);
+const _surface = Color(0xFFFFFFFF);
+const _surfaceSubtle = Color(0xFFF4F4F4);
+const _border = Color(0xFFE0E0E0);
 
-class AdminHomeScreen extends StatelessWidget {
+class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Admin Dashboard',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF111921),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF197FE6),
-          surface: Color(0xFF133343),
-        ),
-      ),
-      home: const AdminDashboard(),
-    );
-  }
-}
-
-class AdminDashboard extends StatefulWidget {
-  const AdminDashboard({super.key});
-
-  @override
-  State<AdminDashboard> createState() => _AdminDashboardState();
+  State<AdminHomeScreen> createState() => _AdminHomeScreenState();
 }
 
 enum QuickActionType { tickets, subscriptions, billing }
 
-class _AdminDashboardState extends State<AdminDashboard> {
+class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _selectedIndex = 0;
   QuickActionType? _quickAction;
   bool _quickMenuOpen = false;
@@ -62,23 +52,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void initState() {
     super.initState();
     _loadDashboard();
-  }
-
-  String _displayNameFromMe(Map<String, dynamic>? me) {
-    if (me == null) return 'Admin';
-    final fullName =
-        (me['full_name'] ?? me['name'] ?? me['fullname'] ?? '').toString();
-    if (fullName.trim().isNotEmpty) return fullName.trim();
-
-    final first = (me['first_name'] ?? me['firstname'] ?? '').toString();
-    final last = (me['last_name'] ?? me['lastname'] ?? '').toString();
-    final combined = ('$first $last').trim();
-    if (combined.isNotEmpty) return combined;
-
-    final email = (me['email'] ?? me['username'] ?? '').toString();
-    if (email.trim().isNotEmpty) return email.trim();
-
-    return 'Admin';
   }
 
   Future<void> _loadDashboard() async {
@@ -116,18 +89,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     if (!mounted) return;
 
-    int? _tryParseInt(dynamic v) {
+    int? tryParseInt(dynamic v) {
       if (v == null) return null;
       if (v is int) return v;
       if (v is num) return v.toInt();
       return int.tryParse(v.toString());
     }
 
-    int? _countFromData(dynamic data) {
+    int? countFromData(dynamic data) {
       if (data is num) return data.toInt();
       if (data is List) return data.length;
       if (data is Map) {
-        // common total/count keys
         for (final k in const [
           'count',
           'total',
@@ -135,11 +107,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           'total_count',
           'total_items',
         ]) {
-          final parsed = _tryParseInt(data[k]);
+          final parsed = tryParseInt(data[k]);
           if (parsed != null) return parsed;
         }
-
-        // common list keys
         for (final k in const [
           'data',
           'items',
@@ -152,33 +122,30 @@ class _AdminDashboardState extends State<AdminDashboard> {
           if (v is num) return v.toInt();
           if (v is List) return v.length;
         }
-
-        // sometimes the list is nested one more level deep
         for (final v in data.values) {
-          final nested = _countFromData(v);
+          final nested = countFromData(v);
           if (nested != null) return nested;
         }
       }
       return null;
     }
 
-    int _countFromResponse(dynamic res) {
+    int countFromResponse(dynamic res) {
       if (res is Map && res['status'] == 'success') {
-        final fromData = _countFromData(res['data']);
+        final fromData = countFromData(res['data']);
         if (fromData != null) return fromData;
-        final fromRaw = _countFromData(res['raw']);
+        final fromRaw = countFromData(res['raw']);
         if (fromRaw != null) return fromRaw;
       }
       return 0;
     }
 
-    List<dynamic> _listFromResponse(
+    List<dynamic> listFromResponse(
       dynamic res, {
       List<String> preferredKeys = const [],
     }) {
       if (res is Map && res['status'] == 'success') {
         final candidates = [res['data'], res['raw']];
-
         for (final c in candidates) {
           if (c is List) return c;
           if (c is Map) {
@@ -207,20 +174,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     setState(() {
       _me = meData;
-      _openCount = _countFromResponse(results[0]);
-      _inProgressCount = _countFromResponse(results[1]);
-      _resolvedCount = _countFromResponse(results[2]);
-      _closedCount = _countFromResponse(results[3]);
-      _recentActivity = _listFromResponse(
+      _openCount = countFromResponse(results[0]);
+      _inProgressCount = countFromResponse(results[1]);
+      _resolvedCount = countFromResponse(results[2]);
+      _closedCount = countFromResponse(results[3]);
+      _recentActivity = listFromResponse(
         results[4],
         preferredKeys: const ['activity', 'activities', 'recent', 'events'],
       );
-      _expiringSubscriptions = _listFromResponse(
+      _expiringSubscriptions = listFromResponse(
         results[5],
         preferredKeys: const ['subscriptions', 'expiring', 'data', 'items'],
       );
       _loadingDashboard = false;
-
       final anyError = results.whereType<Map>().any(
         (r) => r['status'] != 'success',
       );
@@ -231,9 +197,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     });
   }
 
-  void _toggleQuickMenu() {
-    setState(() => _quickMenuOpen = !_quickMenuOpen);
-  }
+  void _toggleQuickMenu() => setState(() => _quickMenuOpen = !_quickMenuOpen);
 
   void _selectQuickAction(QuickActionType type) {
     setState(() {
@@ -319,13 +283,33 @@ class _AdminDashboardState extends State<AdminDashboard> {
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
-                child: Text(
-                  'Tap the Quick Action button\nto open Tickets, Subscriptions, or Billing.',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: _primary.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.flash_on_outlined,
+                        color: _primary,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Tap the Quick Action button\nto open Tickets, Subscriptions, or Billing.',
+                      style: TextStyle(
+                        color: _inkSecondary,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -351,24 +335,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final displayName = _displayNameFromMe(_me);
     return Scaffold(
-      backgroundColor: const Color(0xFF111921),
+      backgroundColor: _surfaceSubtle,
       body: Stack(
         children: [
-          // Main scroll content
           RefreshIndicator(
             onRefresh: _loadDashboard,
+            color: _primary,
+            strokeWidth: 2,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _AppBarDelegate(
-                    displayName: displayName,
-                    isLoading: _loadingDashboard,
-                  ),
-                ),
                 if (_selectedIndex == 0 && _dashboardError != null)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -376,24 +353,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEF4444).withOpacity(0.12),
+                          color: _danger.withOpacity(0.06),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFFEF4444).withOpacity(0.35),
-                          ),
+                          border: Border.all(color: _danger.withOpacity(0.25)),
                         ),
                         child: Row(
                           children: [
                             const Icon(
                               Icons.warning_amber_rounded,
-                              color: Color(0xFFEF4444),
+                              color: _danger,
+                              size: 18,
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
                                 _dashboardError!,
                                 style: const TextStyle(
-                                  color: Colors.white,
+                                  color: _danger,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -409,23 +385,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ),
 
-          // Dim overlay when quick menu open
           if (_quickMenuOpen)
             Positioned.fill(
               child: GestureDetector(
                 onTap: () => setState(() => _quickMenuOpen = false),
-                child: Container(color: Colors.black.withOpacity(0.5)),
+                child: Container(color: Colors.black.withOpacity(0.3)),
               ),
             ),
 
-          // Animated quick action bubbles
           _QuickActionBubbles(
             isOpen: _quickMenuOpen,
             onSelect: _selectQuickAction,
             activeAction: _quickAction,
           ),
 
-          // Floating Bottom Nav
           Positioned(
             bottom: 24,
             left: 20,
@@ -493,26 +466,18 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-
-    // FAB center: horizontally centered, sits 20px above the nav bar top
-    // Nav bar: bottom=24, height≈72, FAB lifted 20px => FAB center Y from top:
-    // screenHeight - 24 - 72/2 - 20 = screenHeight - 80
     final fabCenterX = screenWidth / 2;
     final fabCenterY = screenHeight - 80.0;
-
-    // Bubble size
     const bubbleSize = 56.0;
     const labelHeight = 20.0;
-    const totalBubbleHeight =
-        bubbleSize + 6 + labelHeight; // circle + gap + label
+    const totalBubbleHeight = bubbleSize + 6 + labelHeight;
 
-    // Each bubble's final center offset from FAB center (arc going up)
     final actions = [
       _BubbleData(
         type: QuickActionType.tickets,
         icon: Icons.confirmation_number_outlined,
         label: 'Tickets',
-        color: const Color(0xFFF59E0B),
+        color: _warning,
         targetDx: -76.0,
         targetDy: -100.0,
         delay: 0.0,
@@ -521,7 +486,7 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
         type: QuickActionType.subscriptions,
         icon: Icons.subscriptions_outlined,
         label: 'Subs',
-        color: const Color(0xFF197FE6),
+        color: _primary,
         targetDx: 0.0,
         targetDy: -155.0,
         delay: 0.07,
@@ -530,7 +495,7 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
         type: QuickActionType.billing,
         icon: Icons.receipt_long_outlined,
         label: 'Billing',
-        color: const Color(0xFF10B981),
+        color: _success,
         targetDx: 76.0,
         targetDy: -100.0,
         delay: 0.14,
@@ -553,10 +518,8 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
               animation: anim,
               builder: (context, child) {
                 final t = anim.value;
-                // Bubble top-left position
                 final left = fabCenterX + data.targetDx * t - bubbleSize / 2;
                 final top = fabCenterY + data.targetDy * t - bubbleSize / 2;
-
                 return Positioned(
                   left: left,
                   top: top,
@@ -586,7 +549,7 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
                           color:
                               widget.activeAction == data.type
                                   ? data.color
-                                  : const Color(0xFF1A2A3A),
+                                  : _surface,
                           border: Border.all(
                             color: data.color,
                             width: widget.activeAction == data.type ? 0 : 2,
@@ -594,7 +557,7 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
                           boxShadow: [
                             BoxShadow(
                               color: data.color.withOpacity(
-                                widget.activeAction == data.type ? 0.5 : 0.3,
+                                widget.activeAction == data.type ? 0.35 : 0.2,
                               ),
                               blurRadius: 16,
                               offset: const Offset(0, 4),
@@ -619,7 +582,7 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
                           color:
                               widget.activeAction == data.type
                                   ? data.color
-                                  : Colors.white.withOpacity(0.9),
+                                  : _ink,
                           letterSpacing: 0.2,
                         ),
                       ),
@@ -653,114 +616,6 @@ class _BubbleData {
   });
 }
 
-// ─── App Bar ────────────────────────────────────────────────────────────────
-
-class _AppBarDelegate extends SliverPersistentHeaderDelegate {
-  final String displayName;
-  final bool isLoading;
-
-  _AppBarDelegate({required this.displayName, required this.isLoading});
-
-  @override
-  double get minExtent => 72;
-  @override
-  double get maxExtent => 72;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return Container(
-      color: const Color(0xFF111921).withOpacity(0.85),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFF197FE6).withOpacity(0.4),
-                width: 2,
-              ),
-            ),
-            child: ClipOval(
-              child: Image.network(
-                'https://lh3.googleusercontent.com/aida-public/AB6AXuBv4w3Ol5vcsB_cdKB1yxeoi2NE-VrnOVq-mM50oz2TKuAhSx-D9SthWKi52sm6ZUBQ3y_qeMB2H9JfZEf6ynjIFb_EL7eimG7FBoKEt4wpN6FCnsn-0hTzxoWGnwRtXoJ0bfg8iRGYjGrtWLynqZgw_gFzUgUnlL9ozAEYHk0YqqziMRZ_2Falj6-64pjJf3sjNhKfu_Fjql-vnquQTJlPau-oMdCuOot6VRUB5IYJhiY45kU_fjW3WEhrj4PDuhmUzgZ40Cczn-K4',
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(Icons.person),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isLoading ? 'Loading profile…' : 'Welcome,',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF94A3B8),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  height: 1.2,
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          Stack(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.notifications_outlined,
-                  color: Colors.white,
-                  size: 22,
-                ),
-              ),
-              Positioned(
-                right: 9,
-                top: 9,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF197FE6),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
-      true;
-}
-
 // ─── Quick Create Buttons ─────────────────────────────────────────────────────
 
 class _QuickCreateSection extends StatelessWidget {
@@ -772,10 +627,8 @@ class _QuickCreateSection extends StatelessWidget {
           child: _QuickCreateButton(
             icon: Icons.confirmation_number_outlined,
             label: 'New Ticket',
-            color: const Color(0xFF197FE6),
-            onTap: () {
-              // TODO: open create ticket page / web view
-            },
+            color: _primary,
+            onTap: () {},
           ),
         ),
         const SizedBox(width: 12),
@@ -783,10 +636,8 @@ class _QuickCreateSection extends StatelessWidget {
           child: _QuickCreateButton(
             icon: Icons.person_add_outlined,
             label: 'New Agent',
-            color: const Color(0xFF6366F1),
-            onTap: () {
-              // TODO: open create agent page / web view
-            },
+            color: const Color(0xFF6929C4),
+            onTap: () {},
           ),
         ),
       ],
@@ -814,9 +665,16 @@ class _QuickCreateButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.35), width: 1.5),
+          color: _surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withOpacity(0.25)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -825,10 +683,10 @@ class _QuickCreateButton extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
+                color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: color, size: 18),
+              child: Icon(icon, color: color, size: 16),
             ),
             const SizedBox(width: 10),
             Text(
@@ -846,7 +704,7 @@ class _QuickCreateButton extends StatelessWidget {
   }
 }
 
-// ─── Ticket Overview Card (replaces System Health) ───────────────────────────
+// ─── Ticket Overview Card ─────────────────────────────────────────────────────
 
 class _TicketOverviewCard extends StatelessWidget {
   final bool isLoading;
@@ -867,124 +725,90 @@ class _TicketOverviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = open + inProgress + resolved + closed;
     final segments = <Widget>[
-      if (open > 0) _BarSegment(flex: open, color: const Color(0xFFF59E0B)),
-      if (inProgress > 0)
-        _BarSegment(flex: inProgress, color: const Color(0xFF197FE6)),
-      if (resolved > 0)
-        _BarSegment(flex: resolved, color: const Color(0xFF10B981)),
-      if (closed > 0) _BarSegment(flex: closed, color: const Color(0xFF64748B)),
+      if (open > 0) _BarSegment(flex: open, color: _warning),
+      if (inProgress > 0) _BarSegment(flex: inProgress, color: _primary),
+      if (resolved > 0) _BarSegment(flex: resolved, color: _success),
+      if (closed > 0) _BarSegment(flex: closed, color: const Color(0xFFA8A8A8)),
     ];
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0F2236), Color(0xFF133343)],
+          colors: [Color(0xFF0F62FE), Color(0xFF0043CE)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF1E3A50), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: _primary.withOpacity(0.28),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Ticket Overview',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    isLoading
-                        ? 'Loading tickets…'
-                        : 'Today · $total total tickets',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                ],
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.confirmation_number_outlined,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
-              Row(
-                children: [
-                  // Container(
-                  //   width: 7,
-                  //   height: 7,
-                  //   decoration: const BoxDecoration(
-                  //     color: Color(0xFF4ADE80),
-                  //     shape: BoxShape.circle,
-                  //   ),
-                  // ),
-                  const SizedBox(width: 6),
-                  const Icon(
-                    Icons.confirmation_number, // ticket icon
-                    size: 25, // adjust if needed
-                    color: Colors.white,
-                  ),
-                  // const Text(
-                  //   'LIVE',
-                  //   style: TextStyle(
-                  //     fontSize: 10,
-                  //     fontWeight: FontWeight.w800,
-                  //     color: Color(0xFF4ADE80),
-                  //     letterSpacing: 1.2,
-                  //   ),
-                  // ),
-                ],
+              const SizedBox(width: 10),
+              const Text(
+                'Ticket Overview',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                isLoading ? '…' : '$total total',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 11,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // Segmented progress bar
+          const SizedBox(height: 18),
           ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(5),
             child:
                 segments.isEmpty
-                    ? Container(height: 10, color: const Color(0xFF1E293B))
+                    ? Container(
+                      height: 8,
+                      color: Colors.white.withOpacity(0.15),
+                    )
                     : Row(children: segments),
           ),
-          const SizedBox(height: 14),
-
-          // Legend row
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              _BarLegend(color: _warning, label: 'Open', count: open),
               _BarLegend(
-                color: const Color(0xFFF59E0B),
-                label: 'Open',
-                count: open,
-              ),
-              _BarLegend(
-                color: const Color(0xFF197FE6),
+                color: _primary,
                 label: 'In Progress',
                 count: inProgress,
               ),
+              _BarLegend(color: _success, label: 'Resolved', count: resolved),
               _BarLegend(
-                color: const Color(0xFF10B981),
-                label: 'Resolved',
-                count: resolved,
-              ),
-              _BarLegend(
-                color: const Color(0xFF64748B),
+                color: const Color(0xFFA8A8A8),
                 label: 'Closed',
                 count: closed,
               ),
@@ -1003,7 +827,7 @@ class _BarSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Flexible(flex: flex, child: Container(height: 10, color: color));
+    return Flexible(flex: flex, child: Container(height: 8, color: color));
   }
 }
 
@@ -1025,25 +849,28 @@ class _BarLegend extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 8,
-              height: 8,
+              width: 7,
+              height: 7,
               decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
             const SizedBox(width: 5),
             Text(
               label,
-              style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.white.withOpacity(0.65),
+              ),
             ),
           ],
         ),
         const SizedBox(height: 3),
         Padding(
-          padding: const EdgeInsets.only(left: 13),
+          padding: const EdgeInsets.only(left: 12),
           child: Text(
             '$count',
             style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
               color: Colors.white,
             ),
           ),
@@ -1053,7 +880,7 @@ class _BarLegend extends StatelessWidget {
   }
 }
 
-// ─── Subscription Section ────────────────────────────────────────────────────────────
+// ─── Subscription Section ─────────────────────────────────────────────────────
 
 class _SubscriptionSection extends StatelessWidget {
   final bool isLoading;
@@ -1123,24 +950,37 @@ class _SubscriptionSection extends StatelessWidget {
     return '';
   }
 
+  void _openSubscriptionDetails(
+    BuildContext context, {
+    required String serviceLineNumber,
+    required String nickname,
+  }) {
+    if (serviceLineNumber.trim().isEmpty || serviceLineNumber.trim() == '—')
+      return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => AdminSubscriptionDetailsPage(
+              serviceLineNumber: serviceLineNumber.trim(),
+              title:
+                  nickname.trim().isEmpty
+                      ? serviceLineNumber.trim()
+                      : nickname.trim(),
+            ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return Column(
+      return const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
-            'SUBSCRIPTION END DATES',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF94A3B8),
-              letterSpacing: 1.0,
-            ),
-          ),
-          SizedBox(height: 16),
-          _SkeletonTile(),
+        children: [
+          _SectionHeader(title: 'SUBSCRIPTION END DATES'),
           SizedBox(height: 12),
+          _SkeletonTile(),
+          SizedBox(height: 10),
           _SkeletonTile(),
         ],
       );
@@ -1150,40 +990,12 @@ class _SubscriptionSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'SUBSCRIPTION END DATES',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF94A3B8),
-            letterSpacing: 1.0,
-          ),
-        ),
-        const SizedBox(height: 16),
+        const _SectionHeader(title: 'SUBSCRIPTION END DATES'),
+        const SizedBox(height: 12),
         if (top.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF133343),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF1E293B)),
-            ),
-            child: Row(
-              children: const [
-                Icon(Icons.info_outline, color: Color(0xFF94A3B8)),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'No expiring subscriptions found.',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          _EmptyState(
+            icon: Icons.subscriptions_outlined,
+            message: 'No expiring subscriptions found.',
           )
         else
           ...List.generate(top.length, (i) {
@@ -1192,13 +1004,23 @@ class _SubscriptionSection extends StatelessWidget {
             final nickname = _nicknameFromSub(sub);
             final serviceLine = _serviceLineFromSub(sub);
             final active = _activeFromSub(sub);
+            final displayName =
+                nickname.isNotEmpty ? nickname : _nameFromSub(sub);
             return Padding(
-              padding: EdgeInsets.only(bottom: i == top.length - 1 ? 0 : 12),
+              padding: EdgeInsets.only(bottom: i == top.length - 1 ? 0 : 10),
               child: _SubscriptionTile(
-                nickname: (nickname.isNotEmpty ? nickname : _nameFromSub(sub)),
+                nickname: displayName,
                 serviceLineNumber: serviceLine.isEmpty ? '—' : serviceLine,
                 endDate: endDate.isEmpty ? '—' : endDate,
                 active: active.isEmpty ? '—' : active,
+                onTap:
+                    serviceLine.trim().isEmpty
+                        ? null
+                        : () => _openSubscriptionDetails(
+                          context,
+                          serviceLineNumber: serviceLine,
+                          nickname: displayName,
+                        ),
               ),
             );
           }),
@@ -1207,7 +1029,63 @@ class _SubscriptionSection extends StatelessWidget {
   }
 }
 
-// ─── Recent Activity ─────────────────────────────────────────────────────────
+// ─── Section Header ───────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: _inkTertiary,
+        letterSpacing: 1.1,
+      ),
+    );
+  }
+}
+
+// ─── Empty State ──────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  const _EmptyState({required this.icon, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: _inkTertiary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: _inkSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Recent Activity ──────────────────────────────────────────────────────────
 
 class _RecentActivitySection extends StatelessWidget {
   final bool isLoading;
@@ -1279,33 +1157,31 @@ class _RecentActivitySection extends StatelessWidget {
         'Nov',
         'Dec',
       ];
-      final m = months[dt.month - 1];
-      final d = dt.day.toString().padLeft(2, '0');
-      final y = dt.year.toString();
-      return '$m $d, $y';
+      return '${months[dt.month - 1]} ${dt.day.toString().padLeft(2, '0')}, ${dt.year}';
     } catch (_) {
       return raw;
     }
   }
 
+  Color _statusColor(String s) {
+    final v = s.toLowerCase();
+    if (v.contains('open')) return _warning;
+    if (v.contains('progress')) return _primary;
+    if (v.contains('resolved')) return _success;
+    if (v.contains('closed')) return const Color(0xFFA8A8A8);
+    return _inkTertiary;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return Column(
+      return const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
-            'RECENT ACTIVITY',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF94A3B8),
-              letterSpacing: 1.0,
-            ),
-          ),
-          SizedBox(height: 16),
-          _SkeletonTile(),
+        children: [
+          _SectionHeader(title: 'RECENT ACTIVITY'),
           SizedBox(height: 12),
+          _SkeletonTile(),
+          SizedBox(height: 10),
           _SkeletonTile(),
         ],
       );
@@ -1315,40 +1191,12 @@ class _RecentActivitySection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'RECENT ACTIVITY',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF94A3B8),
-            letterSpacing: 1.0,
-          ),
-        ),
-        const SizedBox(height: 16),
+        const _SectionHeader(title: 'RECENT ACTIVITY'),
+        const SizedBox(height: 12),
         if (top.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF133343),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF1E293B)),
-            ),
-            child: Row(
-              children: const [
-                Icon(Icons.info_outline, color: Color(0xFF94A3B8)),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'No recent activity.',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          const _EmptyState(
+            icon: Icons.history_outlined,
+            message: 'No recent activity.',
           )
         else
           ...List.generate(top.length, (i) {
@@ -1358,15 +1206,30 @@ class _RecentActivitySection extends StatelessWidget {
             final createdAt = _formatDate(_createdAtFromActivity(a));
             final subject = _subjectFromActivity(a);
             final status = _statusFromActivity(a);
+            final color = _statusColor(status);
+
             return Padding(
-              padding: EdgeInsets.only(bottom: i == top.length - 1 ? 0 : 12),
+              padding: EdgeInsets.only(bottom: i == top.length - 1 ? 0 : 10),
               child: _ActivityTile(
-                icon: Icons.history_toggle_off_outlined,
-                iconColor: const Color(0xFF197FE6),
-                iconBg: const Color(0xFF197FE6),
                 title: 'Ticket #$id',
                 subtitle: '$subject · By: $createdBy · $createdAt',
                 status: status,
+                statusColor: color,
+                onTap:
+                    id != '—'
+                        ? () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder:
+                                (_) => AdminTicketDetailsPage(
+                                  ticketId: id,
+                                  subject:
+                                      subject != 'Ticket activity'
+                                          ? subject
+                                          : null,
+                                ),
+                          ),
+                        )
+                        : null,
               ),
             );
           }),
@@ -1375,27 +1238,29 @@ class _RecentActivitySection extends StatelessWidget {
   }
 }
 
+// ─── Skeleton Tile ────────────────────────────────────────────────────────────
+
 class _SkeletonTile extends StatelessWidget {
   const _SkeletonTile();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 74,
+      height: 70,
       decoration: BoxDecoration(
-        color: const Color(0xFF133343),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF1E293B)),
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
       ),
       child: Row(
         children: [
           const SizedBox(width: 16),
           Container(
-            width: 42,
-            height: 42,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
-              shape: BoxShape.circle,
+              color: _surfaceSubtle,
+              borderRadius: BorderRadius.circular(10),
             ),
           ),
           const SizedBox(width: 14),
@@ -1405,19 +1270,19 @@ class _SkeletonTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  height: 12,
-                  width: 160,
+                  height: 11,
+                  width: 150,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.06),
+                    color: _surfaceSubtle,
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  height: 10,
-                  width: 110,
+                  height: 9,
+                  width: 100,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: _surfaceSubtle,
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
@@ -1431,167 +1296,117 @@ class _SkeletonTile extends StatelessWidget {
   }
 }
 
+// ─── Activity Tile ────────────────────────────────────────────────────────────
+
 class _ActivityTile extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBg;
   final String title;
   final String subtitle;
   final String status;
+  final Color statusColor;
+  final VoidCallback? onTap;
 
   const _ActivityTile({
-    required this.icon,
-    required this.iconColor,
-    required this.iconBg,
     required this.title,
     required this.subtitle,
     required this.status,
+    required this.statusColor,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF133343),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF1E293B)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: iconBg.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 22),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.history_toggle_off_outlined,
+                  color: statusColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(fontSize: 11, color: _inkTertiary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: statusColor.withOpacity(0.2)),
+                ),
+                child: Text(
+                  status.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: statusColor,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF94A3B8),
-                  ),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: _inkTertiary,
+                  size: 16,
                 ),
               ],
-            ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: _statusBackgroundColor(status),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: _statusBorderColor(status), width: 1),
-            ),
-            child: Text(
-              status.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-                color: _statusTextColor(status),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
-
-  Color _statusBackgroundColor(String s) {
-    final value = s.toLowerCase();
-
-    if (value.contains('open')) {
-      return const Color(0xFF64748B).withOpacity(0.15); // light gray
-    }
-
-    if (value.contains('progress')) {
-      return const Color(0xFF197FE6).withOpacity(0.15);
-    }
-
-    if (value.contains('resolved')) {
-      return const Color(0xFF10B981).withOpacity(0.15);
-    }
-
-    if (value.contains('closed')) {
-      return const Color(0xFFF59E0B).withOpacity(0.15);
-    }
-
-    return const Color(0xFF64748B).withOpacity(0.15);
-  }
-
-  Color _statusBorderColor(String s) {
-    final value = s.toLowerCase();
-
-    if (value.contains('open')) {
-      return const Color(0xFF64748B);
-    }
-
-    if (value.contains('progress')) {
-      return const Color(0xFF197FE6);
-    }
-
-    if (value.contains('resolved')) {
-      return const Color(0xFF10B981);
-    }
-
-    if (value.contains('closed')) {
-      return const Color(0xFFF59E0B);
-    }
-
-    return const Color(0xFF64748B);
-  }
-
-  Color _statusTextColor(String s) {
-    final value = s.toLowerCase();
-
-    if (value.trim().isEmpty || value == '—') {
-      return const Color(0xFFCBD5F5);
-    }
-
-    if (value.contains('open')) {
-      return const Color.fromARGB(
-        255,
-        243,
-        245,
-        247,
-      ); // darker gray for good contrast
-    }
-
-    if (value.contains('progress')) {
-      return const Color(0xFF197FE6);
-    }
-
-    if (value.contains('resolved')) {
-      return const Color(0xFF10B981);
-    }
-
-    if (value.contains('closed')) {
-      return const Color(0xFFF59E0B);
-    }
-
-    return const Color.fromARGB(255, 100, 101, 105);
-  }
 }
 
-// ─── Settings Section ────────────────────────────────────────────────────────
+// ─── Settings Section ─────────────────────────────────────────────────────────
 
 class _SettingsSection extends StatelessWidget {
   const _SettingsSection();
@@ -1599,7 +1414,7 @@ class _SettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF111921),
+      color: _surfaceSubtle,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
         children: [
@@ -1607,135 +1422,159 @@ class _SettingsSection extends StatelessWidget {
             'Settings',
             style: TextStyle(
               fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              color: _ink,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           const Text(
             'Manage users, your profile, and app guides.',
-            style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+            style: TextStyle(fontSize: 13, color: _inkSecondary),
           ),
           const SizedBox(height: 24),
-          Card(
-            color: const Color(0xFF133343),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ListTile(
-              leading: const Icon(
-                Icons.manage_accounts_outlined,
-                color: Colors.white,
-              ),
-              title: const Text(
-                'Manage Users',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              subtitle: const Text(
-                'Create, update, and deactivate platform users.',
-                style: TextStyle(color: Color(0xFFBFDBFE)),
-              ),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Color(0xFF94A3B8),
-              ),
-              onTap: () {
-                Navigator.of(context).push(
+          _SettingsCard(
+            icon: Icons.manage_accounts_outlined,
+            iconColor: _primary,
+            title: 'Manage Users',
+            subtitle: 'Create, update, and deactivate platform users.',
+            onTap:
+                () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const AdminManageUsersPage(),
                   ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            color: const Color(0xFF133343),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ListTile(
-              leading: const Icon(Icons.person_outline, color: Colors.white),
-              title: const Text(
-                'Edit Profile',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
                 ),
-              ),
-              subtitle: const Text(
-                'Update your admin account information and preferences.',
-                style: TextStyle(color: Color(0xFFBFDBFE)),
-              ),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Color(0xFF94A3B8),
-              ),
-              onTap: () {
-                Navigator.of(context).push(
+          ),
+          const SizedBox(height: 10),
+          _SettingsCard(
+            icon: Icons.person_outline,
+            iconColor: const Color(0xFF6929C4),
+            title: 'Edit Profile',
+            subtitle: 'Update your admin account information and preferences.',
+            onTap:
+                () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const AdminEditProfilePage(),
                   ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            color: const Color(0xFF133343),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ListTile(
-              leading: const Icon(
-                Icons.menu_book_outlined,
-                color: Colors.white,
-              ),
-              title: const Text(
-                'User Guide',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
                 ),
-              ),
-              subtitle: const Text(
-                'Read documentation and guides for the admin portal.',
-                style: TextStyle(color: Color(0xFFBFDBFE)),
-              ),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Color(0xFF94A3B8),
-              ),
-              onTap: () {
-                Navigator.of(context).push(
+          ),
+          const SizedBox(height: 10),
+          _SettingsCard(
+            icon: Icons.menu_book_outlined,
+            iconColor: _success,
+            title: 'User Guide',
+            subtitle: 'Read documentation and guides for the admin portal.',
+            onTap:
+                () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const AdminUserGuidePage()),
-                );
-              },
-            ),
+                ),
           ),
           const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(context).maybePop();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => Navigator.of(context).maybePop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _danger,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-            ),
-            icon: const Icon(Icons.logout),
-            label: const Text(
-              'Logout',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              icon: const Icon(Icons.logout, size: 18),
+              label: const Text(
+                'Logout',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SettingsCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _SettingsCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: _ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _inkSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: _inkTertiary,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1775,14 +1614,14 @@ class _FloatingNavBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: _surface,
         borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 30,
-            offset: const Offset(0, 10),
+            color: Colors.black.withOpacity(0.10),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -1802,7 +1641,6 @@ class _FloatingNavBar extends StatelessWidget {
             selected: selectedIndex == 1,
             onTap: () => onTap(1),
           ),
-          // Center FAB
           GestureDetector(
             onTap: () => onTap(2),
             child: Transform.translate(
@@ -1812,20 +1650,15 @@ class _FloatingNavBar extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color:
-                      quickMenuOpen
-                          ? const Color(0xFF1E293B)
-                          : const Color(0xFF197FE6),
+                  color: quickMenuOpen ? _surfaceSubtle : _primary,
                   shape: BoxShape.circle,
                   border:
                       quickMenuOpen
-                          ? Border.all(color: const Color(0xFF197FE6), width: 2)
+                          ? Border.all(color: _primary, width: 2)
                           : null,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(
-                        0xFF197FE6,
-                      ).withOpacity(quickMenuOpen ? 0.2 : 0.45),
+                      color: _primary.withOpacity(quickMenuOpen ? 0.15 : 0.4),
                       blurRadius: 16,
                       offset: const Offset(0, 6),
                     ),
@@ -1837,9 +1670,8 @@ class _FloatingNavBar extends StatelessWidget {
                   curve: Curves.easeInOut,
                   child: Icon(
                     _quickIcon(),
-                    color:
-                        quickMenuOpen ? const Color(0xFF197FE6) : Colors.white,
-                    size: 28,
+                    color: quickMenuOpen ? _primary : Colors.white,
+                    size: 26,
                   ),
                 ),
               ),
@@ -1878,7 +1710,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFF197FE6) : const Color(0xFF94A3B8);
+    final color = selected ? _primary : _inkTertiary;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -1887,7 +1719,7 @@ class _NavItem extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: 24),
+            Icon(icon, color: color, size: 22),
             const SizedBox(height: 2),
             Text(
               label,
@@ -1904,17 +1736,21 @@ class _NavItem extends StatelessWidget {
   }
 }
 
+// ─── Subscription Tile ────────────────────────────────────────────────────────
+
 class _SubscriptionTile extends StatelessWidget {
   final String nickname;
   final String serviceLineNumber;
   final String endDate;
   final String active;
+  final VoidCallback? onTap;
 
   const _SubscriptionTile({
     required this.nickname,
     required this.serviceLineNumber,
     required this.endDate,
     required this.active,
+    this.onTap,
   });
 
   @override
@@ -1923,98 +1759,109 @@ class _SubscriptionTile extends StatelessWidget {
     IconData icon;
 
     final activeUpper = active.toUpperCase();
-
     if (activeUpper.contains('EXPIRED') || activeUpper.contains('INACTIVE')) {
-      color = const Color(0xFFEF4444);
+      color = _danger;
       icon = Icons.cancel_outlined;
     } else if (activeUpper.contains('EXPIR')) {
-      color = const Color(0xFFF59E0B);
+      color = _warning;
       icon = Icons.schedule;
     } else {
-      color = const Color(0xFF10B981);
+      color = _success;
       icon = Icons.check_circle_outline;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF133343),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF1E293B)),
-      ),
-      child: Row(
-        children: [
-          // ICON (same style as activity)
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 22),
-          ),
-
-          const SizedBox(width: 14),
-
-          // TEXTS
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  nickname,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  serviceLineNumber,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF94A3B8),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Expiration date: $endDate',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF94A3B8),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // STATUS
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                active,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Icon(
-                Icons.chevron_right,
-                color: Color(0xFF64748B),
-                size: 20,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
-        ],
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      serviceLineNumber,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: _inkSecondary,
+                      ),
+                    ),
+                    Text(
+                      'Expires: $endDate',
+                      style: const TextStyle(fontSize: 11, color: _inkTertiary),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      active,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: _inkTertiary,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

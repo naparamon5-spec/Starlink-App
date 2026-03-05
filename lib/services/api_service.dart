@@ -171,10 +171,7 @@ class ApiService {
         if (data['accessToken'] != null) {
           // Store the new access token
           await setAccessToken(data['accessToken']);
-          return {
-            'status': 'success',
-            'accessToken': data['accessToken'],
-          };
+          return {'status': 'success', 'accessToken': data['accessToken']};
         } else {
           throw Exception('No access token in refresh response');
         }
@@ -185,17 +182,14 @@ class ApiService {
       }
     } catch (e) {
       await clearTokens();
-      return {
-        'status': 'error',
-        'message': e.toString(),
-      };
+      return {'status': 'error', 'message': e.toString()};
     }
   }
 
   // Get a valid access token, refreshing if necessary
   static Future<String?> getValidAccessToken() async {
     String? accessToken = await getAccessToken();
-    
+
     // If we have an access token, try to use it
     // In a real implementation, you might want to check token expiration
     // For now, we'll just return it if it exists
@@ -443,7 +437,7 @@ class ApiService {
       print('[DEBUG] getCurrentUserProfile: Starting to get user profile');
       // Get valid access token (will refresh if needed)
       final accessToken = await getValidAccessToken();
-      
+
       if (accessToken == null || accessToken.isEmpty) {
         print('[DEBUG] getCurrentUserProfile: No access token available');
         return {
@@ -470,7 +464,9 @@ class ApiService {
             },
           );
 
-      print('[DEBUG] getCurrentUserProfile: Response status: ${response.statusCode}');
+      print(
+        '[DEBUG] getCurrentUserProfile: Response status: ${response.statusCode}',
+      );
       print('[DEBUG] getCurrentUserProfile: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
@@ -478,27 +474,29 @@ class ApiService {
         // Handle different response formats
         if (data is Map<String, dynamic>) {
           if (data.containsKey('data')) {
-            print('[DEBUG] getCurrentUserProfile: Success - data found in response.data');
-            return {
-              'status': 'success',
-              'data': data['data'],
-            };
+            print(
+              '[DEBUG] getCurrentUserProfile: Success - data found in response.data',
+            );
+            return {'status': 'success', 'data': data['data']};
           } else {
-            print('[DEBUG] getCurrentUserProfile: Success - data is root level');
-            return {
-              'status': 'success',
-              'data': data,
-            };
+            print(
+              '[DEBUG] getCurrentUserProfile: Success - data is root level',
+            );
+            return {'status': 'success', 'data': data};
           }
         } else {
           throw Exception('Invalid response format');
         }
       } else if (response.statusCode == 401) {
-        print('[DEBUG] getCurrentUserProfile: Token expired, attempting refresh');
+        print(
+          '[DEBUG] getCurrentUserProfile: Token expired, attempting refresh',
+        );
         // Token expired, try to refresh
         final refreshResult = await refreshToken();
         if (refreshResult['status'] == 'success') {
-          print('[DEBUG] getCurrentUserProfile: Token refreshed, retrying request');
+          print(
+            '[DEBUG] getCurrentUserProfile: Token refreshed, retrying request',
+          );
           // Retry the request with new token
           final newAccessToken = refreshResult['accessToken'];
           final retryResponse = await _client.get(
@@ -513,15 +511,9 @@ class ApiService {
             final retryData = json.decode(retryResponse.body);
             if (retryData is Map<String, dynamic>) {
               if (retryData.containsKey('data')) {
-                return {
-                  'status': 'success',
-                  'data': retryData['data'],
-                };
+                return {'status': 'success', 'data': retryData['data']};
               } else {
-                return {
-                  'status': 'success',
-                  'data': retryData,
-                };
+                return {'status': 'success', 'data': retryData};
               }
             }
           }
@@ -551,7 +543,7 @@ class ApiService {
       print('[DEBUG] getUserById: Starting to get user by ID: $userId');
       // Get valid access token (will refresh if needed)
       final accessToken = await getValidAccessToken();
-      
+
       if (accessToken == null || accessToken.isEmpty) {
         print('[DEBUG] getUserById: No access token available');
         return {
@@ -561,10 +553,11 @@ class ApiService {
       }
 
       // Use "undefined" if userId is empty or null to get self
-      final userIdParam = (userId.isEmpty || userId == 'null' || userId == 'undefined') 
-          ? 'undefined' 
-          : userId;
-      
+      final userIdParam =
+          (userId.isEmpty || userId == 'null' || userId == 'undefined')
+              ? 'undefined'
+              : userId;
+
       print('[DEBUG] getUserById: Calling /api/v1/users/$userIdParam');
       final response = await _client
           .get(
@@ -592,16 +585,10 @@ class ApiService {
         if (data is Map<String, dynamic>) {
           if (data.containsKey('data')) {
             print('[DEBUG] getUserById: Success - data found in response.data');
-            return {
-              'status': 'success',
-              'data': data['data'],
-            };
+            return {'status': 'success', 'data': data['data']};
           } else {
             print('[DEBUG] getUserById: Success - data is root level');
-            return {
-              'status': 'success',
-              'data': data,
-            };
+            return {'status': 'success', 'data': data};
           }
         } else {
           throw Exception('Invalid response format');
@@ -626,15 +613,9 @@ class ApiService {
             final retryData = json.decode(retryResponse.body);
             if (retryData is Map<String, dynamic>) {
               if (retryData.containsKey('data')) {
-                return {
-                  'status': 'success',
-                  'data': retryData['data'],
-                };
+                return {'status': 'success', 'data': retryData['data']};
               } else {
-                return {
-                  'status': 'success',
-                  'data': retryData,
-                };
+                return {'status': 'success', 'data': retryData};
               }
             }
           }
@@ -692,7 +673,7 @@ class ApiService {
     }
   }
 
-  // Get tickets
+  // Get tickets (admin + customer views)
   static Future<Map<String, dynamic>> getTickets({
     int page = 1,
     int limit = 10,
@@ -706,36 +687,56 @@ class ApiService {
       final queryParams = <String, String>{
         'page': page.toString(),
         'limit': limit.toString(),
-        if (status != null) 'status': status,
-        if (ticketType != null) 'ticket_type': ticketType,
-        if (createdBy != null) 'created_by': createdBy,
-        if (requestedBy != null) 'requested_by': requestedBy,
-        if (search != null) 'search': search,
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (ticketType != null && ticketType.isNotEmpty)
+          'ticket_type': ticketType,
+        if (createdBy != null && createdBy.isNotEmpty) 'created_by': createdBy,
+        if (requestedBy != null && requestedBy.isNotEmpty)
+          'requested_by': requestedBy,
+        if (search != null && search.isNotEmpty) 'search': search,
       };
 
-      final uri = Uri.parse(
-        '$baseUrl/v1/tickets/',
-      ).replace(queryParameters: queryParams);
-
-      final response = await _client.get(
-        uri,
-        headers: {'Accept': 'application/json'},
+      // Use the authorized helper so we always send Bearer token
+      final baseResult = await _authorizedGetJson(
+        '/v1/tickets',
+        queryParameters: queryParams,
       );
 
-      if (response.statusCode != 200) {
-        throw Exception('Server error: ${response.statusCode}');
+      // If the helper already reports an error, bubble it up
+      if (baseResult['status'] != 'success') {
+        return Map<String, dynamic>.from(baseResult);
       }
 
-      final data = json.decode(response.body);
-      if (data is! Map<String, dynamic>) {
-        throw Exception('Invalid response format');
+      final wrapper = baseResult['data'];
+      List<dynamic> items = [];
+      Map<String, dynamic>? pagination;
+
+      // New backend format:
+      // {
+      //   "data": { "data": [...], "pagination": {...} },
+      //   "message": "Success",
+      //   "StatusCode": 200
+      // }
+      if (wrapper is Map<String, dynamic>) {
+        final innerData = wrapper['data'];
+        if (innerData is List) {
+          items = innerData;
+        }
+        final pag = wrapper['pagination'];
+        if (pag is Map<String, dynamic>) {
+          pagination = Map<String, dynamic>.from(pag);
+        }
+      } else if (wrapper is List) {
+        // Legacy format: data is already a list
+        items = wrapper;
       }
 
-      if (data['status'] == 'success' && data['data'] != null) {
-        return data;
-      } else {
-        throw Exception(data['message'] ?? 'Failed to fetch tickets');
-      }
+      return {
+        'status': 'success',
+        'data': items,
+        if (pagination != null) 'pagination': pagination,
+        'raw': baseResult['raw'],
+      };
     } catch (e) {
       throw Exception('Error fetching tickets: $e');
     }
@@ -1058,6 +1059,130 @@ class ApiService {
     }
   }
 
+  // /api/v1/subscriptions/paginated — for admin (auth, pagination, search)
+  static Future<Map<String, dynamic>> getSubscriptionsPaginated({
+    int page = 1,
+    int limit = 10,
+    String search = '',
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': limit.toString(),
+        if (search.isNotEmpty) 'search': search,
+      };
+      final result = await _authorizedGetJson(
+        '/v1/subscriptions/paginated',
+        queryParameters: queryParams,
+      );
+      if (result['status'] != 'success') {
+        return Map<String, dynamic>.from(result);
+      }
+      final wrapper = result['data'];
+      List<dynamic> items = [];
+      Map<String, dynamic>? pagination;
+      if (wrapper is Map<String, dynamic>) {
+        final inner = wrapper['data'];
+        if (inner is List) items = inner;
+        final pag = wrapper['pagination'];
+        if (pag is Map<String, dynamic>) {
+          pagination = Map<String, dynamic>.from(pag);
+        }
+      } else if (wrapper is List) {
+        items = wrapper;
+      }
+      return {
+        'status': 'success',
+        'data': items,
+        if (pagination != null) 'pagination': pagination,
+        'raw': result['raw'],
+      };
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
+
+  // GET /api/v1/starlink/refresh/:serviceLineNumber
+  static Future<Map<String, dynamic>> refreshStarlinkServiceLine(
+    String serviceLineNumber,
+  ) async {
+    try {
+      final result = await _authorizedGetJson(
+        '/v1/starlink/refresh/$serviceLineNumber',
+      );
+      if (result['status'] != 'success') {
+        return Map<String, dynamic>.from(result);
+      }
+      final data = result['data'];
+      return {
+        'status': 'success',
+        'data': data is Map ? Map<String, dynamic>.from(data) : data,
+        'raw': result['raw'],
+      };
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
+
+  // GET /api/v1/subscriptions/:serviceLineNumber
+  static Future<Map<String, dynamic>> getSubscriptionByServiceLineNumber(
+    String serviceLineNumber,
+  ) async {
+    try {
+      final result = await _authorizedGetJson(
+        '/v1/subscriptions/$serviceLineNumber',
+      );
+      if (result['status'] != 'success') {
+        return Map<String, dynamic>.from(result);
+      }
+      final data = result['data'];
+      return {
+        'status': 'success',
+        'data': data is Map ? Map<String, dynamic>.from(data) : data,
+        'raw': result['raw'],
+      };
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
+
+  // GET /api/v1/subscriptions/billing-cycle/:serviceLineNumber?startDate=&endDate=
+  static Future<Map<String, dynamic>> getSubscriptionBillingCycleByDates(
+    String serviceLineNumber, {
+    required String startDate,
+    required String endDate,
+  }) async {
+    try {
+      final result = await _authorizedGetJson(
+        '/v1/subscriptions/billing-cycle/$serviceLineNumber',
+        queryParameters: {'startDate': startDate, 'endDate': endDate},
+      );
+      if (result['status'] != 'success') {
+        return Map<String, dynamic>.from(result);
+      }
+      final data = result['data'];
+      return {
+        'status': 'success',
+        'data': data is Map ? Map<String, dynamic>.from(data) : data,
+        'raw': result['raw'],
+      };
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
+
   // getSubscriptions — fixed URL (baseUrl already ends with '/api')
   static Future<List<dynamic>> getSubscriptions({
     String? bearerToken,
@@ -1243,7 +1368,66 @@ class ApiService {
     }
   }
 
-  // Get all customers
+  // GET /api/v1/tickets/:id
+  static Future<Map<String, dynamic>> getTicketById(String ticketId) async {
+    try {
+      final result = await _authorizedGetJson('/v1/tickets/$ticketId');
+      if (result['status'] != 'success') {
+        return Map<String, dynamic>.from(result);
+      }
+      final data = result['data'];
+      return {
+        'status': 'success',
+        'data': data is Map ? Map<String, dynamic>.from(data) : data,
+        'raw': result['raw'],
+      };
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
+
+  // GET /api/v1/activities/:ticketId
+  static Future<Map<String, dynamic>> getTicketActivities(
+    String ticketId,
+  ) async {
+    try {
+      final result = await _authorizedGetJson('/v1/activities/$ticketId');
+      if (result['status'] != 'success') {
+        return Map<String, dynamic>.from(result);
+      }
+      final data = result['data'];
+      return {'status': 'success', 'data': data, 'raw': result['raw']};
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
+
+  // GET /api/v1/attachments/:ticketId
+  static Future<Map<String, dynamic>> getTicketAttachments(
+    String ticketId,
+  ) async {
+    try {
+      final result = await _authorizedGetJson('/v1/attachments/$ticketId');
+      if (result['status'] != 'success') {
+        return Map<String, dynamic>.from(result);
+      }
+      final data = result['data'];
+      return {'status': 'success', 'data': data, 'raw': result['raw']};
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
+
+  // Legacy get all customers (agents) - kept for compatibility
   static Future<Map<String, dynamic>> getCustomers() async {
     try {
       final response = await _client
@@ -1299,6 +1483,53 @@ class ApiService {
         );
       }
       throw Exception('Error fetching customers: ${e.toString()}');
+    }
+  }
+
+  // /api/v1/customers/paginated?page=&limit=&search=
+  static Future<Map<String, dynamic>> getCustomersPaginated({
+    int page = 1,
+    int limit = 10,
+    String search = '',
+  }) async {
+    final encodedSearch = Uri.encodeQueryComponent(search);
+    final path =
+        '/v1/customers/paginated?page=$page&limit=$limit&search=$encodedSearch';
+    return _getV1WithAuth(path);
+  }
+
+  // /api/v1/enduser/paginated?page=&limit=&search=
+  static Future<Map<String, dynamic>> getEndUsersPaginated({
+    int page = 1,
+    int limit = 10,
+    String search = '',
+  }) async {
+    final encodedSearch = Uri.encodeQueryComponent(search);
+    final path =
+        '/v1/end-user/paginated?page=$page&limit=$limit&search=$encodedSearch';
+    return _getV1WithAuth(path);
+  }
+
+  // GET /api/v1/billing/ — list billing records (auth required)
+  static Future<Map<String, dynamic>> getBillingList() async {
+    try {
+      final result = await _authorizedGetJson('/v1/billing/');
+      if (result['status'] != 'success') {
+        return Map<String, dynamic>.from(result);
+      }
+      final raw = result['data'];
+      List<dynamic> items = [];
+      if (raw is List) {
+        items = raw;
+      } else if (raw is Map<String, dynamic> && raw['data'] is List) {
+        items = raw['data'] as List;
+      }
+      return {'status': 'success', 'data': items, 'raw': result['raw']};
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
     }
   }
 
@@ -1469,6 +1700,127 @@ class ApiService {
       }
     } catch (e) {
       return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
+  // ─── Methods to ADD to ApiService (paste before the closing `}` of the class)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // GET /api/v1/customers/:id  — agent / customer detail
+  static Future<Map<String, dynamic>> getCustomerById(String id) async {
+    return _getV1WithAuth('/v1/customers/$id');
+  }
+
+  // GET /api/v1/subscriptions/customer/:customerCode  — subs for an agent
+  static Future<Map<String, dynamic>> getSubscriptionsByCustomerId(
+    String customerCode,
+  ) async {
+    return _getV1WithAuth('/v1/subscriptions/customer/$customerCode');
+  }
+
+  // GET /api/v1/end-user/:euCode  — single end-user record
+  static Future<Map<String, dynamic>> getEndUserById(String euCode) async {
+    return _getV1WithAuth('/v1/end-user/$euCode');
+  }
+
+  // GET /api/v1/subscriptions/end-user/:euCode  — subs for an end-user
+  static Future<Map<String, dynamic>> getSubscriptionsByEndUserId(
+    String euCode,
+  ) async {
+    return _getV1WithAuth('/v1/subscriptions/end-user/$euCode');
+  }
+
+  // GET /api/v1/users/company/:companyCode  — users belonging to a company
+  static Future<Map<String, dynamic>> getUsersByCompanyCode(
+    String companyCode,
+  ) async {
+    return _getV1WithAuth('/v1/users/company/$companyCode');
+  }
+
+  // GET /api/v1/billing/details/:customerCode/:cpoNumber/:sidrNumber
+  static Future<Map<String, dynamic>> getBillingDetails({
+    required String customerCode,
+    required String cpoNumber,
+    required String sidrNumber,
+  }) async {
+    return _getV1WithAuth(
+      '/v1/billing/details/$customerCode/$cpoNumber/$sidrNumber',
+    );
+  }
+
+  // POST /api/v1/billing/payment  — record a payment
+  static Future<Map<String, dynamic>> makePayment({
+    required String customerCode,
+    required String cpoNumber,
+    required String sidrNumber,
+    required double amount,
+  }) async {
+    try {
+      final accessToken = await getValidAccessToken();
+      if (accessToken == null || accessToken.isEmpty) {
+        return {
+          'status': 'error',
+          'message': 'No access token available. Please login again.',
+        };
+      }
+
+      final response = await _client
+          .post(
+            Uri.parse('$baseUrl/v1/billing/payment'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $accessToken',
+            },
+            body: json.encode({
+              'customer_code': customerCode,
+              'cpo_number': cpoNumber,
+              'sidr_number': sidrNumber,
+              'amount': amount,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 20),
+            onTimeout:
+                () => http.Response(
+                  json.encode({
+                    'status': 'error',
+                    'message': 'Connection timed out. Please try again.',
+                  }),
+                  408,
+                ),
+          );
+
+      dynamic decoded;
+      try {
+        decoded = json.decode(response.body);
+      } catch (_) {
+        decoded = null;
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (decoded is Map<String, dynamic>) {
+          return {
+            'status': decoded['status']?.toString() ?? 'success',
+            'message': decoded['message']?.toString() ?? 'Payment recorded.',
+            'data': decoded['data'],
+            'raw': decoded,
+          };
+        }
+        return {'status': 'success', 'message': 'Payment recorded.'};
+      }
+
+      String msg = 'Server error: ${response.statusCode}';
+      if (decoded is Map) {
+        final m = decoded['message'] ?? decoded['Message'];
+        if (m != null) msg = m.toString();
+      }
+      return {'status': 'error', 'message': msg, 'raw': decoded};
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
     }
   }
 }
