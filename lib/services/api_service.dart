@@ -1823,6 +1823,11 @@ class ApiService {
       };
     }
   }
+
+  // GET /api/v1/users/my/profile/
+  static Future<Map<String, dynamic>> getMyProfile() async {
+    return _getV1WithAuth('/v1/users/my/profile/');
+  }
 }
 
 class TimeoutException implements Exception {

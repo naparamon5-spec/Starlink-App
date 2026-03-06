@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../../../services/api_service.dart';
 import 'admin_ticket_details_page.dart';
+import 'admin_create_ticket_page.dart';
 
 class AdminTicketsPage extends StatefulWidget {
   const AdminTicketsPage({super.key});
@@ -17,13 +18,12 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   List<Map<String, dynamic>> _tickets = [];
   bool _loading = false;
-  bool _searchLoading = false; // subtle indicator while debounce fires
+  bool _searchLoading = false;
   String? _error;
 
-  // ── Design Tokens ─────────────────────────────────────────────────────────
-  static const _primary = Color(0xFFEB1E23); // Brand red
-  static const _primaryDark = Color(0xFF760F12); // Dark red
-  static const _inProgress = Color(0xFF0F62FE); // Blue — kept for In Progress
+  static const _primary = Color(0xFFEB1E23);
+  static const _primaryDark = Color(0xFF760F12);
+  static const _inProgress = Color(0xFF0F62FE);
   static const _success = Color(0xFF24A148);
   static const _warning = Color(0xFFFF832B);
   static const _danger = Color(0xFFEB1E23);
@@ -81,7 +81,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   Future<void> _loadTickets() async {
     setState(() {
-      _loading = _tickets.isEmpty; // full loader only on first/empty load
+      _loading = _tickets.isEmpty;
       _searchLoading = false;
       _error = null;
     });
@@ -154,7 +154,16 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     );
   }
 
-  // ── Stats helpers ──────────────────────────────────────────────────────────
+  /// Navigates to the full-screen Create Ticket page.
+  /// Refreshes the list when it returns `true`.
+  Future<void> _openCreateTicket() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminCreateTicketPage()),
+    );
+    if (created == true && mounted) _loadTickets();
+  }
+
   int get _openCount =>
       _tickets
           .where((t) => (t['status'] ?? '').toLowerCase().contains('open'))
@@ -174,6 +183,17 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _surface,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openCreateTicket,
+        backgroundColor: _primary,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        icon: const Icon(Icons.add_rounded, size: 20),
+        label: const Text(
+          'Create Ticket',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        ),
+      ),
       body:
           _loading
               ? _buildLoader()
@@ -186,13 +206,8 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
-                    // ── Hero Banner ──────────────────────────────────────
                     SliverToBoxAdapter(child: _buildHeroBanner()),
-
-                    // ── Stat Chips ───────────────────────────────────────
                     SliverToBoxAdapter(child: _buildStatChips()),
-
-                    // ── Search ───────────────────────────────────────────
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -243,8 +258,6 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                         ),
                       ),
                     ),
-
-                    // ── Tabs ─────────────────────────────────────────────
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -261,8 +274,6 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                         ),
                       ),
                     ),
-
-                    // ── Section Header ───────────────────────────────────
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
@@ -309,13 +320,11 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                         ),
                       ),
                     ),
-
-                    // ── List ─────────────────────────────────────────────
                     if (_tickets.isEmpty)
                       SliverFillRemaining(child: _buildEmpty())
                     else
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
                         sliver: SliverList(
                           delegate: SliverChildBuilderDelegate((
                             context,
@@ -351,12 +360,10 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     );
   }
 
-  // ── Hero Banner ─────────────────────────────────────────────────────────────
   Widget _buildHeroBanner() {
     final total = _tickets.length;
     final closed = _closedCount;
     final progress = total > 0 ? (closed / total).clamp(0.0, 1.0) : 0.0;
-
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       padding: const EdgeInsets.all(24),
@@ -468,38 +475,34 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     );
   }
 
-  // ── Stat Chips ───────────────────────────────────────────────────────────────
-  Widget _buildStatChips() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      child: Row(
-        children: [
-          _StatPill(
-            icon: Icons.inbox_outlined,
-            label: 'Open',
-            value: '$_openCount',
-            color: _warning,
-          ),
-          const SizedBox(width: 10),
-          _StatPill(
-            icon: Icons.autorenew_rounded,
-            label: 'In Progress',
-            value: '$_inProgressCount',
-            color: _inProgress,
-          ),
-          const SizedBox(width: 10),
-          _StatPill(
-            icon: Icons.check_circle_outline_rounded,
-            label: 'Closed',
-            value: '$_closedCount',
-            color: _success,
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildStatChips() => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+    child: Row(
+      children: [
+        _StatPill(
+          icon: Icons.inbox_outlined,
+          label: 'Open',
+          value: '$_openCount',
+          color: _warning,
+        ),
+        const SizedBox(width: 10),
+        _StatPill(
+          icon: Icons.autorenew_rounded,
+          label: 'In Progress',
+          value: '$_inProgressCount',
+          color: _inProgress,
+        ),
+        const SizedBox(width: 10),
+        _StatPill(
+          icon: Icons.check_circle_outline_rounded,
+          label: 'Closed',
+          value: '$_closedCount',
+          color: _success,
+        ),
+      ],
+    ),
+  );
 
-  // ── Ticket Card ──────────────────────────────────────────────────────────────
   Widget _buildTicketCard(Map<String, dynamic> t) {
     final subject = t['subject'] ?? 'No subject';
     final id = t['id'] ?? '-';
@@ -508,7 +511,6 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     final createdAt = _formatDate(t['created_at']?.toString());
     final color = _statusColor(status);
     final isClosed = status.toLowerCase().contains('closed');
-
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -534,7 +536,6 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Avatar
                     Container(
                       width: 44,
                       height: 44,
@@ -554,8 +555,6 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                       ),
                     ),
                     const SizedBox(width: 12),
-
-                    // Info
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,11 +600,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                   ],
                 ),
               ),
-
-              // Divider
               Container(height: 1, color: _surfaceSubtle),
-
-              // Bottom row
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                 child: Row(
@@ -671,75 +666,27 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     );
   }
 
-  // ── Loader / Error / Empty ───────────────────────────────────────────────────
-  Widget _buildLoader() {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
-          ),
-          SizedBox(height: 14),
-          Text(
-            'Loading tickets…',
-            style: TextStyle(fontSize: 13, color: _inkSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: _danger.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.error_outline_rounded,
-                color: _danger,
-                size: 26,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: _inkSecondary,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextButton.icon(
-              onPressed: _loadTickets,
-              icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: const Text('Try again'),
-              style: TextButton.styleFrom(
-                foregroundColor: _primary,
-                textStyle: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
+  Widget _buildLoader() => const Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
         ),
-      ),
-    );
-  }
+        SizedBox(height: 14),
+        Text(
+          'Loading tickets…',
+          style: TextStyle(fontSize: 13, color: _inkSecondary),
+        ),
+      ],
+    ),
+  );
 
-  Widget _buildEmpty() {
-    return Center(
+  Widget _buildError() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -747,70 +694,102 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: _surfaceSubtle,
+              color: _danger.withOpacity(0.08),
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.confirmation_num_outlined,
-              color: _inkTertiary,
+              Icons.error_outline_rounded,
+              color: _danger,
               size: 26,
             ),
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'No tickets found',
-            style: TextStyle(fontSize: 14, color: _inkSecondary),
+          const SizedBox(height: 16),
+          Text(
+            _error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              color: _inkSecondary,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextButton.icon(
+            onPressed: _loadTickets,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Try again'),
+            style: TextButton.styleFrom(
+              foregroundColor: _primary,
+              textStyle: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+
+  Widget _buildEmpty() => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: _surfaceSubtle,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.confirmation_num_outlined,
+            color: _inkTertiary,
+            size: 26,
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'No tickets found',
+          style: TextStyle(fontSize: 14, color: _inkSecondary),
+        ),
+      ],
+    ),
+  );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-widgets
-// ─────────────────────────────────────────────────────────────────────────────
-
 class _HeroChip extends StatelessWidget {
-  final String label;
-  final String value;
+  final String label, value;
   final Color color;
   const _HeroChip({
     required this.label,
     required this.value,
     required this.color,
   });
-
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: color.withOpacity(0.8),
-            fontWeight: FontWeight.w500,
-          ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: color.withOpacity(0.8),
+          fontWeight: FontWeight.w500,
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 13,
-            color: color,
-            fontWeight: FontWeight.w800,
-          ),
+      ),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: 13,
+          color: color,
+          fontWeight: FontWeight.w800,
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }
 
 class _StatPill extends StatelessWidget {
   final IconData icon;
-  final String label;
-  final String value;
+  final String label, value;
   final Color color;
   const _StatPill({
     required this.icon,
@@ -818,70 +797,64 @@ class _StatPill extends StatelessWidget {
     required this.value,
     required this.color,
   });
-
   @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.15)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: color,
-                letterSpacing: -0.3,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 10,
-                color: Color(0xFF6F6F6F),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.15)),
       ),
-    );
-  }
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: color,
+              letterSpacing: -0.3,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              color: Color(0xFF6F6F6F),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _TicketStatusTag extends StatelessWidget {
   final String status;
   final Color color;
   const _TicketStatusTag({required this.status, required this.color});
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Text(
+      status.toUpperCase().replaceAll('_', ' '),
+      style: TextStyle(
+        fontSize: 9,
+        fontWeight: FontWeight.w800,
+        color: color,
+        letterSpacing: 0.5,
       ),
-      child: Text(
-        status.toUpperCase().replaceAll('_', ' '),
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          color: color,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }

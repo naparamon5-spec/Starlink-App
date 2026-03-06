@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../../services/api_service.dart';
 import 'sections/ticket/admin_tickets_page.dart';
 import 'sections/ticket/admin_ticket_details_page.dart';
+import 'sections/ticket/admin_create_ticket_page.dart'; // ← FIXED: added import
 import 'sections/agent/admin_agents_page.dart';
 import 'sections/billing/admin_billing_page.dart';
 import 'sections/subscription/admin_subscriptions_page.dart';
@@ -200,6 +201,20 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     });
   }
 
+  // ── FIXED: properly fetches token then navigates to AdminCreateTicketPage ──
+  Future<void> _openCreateTicket() async {
+    final token = await ApiService.getValidAccessToken();
+    if (!mounted) return;
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminCreateTicketPage(bearerToken: token),
+      ),
+    );
+    // Refresh dashboard counts after a ticket is created
+    if (created == true) _loadDashboard();
+  }
+
   void _toggleQuickMenu() => setState(() => _quickMenuOpen = !_quickMenuOpen);
 
   void _selectQuickAction(QuickActionType type) {
@@ -229,7 +244,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                _QuickCreateSection(),
+                // FIXED: pass the callback — no more broken inline navigation
+                _QuickCreateSection(onNewTicket: _openCreateTicket),
                 const SizedBox(height: 16),
                 _TicketOverviewCard(
                   isLoading: _loadingDashboard,
@@ -522,7 +538,6 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
                 curve: Curves.elasticOut,
               ),
             );
-
             return AnimatedBuilder(
               animation: anim,
               builder: (context, child) {
@@ -610,9 +625,7 @@ class _BubbleData {
   final IconData icon;
   final String label;
   final Color color;
-  final double targetDx;
-  final double targetDy;
-  final double delay;
+  final double targetDx, targetDy, delay;
 
   const _BubbleData({
     required this.type,
@@ -626,8 +639,14 @@ class _BubbleData {
 }
 
 // ─── Quick Create Buttons ─────────────────────────────────────────────────────
+// FIXED: now a const-friendly widget that receives the callback from State,
+// instead of trying to do async token work inside a StatelessWidget.
 
 class _QuickCreateSection extends StatelessWidget {
+  final VoidCallback onNewTicket; // ← callback from _AdminHomeScreenState
+
+  const _QuickCreateSection({required this.onNewTicket});
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -637,7 +656,7 @@ class _QuickCreateSection extends StatelessWidget {
             icon: Icons.confirmation_number_outlined,
             label: 'New Ticket',
             color: _primary,
-            onTap: () {},
+            onTap: onNewTicket, // ← clean, no broken `yourToken` reference
           ),
         ),
         const SizedBox(width: 12),
@@ -717,10 +736,7 @@ class _QuickCreateButton extends StatelessWidget {
 
 class _TicketOverviewCard extends StatelessWidget {
   final bool isLoading;
-  final int open;
-  final int inProgress;
-  final int resolved;
-  final int closed;
+  final int open, inProgress, resolved, closed;
 
   const _TicketOverviewCard({
     required this.isLoading,
@@ -835,9 +851,8 @@ class _BarSegment extends StatelessWidget {
   const _BarSegment({required this.flex, required this.color});
 
   @override
-  Widget build(BuildContext context) {
-    return Flexible(flex: flex, child: Container(height: 8, color: color));
-  }
+  Widget build(BuildContext context) =>
+      Flexible(flex: flex, child: Container(height: 8, color: color));
 }
 
 class _BarLegend extends StatelessWidget {
@@ -902,7 +917,7 @@ class _SubscriptionSection extends StatelessWidget {
 
   String _nameFromSub(dynamic sub) {
     if (sub is Map) {
-      final name =
+      final n =
           (sub['name'] ??
                   sub['customer_name'] ??
                   sub['end_user_name'] ??
@@ -910,35 +925,35 @@ class _SubscriptionSection extends StatelessWidget {
                   sub['user'] ??
                   '')
               .toString();
-      if (name.trim().isNotEmpty) return name.trim();
+      if (n.trim().isNotEmpty) return n.trim();
     }
     return 'Subscription';
   }
 
   String _nicknameFromSub(dynamic sub) {
     if (sub is Map) {
-      final nickname = (sub['nickname'] ?? sub['name'] ?? '').toString();
-      if (nickname.trim().isNotEmpty) return nickname.trim();
+      final n = (sub['nickname'] ?? sub['name'] ?? '').toString();
+      if (n.trim().isNotEmpty) return n.trim();
     }
     return '';
   }
 
   String _serviceLineFromSub(dynamic sub) {
     if (sub is Map) {
-      final sl =
+      final s =
           (sub['serviceLineNumber'] ??
                   sub['service_line_number'] ??
                   sub['serviceLine'] ??
                   '')
               .toString();
-      if (sl.trim().isNotEmpty) return sl.trim();
+      if (s.trim().isNotEmpty) return s.trim();
     }
     return '';
   }
 
   String _endDateFromSub(dynamic sub) {
     if (sub is Map) {
-      final raw =
+      final r =
           (sub['end_date'] ??
                   sub['expires_at'] ??
                   sub['expiry_date'] ??
@@ -946,15 +961,15 @@ class _SubscriptionSection extends StatelessWidget {
                   sub['end'] ??
                   '')
               .toString();
-      if (raw.trim().isNotEmpty) return raw.trim();
+      if (r.trim().isNotEmpty) return r.trim();
     }
     return '';
   }
 
   String _activeFromSub(dynamic sub) {
     if (sub is Map) {
-      final active = (sub['active'] ?? sub['status'] ?? '').toString();
-      if (active.trim().isNotEmpty) return active.trim();
+      final a = (sub['active'] ?? sub['status'] ?? '').toString();
+      if (a.trim().isNotEmpty) return a.trim();
     }
     return '';
   }
@@ -994,7 +1009,6 @@ class _SubscriptionSection extends StatelessWidget {
         ],
       );
     }
-
     final top = subscriptions.take(3).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1045,17 +1059,15 @@ class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title});
 
   @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: _inkTertiary,
-        letterSpacing: 1.1,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Text(
+    title,
+    style: const TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: _inkTertiary,
+      letterSpacing: 1.1,
+    ),
+  );
 }
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
@@ -1107,43 +1119,43 @@ class _RecentActivitySection extends StatelessWidget {
 
   String _idFromActivity(dynamic a) {
     if (a is Map) {
-      final id = (a['id'] ?? a['ticket_id'] ?? '').toString();
-      if (id.trim().isNotEmpty) return id.trim();
+      final v = (a['id'] ?? a['ticket_id'] ?? '').toString();
+      if (v.trim().isNotEmpty) return v.trim();
     }
     return '—';
   }
 
   String _createdByFromActivity(dynamic a) {
     if (a is Map) {
-      final cb = (a['created_by'] ?? a['createdBy'] ?? '').toString();
-      if (cb.trim().isNotEmpty) return cb.trim();
+      final v = (a['created_by'] ?? a['createdBy'] ?? '').toString();
+      if (v.trim().isNotEmpty) return v.trim();
     }
     return '—';
   }
 
   String _createdAtFromActivity(dynamic a) {
     if (a is Map) {
-      final ca =
+      final v =
           (a['created_at'] ?? a['createdAt'] ?? a['timestamp'] ?? '')
               .toString();
-      if (ca.trim().isNotEmpty) return ca.trim();
+      if (v.trim().isNotEmpty) return v.trim();
     }
     return '—';
   }
 
   String _statusFromActivity(dynamic a) {
     if (a is Map) {
-      final status = (a['status'] ?? a['ticket_status'] ?? '').toString();
-      if (status.trim().isNotEmpty) return status.trim();
+      final v = (a['status'] ?? a['ticket_status'] ?? '').toString();
+      if (v.trim().isNotEmpty) return v.trim();
     }
     return '—';
   }
 
   String _subjectFromActivity(dynamic a) {
     if (a is Map) {
-      final subject =
+      final v =
           (a['subject'] ?? a['title'] ?? a['ticket_type'] ?? '').toString();
-      if (subject.trim().isNotEmpty) return subject.trim();
+      if (v.trim().isNotEmpty) return v.trim();
     }
     return 'Ticket activity';
   }
@@ -1195,7 +1207,6 @@ class _RecentActivitySection extends StatelessWidget {
         ],
       );
     }
-
     final top = activities.take(5).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1216,7 +1227,6 @@ class _RecentActivitySection extends StatelessWidget {
             final subject = _subjectFromActivity(a);
             final status = _statusFromActivity(a);
             final color = _statusColor(status);
-
             return Padding(
               padding: EdgeInsets.only(bottom: i == top.length - 1 ? 0 : 10),
               child: _ActivityTile(
@@ -1308,9 +1318,7 @@ class _SkeletonTile extends StatelessWidget {
 // ─── Activity Tile ────────────────────────────────────────────────────────────
 
 class _ActivityTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final String status;
+  final String title, subtitle, status;
   final Color statusColor;
   final VoidCallback? onTap;
 
@@ -1419,25 +1427,22 @@ class _ActivityTile extends StatelessWidget {
 
 class _SettingsSection extends StatelessWidget {
   final Map<String, dynamic>? me;
-
   const _SettingsSection({this.me});
 
   String? _extractString(List<String> keys) {
     if (me == null) return null;
     for (final k in keys) {
       final v = me![k];
-      if (v != null && v.toString().trim().isNotEmpty) {
+      if (v != null && v.toString().trim().isNotEmpty)
         return v.toString().trim();
-      }
     }
     return null;
   }
 
   String _initials(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2) {
+    if (parts.length >= 2)
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-    }
     return name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'A';
   }
 
@@ -1463,7 +1468,6 @@ class _SettingsSection extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         children: [
-          // ── Page Title ────────────────────────────────────────────────
           const Text(
             'Settings',
             style: TextStyle(
@@ -1480,7 +1484,6 @@ class _SettingsSection extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // ── Profile Card ──────────────────────────────────────────────
           GestureDetector(
             onTap:
                 () => Navigator.of(context).push(
@@ -1507,7 +1510,6 @@ class _SettingsSection extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  // ── Avatar ──────────────────────────────────────────
                   Stack(
                     children: [
                       Container(
@@ -1534,7 +1536,6 @@ class _SettingsSection extends StatelessWidget {
                                 )
                                 : _AvatarInitials(initials: initials),
                       ),
-                      // Edit badge
                       Positioned(
                         bottom: 0,
                         right: 0,
@@ -1559,7 +1560,6 @@ class _SettingsSection extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(width: 16),
-                  // ── Name / Email / Role ──────────────────────────────
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1633,11 +1633,8 @@ class _SettingsSection extends StatelessWidget {
           ),
 
           const SizedBox(height: 24),
-
-          // ── Section Label ─────────────────────────────────────────────
           const _SectionHeader(title: 'ACCOUNT'),
           const SizedBox(height: 12),
-
           _SettingsCard(
             icon: Icons.manage_accounts_outlined,
             iconColor: _primary,
@@ -1664,11 +1661,8 @@ class _SettingsSection extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 20),
-
-          // ── Section Label ─────────────────────────────────────────────
           const _SectionHeader(title: 'HELP'),
           const SizedBox(height: 12),
-
           _SettingsCard(
             icon: Icons.menu_book_outlined,
             iconColor: _success,
@@ -1680,8 +1674,6 @@ class _SettingsSection extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 28),
-
-          // ── Logout ────────────────────────────────────────────────────
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -1715,19 +1707,17 @@ class _AvatarInitials extends StatelessWidget {
   const _AvatarInitials({required this.initials});
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        initials,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
-        ),
+  Widget build(BuildContext context) => Center(
+    child: Text(
+      initials,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 22,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.5,
       ),
-    );
-  }
+    ),
+  );
 }
 
 // ─── Settings Card ────────────────────────────────────────────────────────────
@@ -1735,8 +1725,7 @@ class _AvatarInitials extends StatelessWidget {
 class _SettingsCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
-  final String title;
-  final String subtitle;
+  final String title, subtitle;
   final VoidCallback onTap;
 
   const _SettingsCard({
@@ -1848,7 +1837,6 @@ class _BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).padding.bottom;
-
     return Container(
       decoration: BoxDecoration(
         color: _surface,
@@ -1983,10 +1971,7 @@ class _NavItem extends StatelessWidget {
 // ─── Subscription Tile ────────────────────────────────────────────────────────
 
 class _SubscriptionTile extends StatelessWidget {
-  final String nickname;
-  final String serviceLineNumber;
-  final String endDate;
-  final String active;
+  final String nickname, serviceLineNumber, endDate, active;
   final VoidCallback? onTap;
 
   const _SubscriptionTile({
@@ -1999,14 +1984,13 @@ class _SubscriptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color color;
-    IconData icon;
-
-    final activeUpper = active.toUpperCase();
-    if (activeUpper.contains('EXPIRED') || activeUpper.contains('INACTIVE')) {
+    final au = active.toUpperCase();
+    final Color color;
+    final IconData icon;
+    if (au.contains('EXPIRED') || au.contains('INACTIVE')) {
       color = _primaryDark;
       icon = Icons.cancel_outlined;
-    } else if (activeUpper.contains('EXPIR')) {
+    } else if (au.contains('EXPIR')) {
       color = _warning;
       icon = Icons.schedule;
     } else {
