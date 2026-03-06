@@ -6,9 +6,6 @@ class AdminBillingDetailsPage extends StatefulWidget {
   final String cpoNumber;
   final String sidrNumber;
   final String? customerName;
-
-  /// Full billing record from the list page — shown immediately so the
-  /// page never blocks on a 404 from the /details endpoint.
   final Map<String, dynamic>? prefetchedData;
 
   const AdminBillingDetailsPage({
@@ -29,14 +26,16 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
   bool _loading = false;
   Map<String, dynamic>? _billing;
 
+  // ── Brand colors ───────────────────────────────────────────────────────────
+  static const _brandRed = Color(0xFFEB1E23);
+  static const _brandDark = Color(0xFF760F12);
+
   @override
   void initState() {
     super.initState();
-    // Show prefetched data immediately
     if (widget.prefetchedData != null) {
       _billing = Map<String, dynamic>.from(widget.prefetchedData!);
     }
-    // Try to enrich with API data in the background (silently ignore errors)
     _tryFetchFromApi();
   }
 
@@ -88,8 +87,6 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
     await _tryFetchFromApi();
   }
 
-  // ── helpers ────────────────────────────────────────────────────────────────
-
   String _str(dynamic v) =>
       (v == null || v.toString() == 'null' || v.toString().trim().isEmpty)
           ? '—'
@@ -131,8 +128,6 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
   double _parseAmount(dynamic raw) =>
       double.tryParse(raw?.toString() ?? '0') ?? 0.0;
 
-  // ── build ──────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final title =
@@ -140,16 +135,12 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
             ? widget.customerName!
             : widget.customerCode;
 
-    // Show full loader only if we have absolutely no data yet
     if (_billing == null) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: _buildAppBar(title),
-        body: const Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF197FE6),
-            strokeWidth: 2.5,
-          ),
+        body: Center(
+          child: CircularProgressIndicator(color: _brandRed, strokeWidth: 2.5),
         ),
       );
     }
@@ -161,7 +152,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
         children: [
           RefreshIndicator(
             onRefresh: _reload,
-            color: const Color(0xFF197FE6),
+            color: _brandRed,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               children: [
@@ -173,15 +164,14 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
               ],
             ),
           ),
-          // Thin top progress bar while background fetch is in progress
           if (_loading)
-            const Positioned(
+            Positioned(
               top: 0,
               left: 0,
               right: 0,
               child: LinearProgressIndicator(
-                color: Color(0xFF197FE6),
-                backgroundColor: Color(0xFFE8ECF0),
+                color: _brandRed,
+                backgroundColor: _brandRed.withOpacity(0.15),
                 minHeight: 3,
               ),
             ),
@@ -198,7 +188,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
 
   PreferredSizeWidget _buildAppBar(String title) => AppBar(
     backgroundColor: Colors.white,
-    foregroundColor: const Color(0xFF1A1A2E),
+    foregroundColor: const Color(0xFF000000),
     elevation: 0,
     surfaceTintColor: Colors.transparent,
     title: Column(
@@ -211,7 +201,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
           style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF1A1A2E),
+            color: Color(0xFF000000),
           ),
         ),
         Text(
@@ -222,7 +212,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
     ),
     actions: [
       IconButton(
-        icon: const Icon(Icons.refresh_rounded, color: Color(0xFF197FE6)),
+        icon: Icon(Icons.refresh_rounded, color: _brandRed),
         onPressed: _loading ? null : _reload,
       ),
     ],
@@ -231,8 +221,6 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
       child: Container(height: 1, color: const Color(0xFFE8ECF0)),
     ),
   );
-
-  // ── Make Payment Button ────────────────────────────────────────────────────
 
   Widget _buildMakePaymentButton() {
     final b = _billing ?? {};
@@ -264,7 +252,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
         child: ElevatedButton.icon(
           onPressed: isPaid ? null : _showMakePaymentSheet,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF197FE6),
+            backgroundColor: _brandRed,
             foregroundColor: Colors.white,
             disabledBackgroundColor: const Color(0xFFE8ECF0),
             disabledForegroundColor: const Color(0xFF8A96A3),
@@ -289,8 +277,6 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
       ),
     );
   }
-
-  // ── Make Payment Bottom Sheet ──────────────────────────────────────────────
 
   void _showMakePaymentSheet() {
     final b = _billing ?? {};
@@ -403,12 +389,12 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF197FE6).withOpacity(0.1),
+                            color: _brandRed.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.payment_rounded,
-                            color: Color(0xFF197FE6),
+                            color: _brandRed,
                             size: 20,
                           ),
                         ),
@@ -421,7 +407,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
-                                color: Color(0xFF1A1A2E),
+                                color: Color(0xFF000000),
                               ),
                             ),
                             Text(
@@ -460,10 +446,10 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                           ),
                           Text(
                             '₱${_formatAmount(balance)}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFFEF4444),
+                              color: _brandRed,
                             ),
                           ),
                         ],
@@ -488,14 +474,14 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF1A1A2E),
+                        color: Color(0xFF000000),
                       ),
                       decoration: InputDecoration(
                         prefixText: '₱ ',
-                        prefixStyle: const TextStyle(
+                        prefixStyle: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF197FE6),
+                          color: _brandRed,
                         ),
                         filled: true,
                         fillColor: const Color(0xFFF8FAFC),
@@ -517,10 +503,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF197FE6),
-                            width: 1.5,
-                          ),
+                          borderSide: BorderSide(color: _brandRed, width: 1.5),
                         ),
                       ),
                     ),
@@ -528,18 +511,18 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.error_outline_rounded,
-                            color: Color(0xFFEF4444),
+                            color: _brandRed,
                             size: 15,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               sheetError!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Color(0xFFEF4444),
+                                color: _brandRed,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -554,11 +537,9 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                       child: ElevatedButton(
                         onPressed: submitting ? null : confirmPayment,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF197FE6),
+                          backgroundColor: _brandRed,
                           foregroundColor: Colors.white,
-                          disabledBackgroundColor: const Color(
-                            0xFF197FE6,
-                          ).withOpacity(0.6),
+                          disabledBackgroundColor: _brandRed.withOpacity(0.6),
                           disabledForegroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
@@ -594,8 +575,6 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
     );
   }
 
-  // ── Summary Row ────────────────────────────────────────────────────────────
-
   Widget _buildSummaryRow() {
     final b = _billing ?? {};
     final amount = _parseAmount(b['amount']);
@@ -609,7 +588,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
             label: 'Total Amount',
             value: '₱${_formatAmount(amount)}',
             icon: Icons.receipt_long_outlined,
-            color: const Color(0xFF197FE6),
+            color: _brandRed,
           ),
         ),
         const SizedBox(width: 10),
@@ -627,14 +606,12 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
             label: 'Balance',
             value: '₱${_formatAmount(balance.abs())}',
             icon: isPaid ? Icons.verified_rounded : Icons.pending_outlined,
-            color: isPaid ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+            color: isPaid ? const Color(0xFF10B981) : _brandRed,
           ),
         ),
       ],
     );
   }
-
-  // ── Info Card ──────────────────────────────────────────────────────────────
 
   Widget _buildInfoCard() {
     final b = _billing ?? {};
@@ -653,9 +630,9 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _CardHeader(
+          _CardHeader(
             icon: Icons.info_outline_rounded,
-            iconColor: Color(0xFF197FE6),
+            iconColor: _brandRed,
             label: 'Billing Information',
           ),
           const _HDivider(),
@@ -688,8 +665,6 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
     );
   }
 
-  // ── Payment Card ───────────────────────────────────────────────────────────
-
   Widget _buildPaymentCard() {
     final b = _billing ?? {};
     final amount = _parseAmount(b['amount']);
@@ -702,7 +677,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
             ? const Color(0xFF10B981)
             : progress >= 0.5
             ? const Color(0xFFF59E0B)
-            : const Color(0xFFEF4444);
+            : _brandRed;
 
     return _Card(
       child: Column(
@@ -714,7 +689,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
             label: 'Payment Summary',
             trailing: _StatusBadge(
               label: isPaid ? 'PAID' : 'OUTSTANDING',
-              color: isPaid ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+              color: isPaid ? const Color(0xFF10B981) : _brandRed,
             ),
           ),
           const _HDivider(),
@@ -761,7 +736,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                   label: 'Total Amount',
                   value: '₱${_formatAmount(amount)}',
                   bold: true,
-                  color: const Color(0xFF1A1A2E),
+                  color: const Color(0xFF000000),
                 ),
                 const SizedBox(height: 8),
                 _AmountRow(
@@ -773,10 +748,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                 _AmountRow(
                   label: isPaid ? 'Overpayment' : 'Outstanding Balance',
                   value: '₱${_formatAmount(balance.abs())}',
-                  color:
-                      isPaid
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFFEF4444),
+                  color: isPaid ? const Color(0xFF10B981) : _brandRed,
                   bold: true,
                 ),
               ],
@@ -845,7 +817,7 @@ class _CardHeader extends StatelessWidget {
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
+              color: Color(0xFF000000),
             ),
           ),
         ),
@@ -981,7 +953,7 @@ class _KVRow extends StatelessWidget {
           value,
           style: const TextStyle(
             fontSize: 12,
-            color: Color(0xFF1A1A2E),
+            color: Color(0xFF000000),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1009,7 +981,7 @@ class _AmountRow extends StatelessWidget {
         label,
         style: TextStyle(
           fontSize: 13,
-          color: bold ? const Color(0xFF1A1A2E) : const Color(0xFF8A96A3),
+          color: bold ? const Color(0xFF000000) : const Color(0xFF8A96A3),
           fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
         ),
       ),

@@ -124,10 +124,11 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
   }
 
   // ── Design tokens ─────────────────────────────────────────────────────────
-  static const _primary = Color(0xFF0F62FE);
+  static const _primary = Color(0xFFEB1E23); // Brand red
+  static const _primaryDark = Color(0xFF760F12); // Dark red
   static const _success = Color(0xFF24A148);
-  static const _danger = Color(0xFFDA1E28);
-  static const _ink = Color(0xFF161616);
+  static const _danger = Color(0xFFEB1E23);
+  static const _ink = Color(0xFF000000);
   static const _inkSecondary = Color(0xFF6F6F6F);
   static const _inkTertiary = Color(0xFFA8A8A8);
   static const _surface = Color(0xFFFFFFFF);
@@ -373,7 +374,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                                     const SizedBox(width: 8),
                                     _StatusBadge(
                                       label: isActive ? 'ACTIVE' : 'INACTIVE',
-                                      color: isActive ? _success : _danger,
+                                      color: isActive ? _success : _primaryDark,
                                     ),
                                   ],
                                 ),
@@ -486,7 +487,9 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                                                     ? 'Active'
                                                     : 'Inactive',
                                             color:
-                                                isActive ? _success : _danger,
+                                                isActive
+                                                    ? _success
+                                                    : _primaryDark,
                                           ),
                                         ],
                                       ),
@@ -551,7 +554,7 @@ class _SectionCard extends StatelessWidget {
     this.trailing,
   });
 
-  static const _ink = Color(0xFF161616);
+  static const _ink = Color(0xFF000000);
   static const _surface = Color(0xFFFFFFFF);
   static const _border = Color(0xFFE0E0E0);
   static const _surfaceSubtle = Color(0xFFF4F4F4);
@@ -699,7 +702,7 @@ class _KVRow extends StatelessWidget {
             value,
             style: const TextStyle(
               fontSize: 12,
-              color: Color(0xFF161616),
+              color: Color(0xFF000000),
               fontWeight: FontWeight.w600,
             ),
           ),

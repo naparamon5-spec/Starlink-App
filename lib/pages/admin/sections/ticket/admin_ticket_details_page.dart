@@ -27,6 +27,10 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   String? _activitiesError;
   String? _attachmentsError;
 
+  // ── Brand colors ───────────────────────────────────────────────────────────
+  static const _brandRed = Color(0xFFEB1E23);
+  static const _brandDark = Color(0xFF760F12);
+
   @override
   void initState() {
     super.initState();
@@ -98,7 +102,6 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
 
     final id = widget.ticketId.trim();
 
-    // Run all three calls in parallel
     final results = await Future.wait([
       ApiService.getTicketById(id),
       ApiService.getTicketActivities(id),
@@ -172,7 +175,8 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   Color _statusColor(String s) {
     final v = s.toLowerCase();
     if (v.contains('open')) return const Color(0xFF64748B);
-    if (v.contains('progress')) return const Color(0xFF197FE6);
+    if (v.contains('progress'))
+      return const Color(0xFF0F62FE); // keep blue for In Progress
     if (v.contains('resolved')) return const Color(0xFF10B981);
     if (v.contains('closed')) return const Color(0xFFF59E0B);
     return const Color(0xFF94A3B8);
@@ -181,7 +185,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   Color _priorityColor(String p) {
     final v = p.toLowerCase();
     if (v.contains('high') || v.contains('urgent'))
-      return const Color(0xFFEF4444);
+      return const Color(0xFFEB1E23);
     if (v.contains('medium') || v.contains('normal'))
       return const Color(0xFFF59E0B);
     return const Color(0xFF10B981);
@@ -207,7 +211,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     if (v.contains('close')) return const Color(0xFFF59E0B);
     if (v.contains('comment') || v.contains('note'))
       return const Color(0xFF6366F1);
-    if (v.contains('assign')) return const Color(0xFF197FE6);
+    if (v.contains('assign')) return _brandRed;
     return const Color(0xFF94A3B8);
   }
 
@@ -224,7 +228,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A1A2E),
+        foregroundColor: const Color(0xFF000000),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         title: Column(
@@ -237,7 +241,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A2E),
+                color: Color(0xFF000000),
               ),
             ),
             Text(
@@ -248,7 +252,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF197FE6)),
+            icon: Icon(Icons.refresh_rounded, color: _brandRed),
             onPressed: _loading ? null : _load,
           ),
         ],
@@ -259,16 +263,16 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
       ),
       body:
           _loading
-              ? const Center(
+              ? Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CircularProgressIndicator(
-                      color: Color(0xFF197FE6),
+                      color: _brandRed,
                       strokeWidth: 2.5,
                     ),
-                    SizedBox(height: 14),
-                    Text(
+                    const SizedBox(height: 14),
+                    const Text(
                       'Loading ticket…',
                       style: TextStyle(color: Color(0xFF8A96A3), fontSize: 13),
                     ),
@@ -279,26 +283,19 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               ? _buildErrorState()
               : RefreshIndicator(
                 onRefresh: _load,
-                color: const Color(0xFF197FE6),
+                color: _brandRed,
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                   children: [
-                    // ── Ticket Info ──────────────────────────────────────
                     if (_ticketError != null)
                       _ErrorCard(message: _ticketError!)
                     else
                       _buildTicketCard(),
 
                     const SizedBox(height: 14),
-
-                    // ── Attachments ──────────────────────────────────────
                     _buildAttachmentsCard(),
-
                     const SizedBox(height: 14),
-
-                    // ── Activity Timeline ────────────────────────────────
                     _buildActivitiesCard(),
-
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -316,13 +313,13 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
             Container(
               width: 64,
               height: 64,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFEEEE),
+              decoration: BoxDecoration(
+                color: _brandRed.withOpacity(0.08),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.error_outline_rounded,
-                color: Color(0xFFEF4444),
+                color: _brandRed,
                 size: 32,
               ),
             ),
@@ -331,7 +328,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               _error!,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Color(0xFF1A1A2E),
+                color: Color(0xFF000000),
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
@@ -340,7 +337,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
             ElevatedButton.icon(
               onPressed: _load,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF197FE6),
+                backgroundColor: _brandRed,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -414,7 +411,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A1A2E),
+                          color: Color(0xFF000000),
                         ),
                       ),
                     ],
@@ -552,7 +549,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1A2E),
+                    color: Color(0xFF000000),
                   ),
                 ),
                 const Spacer(),
@@ -677,7 +674,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                               style: const TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF1A1A2E),
+                                color: Color(0xFF000000),
                               ),
                             ),
                             if (size != '—' || type != '—')
@@ -694,11 +691,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                           ],
                         ),
                       ),
-                      const Icon(
-                        Icons.download_outlined,
-                        color: Color(0xFF197FE6),
-                        size: 20,
-                      ),
+                      Icon(Icons.download_outlined, color: _brandRed, size: 20),
                     ],
                   ),
                 );
@@ -712,7 +705,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   Color _extColor(String ext) {
     switch (ext) {
       case 'pdf':
-        return const Color(0xFFEF4444);
+        return const Color(0xFFEB1E23);
       case 'png':
       case 'jpg':
       case 'jpeg':
@@ -721,7 +714,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
         return const Color(0xFF10B981);
       case 'doc':
       case 'docx':
-        return const Color(0xFF197FE6);
+        return const Color(0xFF0F62FE);
       case 'xls':
       case 'xlsx':
         return const Color(0xFF10B981);
@@ -748,12 +741,12 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                   width: 30,
                   height: 30,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF197FE6).withOpacity(0.12),
+                    color: _brandRed.withOpacity(0.10),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.timeline_rounded,
-                    color: Color(0xFF197FE6),
+                    color: _brandRed,
                     size: 17,
                   ),
                 ),
@@ -763,7 +756,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1A2E),
+                    color: Color(0xFF000000),
                   ),
                 ),
                 const Spacer(),
@@ -774,15 +767,15 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF197FE6).withOpacity(0.1),
+                      color: _brandRed.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       '${_activities.length}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF197FE6),
+                        color: _brandRed,
                       ),
                     ),
                   ),
@@ -1097,7 +1090,7 @@ class _InfoChip extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1A2E),
+                    color: Color(0xFF000000),
                   ),
                 ),
               ],
@@ -1136,7 +1129,7 @@ class _KVRow extends StatelessWidget {
             value,
             style: const TextStyle(
               fontSize: 12,
-              color: Color(0xFF1A1A2E),
+              color: Color(0xFF000000),
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1157,20 +1150,20 @@ class _ErrorCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFFFF1F0),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.35)),
+        border: Border.all(color: const Color(0xFFEB1E23).withOpacity(0.35)),
       ),
       child: Row(
         children: [
           const Icon(
             Icons.warning_amber_rounded,
-            color: Color(0xFFEF4444),
+            color: Color(0xFFEB1E23),
             size: 18,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+              style: const TextStyle(color: Color(0xFFEB1E23), fontSize: 12),
             ),
           ),
         ],

@@ -34,6 +34,10 @@ class _AdminSubscriptionDetailsPageState
   List<_BillingPeriod> _billingPeriods = [];
   _BillingPeriod? _selectedPeriod;
 
+  // ── Brand colors ───────────────────────────────────────────────────────────
+  static const _brandRed = Color(0xFFEB1E23);
+  static const _brandDark = Color(0xFF760F12);
+
   @override
   void initState() {
     super.initState();
@@ -92,10 +96,8 @@ class _AdminSubscriptionDetailsPageState
 
     final sln = widget.serviceLineNumber.trim();
 
-    // Silently call refresh (fire & forget — not displayed to user)
     ApiService.refreshStarlinkServiceLine(sln).catchError((_) {});
 
-    // ── 1. Subscription ───────────────────────────────────────────────────────
     Map<String, dynamic>? subResult;
     String? subErr;
     try {
@@ -113,7 +115,6 @@ class _AdminSubscriptionDetailsPageState
       subErr = e.toString().replaceAll('Exception: ', '');
     }
 
-    // ── Extract billing dates ─────────────────────────────────────────────────
     String? startDate;
     String? endDate;
     final List<_BillingPeriod> periods = [];
@@ -156,7 +157,6 @@ class _AdminSubscriptionDetailsPageState
       }
     }
 
-    // ── 2. Billing cycle ──────────────────────────────────────────────────────
     final useStart = periods.isNotEmpty ? periods.first.startDate : startDate;
     final useEnd = periods.isNotEmpty ? periods.first.endDate : endDate;
 
@@ -249,7 +249,7 @@ class _AdminSubscriptionDetailsPageState
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A1A2E),
+        foregroundColor: const Color(0xFF000000),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         title: Column(
@@ -260,14 +260,14 @@ class _AdminSubscriptionDetailsPageState
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A2E),
+                color: Color(0xFF000000),
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF197FE6)),
+            icon: Icon(Icons.refresh_rounded, color: _brandRed),
             onPressed: _loading ? null : _load,
           ),
         ],
@@ -278,16 +278,16 @@ class _AdminSubscriptionDetailsPageState
       ),
       body:
           _loading
-              ? const Center(
+              ? Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CircularProgressIndicator(
-                      color: Color(0xFF197FE6),
+                      color: _brandRed,
                       strokeWidth: 2.5,
                     ),
-                    SizedBox(height: 14),
-                    Text(
+                    const SizedBox(height: 14),
+                    const Text(
                       'Loading subscription…',
                       style: TextStyle(color: Color(0xFF8A96A3), fontSize: 13),
                     ),
@@ -310,13 +310,13 @@ class _AdminSubscriptionDetailsPageState
             Container(
               width: 64,
               height: 64,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFEEEE),
+              decoration: BoxDecoration(
+                color: _brandRed.withOpacity(0.08),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.error_outline_rounded,
-                color: Color(0xFFEF4444),
+                color: _brandRed,
                 size: 32,
               ),
             ),
@@ -325,7 +325,7 @@ class _AdminSubscriptionDetailsPageState
               _error!,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Color(0xFF1A1A2E),
+                color: Color(0xFF000000),
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
@@ -334,7 +334,7 @@ class _AdminSubscriptionDetailsPageState
             ElevatedButton.icon(
               onPressed: _load,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF197FE6),
+                backgroundColor: _brandRed,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -359,15 +359,16 @@ class _AdminSubscriptionDetailsPageState
   Widget _buildBody() {
     return RefreshIndicator(
       onRefresh: _load,
-      color: const Color(0xFF197FE6),
+      color: _brandRed,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
-          // Service line chip
-          _ServiceLineChip(serviceLineNumber: widget.serviceLineNumber),
+          _ServiceLineChip(
+            serviceLineNumber: widget.serviceLineNumber,
+            brandRed: _brandRed,
+          ),
           const SizedBox(height: 14),
 
-          // Subscription card
           if (_subscriptionError != null)
             _ErrorCard(message: 'Subscription: $_subscriptionError')
           else
@@ -375,7 +376,6 @@ class _AdminSubscriptionDetailsPageState
 
           const SizedBox(height: 14),
 
-          // Billing card
           _BillingCard(
             billingData: _billingData,
             billingError: _billingError,
@@ -402,7 +402,11 @@ class _AdminSubscriptionDetailsPageState
 
 class _ServiceLineChip extends StatelessWidget {
   final String serviceLineNumber;
-  const _ServiceLineChip({required this.serviceLineNumber});
+  final Color brandRed;
+  const _ServiceLineChip({
+    required this.serviceLineNumber,
+    required this.brandRed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -419,14 +423,10 @@ class _ServiceLineChip extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
+              color: brandRed.withOpacity(0.08),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
-              Icons.satellite_alt_rounded,
-              color: Color(0xFF197FE6),
-              size: 20,
-            ),
+            child: Icon(Icons.satellite_alt_rounded, color: brandRed, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -447,7 +447,7 @@ class _ServiceLineChip extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1A2E),
+                    color: Color(0xFF000000),
                     letterSpacing: 0.2,
                   ),
                 ),
@@ -457,15 +457,15 @@ class _ServiceLineChip extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0F9FF),
+              color: brandRed.withOpacity(0.06),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFBAE6FD)),
+              border: Border.all(color: brandRed.withOpacity(0.2)),
             ),
-            child: const Text(
+            child: Text(
               'Refreshes every 30–45 min',
               style: TextStyle(
                 fontSize: 9,
-                color: Color(0xFF0284C7),
+                color: brandRed,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -556,7 +556,6 @@ class _SubscriptionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Nickname + status
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Row(
@@ -580,7 +579,7 @@ class _SubscriptionCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A1A2E),
+                          color: Color(0xFF000000),
                         ),
                       ),
                     ],
@@ -603,7 +602,6 @@ class _SubscriptionCard extends StatelessWidget {
           const SizedBox(height: 14),
           const _HDivider(),
 
-          // End Date
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
@@ -641,7 +639,7 @@ class _SubscriptionCard extends StatelessWidget {
                           _formatDate(data?['endDate']?.toString()),
                           style: const TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF1A1A2E),
+                            color: Color(0xFF000000),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -656,7 +654,6 @@ class _SubscriptionCard extends StatelessWidget {
           const SizedBox(height: 16),
           const _HDivider(),
 
-          // Usage
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
@@ -668,7 +665,7 @@ class _SubscriptionCard extends StatelessWidget {
                       'Current plan Usage',
                       style: TextStyle(
                         fontSize: 12.5,
-                        color: Color(0xFF1A1A2E),
+                        color: Color(0xFF000000),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -676,7 +673,7 @@ class _SubscriptionCard extends StatelessWidget {
                       '${_gbStr(consumed)} / ${_gbStr(usageLimit)}',
                       style: const TextStyle(
                         fontSize: 12.5,
-                        color: Color(0xFF1A1A2E),
+                        color: Color(0xFF000000),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -688,12 +685,13 @@ class _SubscriptionCard extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: progress,
                     backgroundColor: const Color(0xFFE8ECF0),
+                    // Data-viz: red when >90%, amber >70%, blue otherwise (keep as-is)
                     valueColor: AlwaysStoppedAnimation<Color>(
                       progress > 0.9
                           ? const Color(0xFFEF4444)
                           : progress > 0.7
                           ? const Color(0xFFF59E0B)
-                          : const Color(0xFF197FE6),
+                          : const Color(0xFF0F62FE),
                     ),
                     minHeight: 6,
                   ),
@@ -712,7 +710,6 @@ class _SubscriptionCard extends StatelessWidget {
           const SizedBox(height: 16),
           const _HDivider(),
 
-          // Address
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
             child: Column(
@@ -744,7 +741,7 @@ class _SubscriptionCard extends StatelessWidget {
                         _str(data?['address']),
                         style: const TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF1A1A2E),
+                          color: Color(0xFF000000),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -834,7 +831,6 @@ class _BillingCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Period selector
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Column(
@@ -884,7 +880,7 @@ class _BillingCard extends StatelessWidget {
                         ),
                         style: const TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF1A1A2E),
+                          color: Color(0xFF000000),
                           fontWeight: FontWeight.w500,
                         ),
                         items:
@@ -909,24 +905,22 @@ class _BillingCard extends StatelessWidget {
           const SizedBox(height: 16),
           const _HDivider(),
 
-          // Billing body
           if (billingError != null)
             Padding(
               padding: const EdgeInsets.all(16),
               child: _ErrorCard(message: billingError!),
             )
           else if (billingData == null)
-            const Padding(
-              padding: EdgeInsets.all(36),
+            Padding(
+              padding: const EdgeInsets.all(36),
               child: Center(
                 child: CircularProgressIndicator(
-                  color: Color(0xFF197FE6),
+                  color: const Color(0xFFEB1E23),
                   strokeWidth: 2.5,
                 ),
               ),
             )
           else ...[
-            // Usage headline
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
               child: Column(
@@ -946,7 +940,7 @@ class _BillingCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 30,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF1A1A2E),
+                      color: Color(0xFF000000),
                       letterSpacing: -0.5,
                     ),
                   ),
@@ -954,7 +948,6 @@ class _BillingCard extends StatelessWidget {
               ),
             ),
 
-            // Progress bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
@@ -965,12 +958,15 @@ class _BillingCard extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: progress,
                       backgroundColor: const Color(0xFFE8ECF0),
+                      // Data-viz: keep color gradient for usage level
                       valueColor: AlwaysStoppedAnimation<Color>(
                         progress > 0.9
                             ? const Color(0xFFEF4444)
                             : progress > 0.7
                             ? const Color(0xFFF59E0B)
-                            : const Color(0xFFFC9FA5),
+                            : const Color(
+                              0xFFFC9FA5,
+                            ), // light brand red for healthy usage
                       ),
                       minHeight: 48,
                     ),
@@ -1003,7 +999,6 @@ class _BillingCard extends StatelessWidget {
             const SizedBox(height: 16),
             const _HDivider(),
 
-            // Stats grid
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
               child: Column(
@@ -1014,7 +1009,9 @@ class _BillingCard extends StatelessWidget {
                         child: _StatBox(
                           label: 'Priority Data',
                           value: _gbStr(priority),
-                          color: const Color(0xFF197FE6),
+                          color: const Color(
+                            0xFF0F62FE,
+                          ), // blue = data category
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -1102,7 +1099,7 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+    final color = active ? const Color(0xFF10B981) : const Color(0xFF760F12);
     final bg = active ? const Color(0xFFECFDF5) : const Color(0xFFFFF1F0);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1153,7 +1150,7 @@ class _UsageRow extends StatelessWidget {
           value,
           style: const TextStyle(
             fontSize: 12.5,
-            color: Color(0xFF1A1A2E),
+            color: Color(0xFF000000),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1198,7 +1195,7 @@ class _StatBox extends StatelessWidget {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF1A1A2E),
+              color: Color(0xFF000000),
             ),
           ),
         ],
@@ -1218,20 +1215,20 @@ class _ErrorCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFFFF1F0),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.35)),
+        border: Border.all(color: const Color(0xFFEB1E23).withOpacity(0.35)),
       ),
       child: Row(
         children: [
           const Icon(
             Icons.warning_amber_rounded,
-            color: Color(0xFFEF4444),
+            color: Color(0xFFEB1E23),
             size: 18,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+              style: const TextStyle(color: Color(0xFFEB1E23), fontSize: 12),
             ),
           ),
         ],

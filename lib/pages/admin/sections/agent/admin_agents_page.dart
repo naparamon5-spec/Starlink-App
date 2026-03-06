@@ -3,10 +3,11 @@ import '../../../../services/api_service.dart';
 import 'admin_agent_details_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFF0F62FE);
+const _primary = Color(0xFFEB1E23); // Brand red
+const _primaryDark = Color(0xFF760F12); // Dark red
 const _success = Color(0xFF24A148);
-const _danger = Color(0xFFDA1E28);
-const _ink = Color(0xFF161616);
+const _danger = Color(0xFFEB1E23);
+const _ink = Color(0xFF000000);
 const _inkSecondary = Color(0xFF6F6F6F);
 const _inkTertiary = Color(0xFFA8A8A8);
 const _surface = Color(0xFFFFFFFF);
@@ -119,7 +120,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
 
   Color _statusColor(String status) {
     if (status == 'ACTIVE') return _success;
-    if (status == 'INACTIVE') return _danger;
+    if (status == 'INACTIVE') return _primaryDark;
     return _inkTertiary;
   }
 
@@ -229,7 +230,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                           borderRadius: BorderRadius.circular(10),
                           boxShadow: [
                             BoxShadow(
-                              color: _primary.withOpacity(0.3),
+                              color: _primaryDark.withOpacity(0.35),
                               blurRadius: 8,
                               offset: const Offset(0, 3),
                             ),
@@ -255,7 +256,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                // Search field
                 Container(
                   decoration: BoxDecoration(
                     color: _surfaceSubtle,

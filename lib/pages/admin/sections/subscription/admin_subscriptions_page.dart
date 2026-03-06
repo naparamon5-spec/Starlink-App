@@ -3,10 +3,11 @@ import '../../../../services/api_service.dart';
 import 'admin_subscription_details_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFF0F62FE);
+const _primary = Color(0xFFEB1E23); // Brand red
+const _primaryDark = Color(0xFF760F12); // Dark red
 const _success = Color(0xFF24A148);
-const _danger = Color(0xFFDA1E28);
-const _ink = Color(0xFF161616);
+const _danger = Color(0xFFEB1E23);
+const _ink = Color(0xFF000000);
 const _inkSecondary = Color(0xFF6F6F6F);
 const _inkTertiary = Color(0xFFA8A8A8);
 const _surface = Color(0xFFFFFFFF);
@@ -130,7 +131,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
   Color _activeColor(String? active) {
     final a = (active ?? '').toString().toUpperCase();
     if (a == 'ACTIVE') return _success;
-    if (a == 'EXPIRED' || a == 'CANCELLED') return _danger;
+    if (a == 'EXPIRED' || a == 'CANCELLED') return _primaryDark;
     return _inkTertiary;
   }
 

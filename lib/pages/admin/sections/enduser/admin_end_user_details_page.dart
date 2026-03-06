@@ -28,11 +28,12 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
   List<Map<String, dynamic>> _users = [];
 
   // ── Design tokens ──────────────────────────────────────────────────────────
-  static const _primary = Color(0xFF0F62FE);
+  static const _primary = Color(0xFFEB1E23); // Brand red
+  static const _primaryDark = Color(0xFF760F12); // Dark red
   static const _success = Color(0xFF24A148);
-  static const _danger = Color(0xFFDA1E28);
+  static const _danger = Color(0xFFEB1E23);
   static const _purple = Color(0xFF7C3AED);
-  static const _ink = Color(0xFF161616);
+  static const _ink = Color(0xFF000000);
   static const _inkSecondary = Color(0xFF6F6F6F);
   static const _inkTertiary = Color(0xFFA8A8A8);
   static const _surface = Color(0xFFFFFFFF);
@@ -52,11 +53,7 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
     });
 
     try {
-      // All three endpoints use eu_code as the ID:
-      // GET /v1/end-user/:eu_code
-      // GET /v1/subscriptions/end-user/:eu_code
-      // GET /v1/users/company/:eu_code
-      final euCode = widget.endUserId; // endUserId is always eu_code
+      final euCode = widget.endUserId;
       final results = await Future.wait([
         ApiService.getEndUserById(euCode),
         ApiService.getSubscriptionsByEndUserId(euCode),
@@ -64,11 +61,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
       ]);
 
       if (!mounted) return;
-
-      // ── End user ──────────────────────────────────────────────────────────
-      // _getV1WithAuth strips the outer wrapper and returns data['data'].
-      // For /v1/end-user/:id  → data field is a Map object directly.
-      // So results[0]['data'] = { eu_code, eu_name, inactive, customer_code }
 
       if (results[0]['status'] != 'success') {
         setState(() {
@@ -82,10 +74,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
       final endUser =
           rawEu is Map ? Map<String, dynamic>.from(rawEu) : <String, dynamic>{};
 
-      // ── Subscriptions ─────────────────────────────────────────────────────
-      // For /v1/subscriptions/end-user/:id → data field is a List directly.
-      // So results[1]['data'] = [ {...}, {...} ]
-
       List<Map<String, dynamic>> subs = [];
       if (results[1]['status'] == 'success') {
         final rawSubs = results[1]['data'];
@@ -93,7 +81,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
         if (rawSubs is List) {
           list = rawSubs;
         } else if (rawSubs is Map) {
-          // in case it's wrapped: { data: [...] }
           final inner = rawSubs['data'];
           if (inner is List) list = inner;
         }
@@ -103,9 +90,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                 .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
                 .toList();
       }
-
-      // ── Users ─────────────────────────────────────────────────────────────
-      // For /v1/users/company/:code → data field may be List or wrapped.
 
       List<Map<String, dynamic>> users = [];
       if (results[2]['status'] == 'success') {
@@ -139,7 +123,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
     }
   }
 
-  // ── Toggle end-user active status (UI only) ───────────────────────────────
   void _toggleStatus(bool newActiveValue) {
     setState(() {
       _isTogglingStatus = false;
@@ -152,8 +135,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
       (v == null || v.toString() == 'null' || v.toString().trim().isEmpty)
           ? '—'
           : v.toString().trim();
-
-  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -213,8 +194,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
     );
   }
 
-  // ── End User Card ──────────────────────────────────────────────────────────
-
   Widget _buildEndUserCard() {
     final e = _endUser ?? {};
     final name = _str(e['eu_name'] ?? e['name']);
@@ -271,13 +250,10 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
     );
   }
 
-  // ── Subscriptions Section ──────────────────────────────────────────────────
-
   Widget _buildSubscriptionsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Section header
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
           child: Row(
@@ -296,7 +272,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
             ],
           ),
         ),
-
         if (_subscriptions.isEmpty)
           _WhiteCard(
             child: const Padding(
@@ -329,7 +304,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
     final kit = _str(s['kit_number'] ?? s['kitNumber']);
     final activeRaw = _str(s['active'] ?? s['status']);
     final isActive = activeRaw.toUpperCase() == 'ACTIVE' || activeRaw == '1';
-
     final dataGB = double.tryParse(totalGB == '—' ? '0' : totalGB) ?? 0;
 
     return _WhiteCard(
@@ -338,7 +312,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Nickname + status badge
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -356,12 +329,10 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                 const SizedBox(width: 10),
                 _StatusBadge(
                   label: isActive ? 'ACTIVE' : 'INACTIVE',
-                  color: isActive ? _success : _danger,
+                  color: isActive ? _success : _primaryDark,
                 ),
               ],
             ),
-
-            // Service Line Number
             const SizedBox(height: 4),
             Text(
               sln,
@@ -371,12 +342,9 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                 fontWeight: FontWeight.w400,
               ),
             ),
-
             const SizedBox(height: 14),
             Container(height: 1, color: _surfaceSubtle),
             const SizedBox(height: 12),
-
-            // Detail rows
             _LabelValue(
               label: 'Data Usage',
               value: '$totalGB GB',
@@ -390,13 +358,10 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
     );
   }
 
-  // ── Users Section ──────────────────────────────────────────────────────────
-
   Widget _buildUsersSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Section header
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
           child: Row(
@@ -446,7 +411,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
             ],
           ),
         ),
-
         if (_users.isEmpty)
           _WhiteCard(
             child: const Padding(
@@ -506,7 +470,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Avatar
           Container(
             width: 38,
             height: 38,
@@ -526,8 +489,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
             ),
           ),
           const SizedBox(width: 12),
-
-          // Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -549,7 +510,7 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                     const SizedBox(width: 8),
                     _StatusBadge(
                       label: isActive ? 'Active' : 'Inactive',
-                      color: isActive ? _success : _danger,
+                      color: isActive ? _success : _primaryDark,
                     ),
                   ],
                 ),
@@ -589,8 +550,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
       ),
     );
   }
-
-  // ── States ─────────────────────────────────────────────────────────────────
 
   Widget _buildLoader() {
     return const Center(
@@ -732,7 +691,7 @@ class _LabelValue extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: valueColor ?? const Color(0xFF161616),
+              color: valueColor ?? const Color(0xFF000000),
             ),
           ),
         ),

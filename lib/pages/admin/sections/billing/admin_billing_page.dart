@@ -16,10 +16,11 @@ class _AdminBillingPageState extends State<AdminBillingPage>
   String? _error;
   late AnimationController _animController;
 
-  static const _primary = Color(0xFF0F62FE);
+  static const _primary = Color(0xFFEB1E23); // Brand red
+  static const _primaryDark = Color(0xFF760F12); // Dark red
   static const _success = Color(0xFF24A148);
-  static const _danger = Color(0xFFDA1E28);
-  static const _ink = Color(0xFF161616);
+  static const _danger = Color(0xFFEB1E23);
+  static const _ink = Color(0xFF000000);
   static const _inkSecondary = Color(0xFF6F6F6F);
   static const _inkTertiary = Color(0xFFA8A8A8);
   static const _surface = Color(0xFFFFFFFF);
@@ -86,8 +87,6 @@ class _AdminBillingPageState extends State<AdminBillingPage>
   }
 
   void _openDetails(Map<String, dynamic> b) {
-    // Pass the full record as prefetchedData — the details page will
-    // show this data immediately and optionally try the API too.
     Navigator.of(context).push(
       MaterialPageRoute(
         builder:
@@ -277,14 +276,14 @@ class _AdminBillingPageState extends State<AdminBillingPage>
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0F62FE), Color(0xFF0043CE)],
+          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: _primary.withOpacity(0.28),
+            color: _primaryDark.withOpacity(0.38),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),

@@ -22,10 +22,11 @@ class _AdminEndUsersPageState extends State<AdminEndUsersPage>
   late AnimationController _animController;
 
   // ── Design tokens ──────────────────────────────────────────────────────────
-  static const _primary = Color(0xFF0F62FE);
+  static const _primary = Color(0xFFEB1E23); // Brand red
+  static const _primaryDark = Color(0xFF760F12); // Dark red
   static const _success = Color(0xFF24A148);
-  static const _danger = Color(0xFFDA1E28);
-  static const _ink = Color(0xFF161616);
+  static const _danger = Color(0xFFEB1E23);
+  static const _ink = Color(0xFF000000);
   static const _inkSecondary = Color(0xFF6F6F6F);
   static const _inkTertiary = Color(0xFFA8A8A8);
   static const _surface = Color(0xFFFFFFFF);
@@ -49,11 +50,6 @@ class _AdminEndUsersPageState extends State<AdminEndUsersPage>
     super.dispose();
   }
 
-  // ── Data loading ───────────────────────────────────────────────────────────
-  // getEndUsersPaginated → _getV1WithAuth → returns:
-  //   { 'status': 'success', 'data': <raw data field from API> }
-  // The API's data field is: { 'data': [...items], 'pagination': {...} }
-
   Future<void> _loadUsers({int page = 1}) async {
     setState(() => _isLoading = true);
 
@@ -67,7 +63,7 @@ class _AdminEndUsersPageState extends State<AdminEndUsersPage>
       if (!mounted) return;
 
       if (response['status'] == 'success') {
-        final payload = response['data']; // raw API data field
+        final payload = response['data'];
         final items = payload is Map ? payload['data'] : null;
         final pagination = payload is Map ? payload['pagination'] : null;
 
@@ -94,10 +90,6 @@ class _AdminEndUsersPageState extends State<AdminEndUsersPage>
   }
 
   void _openDetails(Map<String, dynamic> user) {
-    // API endpoints use eu_code as the ID parameter:
-    // GET /v1/end-user/:eu_code
-    // GET /v1/subscriptions/end-user/:eu_code
-    // GET /v1/users/company/:eu_code
     final euCode =
         (user['eu_code'] ?? user['code'] ?? user['id'] ?? '').toString();
 
@@ -114,11 +106,8 @@ class _AdminEndUsersPageState extends State<AdminEndUsersPage>
     );
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
-    // This page is a tab body — use ColoredBox so parent's BottomNavBar shows.
     return ColoredBox(
       color: _surface,
       child: Column(
@@ -360,10 +349,10 @@ class _EndUserCard extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  static const _primary = Color(0xFF0F62FE);
+  static const _primary = Color(0xFFEB1E23);
+  static const _primaryDark = Color(0xFF760F12);
   static const _success = Color(0xFF24A148);
-  static const _danger = Color(0xFFDA1E28);
-  static const _ink = Color(0xFF161616);
+  static const _ink = Color(0xFF000000);
   static const _inkSecondary = Color(0xFF6F6F6F);
   static const _inkTertiary = Color(0xFFA8A8A8);
   static const _surface = Color(0xFFFFFFFF);
@@ -481,7 +470,8 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive ? const Color(0xFF24A148) : const Color(0xFFDA1E28);
+    // Active = green, Inactive = dark red
+    final color = isActive ? const Color(0xFF24A148) : const Color(0xFF760F12);
     final label = isActive ? 'Active' : 'Inactive';
 
     return Container(
@@ -521,7 +511,7 @@ class _PaginationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const primary = Color(0xFF0F62FE);
+    const primary = Color(0xFFEB1E23);
     const inkTertiary = Color(0xFFA8A8A8);
     const surfaceSubtle = Color(0xFFF4F4F4);
     const border = Color(0xFFE0E0E0);

@@ -12,12 +12,15 @@ import 'profile/admin_edit_profile_page.dart';
 import 'profile/admin_manage_users_page.dart';
 import 'profile/admin_user_guide_page.dart';
 
-// ── Design tokens (matching AdminBillingPage) ─────────────────────────────────
-const _primary = Color(0xFF0F62FE);
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const _primary = Color(0xFFEB1E23); // Main brand red
+const _primaryDark = Color(0xFF760F12); // Dark red
+const _primaryBright = Color(0xFFEA0509); // Bright red accent
+const _inProgress = Color(0xFF0F62FE); // Blue — kept for In Progress status
 const _success = Color(0xFF24A148);
 const _warning = Color(0xFFFF832B);
-const _danger = Color(0xFFDA1E28);
-const _ink = Color(0xFF161616);
+const _danger = Color(0xFFEB1E23); // Uses brand red for danger
+const _ink = Color(0xFF000000); // Pure black
 const _inkSecondary = Color(0xFF6F6F6F);
 const _inkTertiary = Color(0xFFA8A8A8);
 const _surface = Color(0xFFFFFFFF);
@@ -223,7 +226,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       case 0:
         return [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 _QuickCreateSection(),
@@ -336,81 +339,85 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: _surfaceSubtle,
-      body: Stack(
-        children: [
-          RefreshIndicator(
-            onRefresh: _loadDashboard,
-            color: _primary,
-            strokeWidth: 2,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                if (_selectedIndex == 0 && _dashboardError != null)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _danger.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _danger.withOpacity(0.25)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.warning_amber_rounded,
-                              color: _danger,
-                              size: 18,
+      // ── Fixed bottom nav bar ──────────────────────────────────────────
+      bottomNavigationBar: _BottomNavBar(
+        selectedIndex: _selectedIndex,
+        onTap: _onNavTap,
+        quickMenuOpen: _quickMenuOpen,
+        quickAction: _quickAction,
+      ),
+      body: SafeArea(
+        top: true,
+        bottom: false, // bottom handled by nav bar
+        child: Stack(
+          children: [
+            RefreshIndicator(
+              onRefresh: _loadDashboard,
+              color: _primary,
+              strokeWidth: 2,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  if (_selectedIndex == 0 && _dashboardError != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _danger.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _danger.withOpacity(0.25),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _dashboardError!,
-                                style: const TextStyle(
-                                  color: _danger,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.warning_amber_rounded,
+                                color: _danger,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _dashboardError!,
+                                  style: const TextStyle(
+                                    color: _danger,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ..._buildBodySlivers(),
-              ],
-            ),
-          ),
-
-          if (_quickMenuOpen)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => setState(() => _quickMenuOpen = false),
-                child: Container(color: Colors.black.withOpacity(0.3)),
+                  ..._buildBodySlivers(),
+                ],
               ),
             ),
 
-          _QuickActionBubbles(
-            isOpen: _quickMenuOpen,
-            onSelect: _selectQuickAction,
-            activeAction: _quickAction,
-          ),
+            // ── Quick action dimmed backdrop ────────────────────────────
+            if (_quickMenuOpen)
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => setState(() => _quickMenuOpen = false),
+                  child: Container(color: Colors.black.withOpacity(0.3)),
+                ),
+              ),
 
-          Positioned(
-            bottom: 24,
-            left: 20,
-            right: 20,
-            child: _FloatingNavBar(
-              selectedIndex: _selectedIndex,
-              onTap: _onNavTap,
-              quickMenuOpen: _quickMenuOpen,
-              quickAction: _quickAction,
+            // ── Quick action bubbles anchored above the nav bar ─────────
+            _QuickActionBubbles(
+              isOpen: _quickMenuOpen,
+              onSelect: _selectQuickAction,
+              activeAction: _quickAction,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -466,8 +473,10 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final navBarHeight = 60.0 + bottomInset;
     final fabCenterX = screenWidth / 2;
-    final fabCenterY = screenHeight - 80.0;
+    final fabCenterY = screenHeight - navBarHeight / 2 - 8;
     const bubbleSize = 56.0;
     const labelHeight = 20.0;
     const totalBubbleHeight = bubbleSize + 6 + labelHeight;
@@ -636,7 +645,7 @@ class _QuickCreateSection extends StatelessWidget {
           child: _QuickCreateButton(
             icon: Icons.person_add_outlined,
             label: 'New Agent',
-            color: const Color(0xFF6929C4),
+            color: _primaryDark,
             onTap: () {},
           ),
         ),
@@ -726,7 +735,7 @@ class _TicketOverviewCard extends StatelessWidget {
     final total = open + inProgress + resolved + closed;
     final segments = <Widget>[
       if (open > 0) _BarSegment(flex: open, color: _warning),
-      if (inProgress > 0) _BarSegment(flex: inProgress, color: _primary),
+      if (inProgress > 0) _BarSegment(flex: inProgress, color: _inProgress),
       if (resolved > 0) _BarSegment(flex: resolved, color: _success),
       if (closed > 0) _BarSegment(flex: closed, color: const Color(0xFFA8A8A8)),
     ];
@@ -735,14 +744,14 @@ class _TicketOverviewCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0F62FE), Color(0xFF0043CE)],
+          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: _primary.withOpacity(0.28),
+            color: _primaryDark.withOpacity(0.38),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -802,7 +811,7 @@ class _TicketOverviewCard extends StatelessWidget {
             children: [
               _BarLegend(color: _warning, label: 'Open', count: open),
               _BarLegend(
-                color: _primary,
+                color: _inProgress,
                 label: 'In Progress',
                 count: inProgress,
               ),
@@ -1166,7 +1175,7 @@ class _RecentActivitySection extends StatelessWidget {
   Color _statusColor(String s) {
     final v = s.toLowerCase();
     if (v.contains('open')) return _warning;
-    if (v.contains('progress')) return _primary;
+    if (v.contains('progress')) return _inProgress;
     if (v.contains('resolved')) return _success;
     if (v.contains('closed')) return const Color(0xFFA8A8A8);
     return _inkTertiary;
@@ -1416,7 +1425,7 @@ class _SettingsSection extends StatelessWidget {
     return Container(
       color: _surfaceSubtle,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         children: [
           const Text(
             'Settings',
@@ -1448,7 +1457,7 @@ class _SettingsSection extends StatelessWidget {
           const SizedBox(height: 10),
           _SettingsCard(
             icon: Icons.person_outline,
-            iconColor: const Color(0xFF6929C4),
+            iconColor: _primaryDark,
             title: 'Edit Profile',
             subtitle: 'Update your admin account information and preferences.',
             onTap:
@@ -1475,7 +1484,7 @@ class _SettingsSection extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: () => Navigator.of(context).maybePop(),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _danger,
+                backgroundColor: _primaryDark,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1580,15 +1589,15 @@ class _SettingsCard extends StatelessWidget {
   }
 }
 
-// ─── Floating Bottom Nav ──────────────────────────────────────────────────────
+// ─── Fixed Bottom Nav Bar ─────────────────────────────────────────────────────
 
-class _FloatingNavBar extends StatelessWidget {
+class _BottomNavBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
   final bool quickMenuOpen;
   final QuickActionType? quickAction;
 
-  const _FloatingNavBar({
+  const _BottomNavBar({
     required this.selectedIndex,
     required this.onTap,
     required this.quickMenuOpen,
@@ -1611,23 +1620,29 @@ class _FloatingNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: _surface,
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: _border),
+        border: const Border(top: BorderSide(color: _border, width: 1)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.10),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
+      padding: EdgeInsets.only(
+        left: 8,
+        right: 8,
+        top: 8,
+        bottom: bottomInset > 0 ? bottomInset : 10,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _NavItem(
             icon: Icons.dashboard_outlined,
@@ -1641,14 +1656,15 @@ class _FloatingNavBar extends StatelessWidget {
             selected: selectedIndex == 1,
             onTap: () => onTap(1),
           ),
+          // ── Centre FAB ──────────────────────────────────────────────────
           GestureDetector(
             onTap: () => onTap(2),
             child: Transform.translate(
-              offset: const Offset(0, -20),
+              offset: const Offset(0, -12),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
-                width: 56,
-                height: 56,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   color: quickMenuOpen ? _surfaceSubtle : _primary,
                   shape: BoxShape.circle,
@@ -1658,9 +1674,11 @@ class _FloatingNavBar extends StatelessWidget {
                           : null,
                   boxShadow: [
                     BoxShadow(
-                      color: _primary.withOpacity(quickMenuOpen ? 0.15 : 0.4),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
+                      color: _primaryDark.withOpacity(
+                        quickMenuOpen ? 0.15 : 0.40,
+                      ),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5),
                     ),
                   ],
                 ),
@@ -1671,7 +1689,7 @@ class _FloatingNavBar extends StatelessWidget {
                   child: Icon(
                     _quickIcon(),
                     color: quickMenuOpen ? _primary : Colors.white,
-                    size: 26,
+                    size: 24,
                   ),
                 ),
               ),
@@ -1760,7 +1778,7 @@ class _SubscriptionTile extends StatelessWidget {
 
     final activeUpper = active.toUpperCase();
     if (activeUpper.contains('EXPIRED') || activeUpper.contains('INACTIVE')) {
-      color = _danger;
+      color = _primaryDark;
       icon = Icons.cancel_outlined;
     } else if (activeUpper.contains('EXPIR')) {
       color = _warning;

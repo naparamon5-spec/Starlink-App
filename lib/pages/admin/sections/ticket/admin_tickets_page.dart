@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../../../../services/api_service.dart';
 import 'admin_ticket_details_page.dart';
 
@@ -16,14 +17,17 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   List<Map<String, dynamic>> _tickets = [];
   bool _loading = false;
+  bool _searchLoading = false; // subtle indicator while debounce fires
   String? _error;
 
   // ── Design Tokens ─────────────────────────────────────────────────────────
-  static const _primary = Color(0xFF0F62FE);
+  static const _primary = Color(0xFFEB1E23); // Brand red
+  static const _primaryDark = Color(0xFF760F12); // Dark red
+  static const _inProgress = Color(0xFF0F62FE); // Blue — kept for In Progress
   static const _success = Color(0xFF24A148);
   static const _warning = Color(0xFFFF832B);
-  static const _danger = Color(0xFFDA1E28);
-  static const _ink = Color(0xFF161616);
+  static const _danger = Color(0xFFEB1E23);
+  static const _ink = Color(0xFF000000);
   static const _inkSecondary = Color(0xFF6F6F6F);
   static const _inkTertiary = Color(0xFFA8A8A8);
   static const _surface = Color(0xFFFFFFFF);
@@ -31,6 +35,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   static const _border = Color(0xFFE0E0E0);
 
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -54,6 +59,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _tabController.dispose();
     _animController.dispose();
     _searchController.dispose();
@@ -75,7 +81,8 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   Future<void> _loadTickets() async {
     setState(() {
-      _loading = true;
+      _loading = _tickets.isEmpty; // full loader only on first/empty load
+      _searchLoading = false;
       _error = null;
     });
     try {
@@ -105,7 +112,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   Color _statusColor(String status) {
     final s = status.toLowerCase();
     if (s.contains('open')) return _warning;
-    if (s.contains('progress')) return _primary;
+    if (s.contains('progress')) return _inProgress;
     if (s.contains('closed')) return _inkTertiary;
     return _inkTertiary;
   }
@@ -197,15 +204,38 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                           ),
                           child: TextField(
                             controller: _searchController,
-                            onChanged: (_) => _loadTickets(),
-                            decoration: const InputDecoration(
+                            onChanged: (_) {
+                              setState(() => _searchLoading = true);
+                              _searchDebounce?.cancel();
+                              _searchDebounce = Timer(
+                                const Duration(milliseconds: 500),
+                                () {
+                                  if (mounted) _loadTickets();
+                                },
+                              );
+                            },
+                            decoration: InputDecoration(
                               hintText: 'Search tickets...',
                               border: InputBorder.none,
-                              prefixIcon: Icon(
+                              prefixIcon: const Icon(
                                 Icons.search,
                                 color: _inkTertiary,
                               ),
-                              contentPadding: EdgeInsets.symmetric(
+                              suffixIcon:
+                                  _searchLoading
+                                      ? const Padding(
+                                        padding: EdgeInsets.all(12),
+                                        child: SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            color: _primary,
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      )
+                                      : null,
+                              contentPadding: const EdgeInsets.symmetric(
                                 vertical: 14,
                               ),
                             ),
@@ -332,14 +362,14 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0F62FE), Color(0xFF0043CE)],
+          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: _primary.withOpacity(0.28),
+            color: _primaryDark.withOpacity(0.38),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -455,7 +485,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
             icon: Icons.autorenew_rounded,
             label: 'In Progress',
             value: '$_inProgressCount',
-            color: _primary,
+            color: _inProgress,
           ),
           const SizedBox(width: 10),
           _StatPill(
@@ -583,7 +613,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                   children: [
                     Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.calendar_today_outlined,
                           size: 12,
                           color: _inkTertiary,
@@ -738,7 +768,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-widgets (shared style with billing page)
+// Sub-widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _HeroChip extends StatelessWidget {
