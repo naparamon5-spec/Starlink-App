@@ -13,14 +13,14 @@ import 'profile/admin_manage_users_page.dart';
 import 'profile/admin_user_guide_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23); // Main brand red
-const _primaryDark = Color(0xFF760F12); // Dark red
-const _primaryBright = Color(0xFFEA0509); // Bright red accent
-const _inProgress = Color(0xFF0F62FE); // Blue — kept for In Progress status
+const _primary = Color(0xFFEB1E23);
+const _primaryDark = Color(0xFF760F12);
+const _primaryBright = Color(0xFFEA0509);
+const _inProgress = Color(0xFF0F62FE);
 const _success = Color(0xFF24A148);
 const _warning = Color(0xFFFF832B);
-const _danger = Color(0xFFEB1E23); // Uses brand red for danger
-const _ink = Color(0xFF000000); // Pure black
+const _danger = Color(0xFFEB1E23);
+const _ink = Color(0xFF000000);
 const _inkSecondary = Color(0xFF6F6F6F);
 const _inkTertiary = Color(0xFFA8A8A8);
 const _surface = Color(0xFFFFFFFF);
@@ -326,8 +326,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           ),
         ];
       case 4:
-        return const [
-          SliverFillRemaining(hasScrollBody: true, child: _SettingsSection()),
+        return [
+          SliverFillRemaining(
+            hasScrollBody: true,
+            child: _SettingsSection(me: _me),
+          ),
         ];
       default:
         return const [
@@ -341,7 +344,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: _surfaceSubtle,
-      // ── Fixed bottom nav bar ──────────────────────────────────────────
       bottomNavigationBar: _BottomNavBar(
         selectedIndex: _selectedIndex,
         onTap: _onNavTap,
@@ -350,7 +352,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       ),
       body: SafeArea(
         top: true,
-        bottom: false, // bottom handled by nav bar
+        bottom: false,
         child: Stack(
           children: [
             RefreshIndicator(
@@ -401,7 +403,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               ),
             ),
 
-            // ── Quick action dimmed backdrop ────────────────────────────
             if (_quickMenuOpen)
               Positioned.fill(
                 child: GestureDetector(
@@ -410,7 +411,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 ),
               ),
 
-            // ── Quick action bubbles anchored above the nav bar ─────────
             _QuickActionBubbles(
               isOpen: _quickMenuOpen,
               onSelect: _selectQuickAction,
@@ -1418,15 +1418,52 @@ class _ActivityTile extends StatelessWidget {
 // ─── Settings Section ─────────────────────────────────────────────────────────
 
 class _SettingsSection extends StatelessWidget {
-  const _SettingsSection();
+  final Map<String, dynamic>? me;
+
+  const _SettingsSection({this.me});
+
+  String? _extractString(List<String> keys) {
+    if (me == null) return null;
+    for (final k in keys) {
+      final v = me![k];
+      if (v != null && v.toString().trim().isNotEmpty) {
+        return v.toString().trim();
+      }
+    }
+    return null;
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    }
+    return name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'A';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final name =
+        _extractString(['name', 'full_name', 'fullName', 'username']) ??
+        'Admin';
+    final email = _extractString(['email', 'email_address']) ?? '—';
+    final role =
+        _extractString(['role', 'user_role', 'userRole', 'type']) ??
+        'Administrator';
+    final avatarUrl = _extractString([
+      'avatar',
+      'avatar_url',
+      'photo',
+      'profile_picture',
+    ]);
+    final initials = _initials(name);
+
     return Container(
       color: _surfaceSubtle,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         children: [
+          // ── Page Title ────────────────────────────────────────────────
           const Text(
             'Settings',
             style: TextStyle(
@@ -1438,10 +1475,169 @@ class _SettingsSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Manage users, your profile, and app guides.',
+            'Manage your profile and app settings.',
             style: TextStyle(fontSize: 13, color: _inkSecondary),
           ),
+          const SizedBox(height: 20),
+
+          // ── Profile Card ──────────────────────────────────────────────
+          GestureDetector(
+            onTap:
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AdminEditProfilePage(),
+                  ),
+                ),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primaryDark.withOpacity(0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  // ── Avatar ──────────────────────────────────────────
+                  Stack(
+                    children: [
+                      Container(
+                        width: 66,
+                        height: 66,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withOpacity(0.2),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.5),
+                            width: 2.5,
+                          ),
+                        ),
+                        child:
+                            avatarUrl != null && avatarUrl.startsWith('http')
+                                ? ClipOval(
+                                  child: Image.network(
+                                    avatarUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (_, __, ___) =>
+                                            _AvatarInitials(initials: initials),
+                                  ),
+                                )
+                                : _AvatarInitials(initials: initials),
+                      ),
+                      // Edit badge
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _primary.withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.edit,
+                            color: _primary,
+                            size: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                  // ── Name / Email / Role ──────────────────────────────
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.3,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.email_outlined,
+                              color: Colors.white.withOpacity(0.7),
+                              size: 12,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                email,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.8),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            role,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white.withOpacity(0.6),
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           const SizedBox(height: 24),
+
+          // ── Section Label ─────────────────────────────────────────────
+          const _SectionHeader(title: 'ACCOUNT'),
+          const SizedBox(height: 12),
+
           _SettingsCard(
             icon: Icons.manage_accounts_outlined,
             iconColor: _primary,
@@ -1467,7 +1663,12 @@ class _SettingsSection extends StatelessWidget {
                   ),
                 ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
+
+          // ── Section Label ─────────────────────────────────────────────
+          const _SectionHeader(title: 'HELP'),
+          const SizedBox(height: 12),
+
           _SettingsCard(
             icon: Icons.menu_book_outlined,
             iconColor: _success,
@@ -1478,7 +1679,9 @@ class _SettingsSection extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => const AdminUserGuidePage()),
                 ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
+
+          // ── Logout ────────────────────────────────────────────────────
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -1504,6 +1707,30 @@ class _SettingsSection extends StatelessWidget {
     );
   }
 }
+
+// ─── Avatar Initials ──────────────────────────────────────────────────────────
+
+class _AvatarInitials extends StatelessWidget {
+  final String initials;
+  const _AvatarInitials({required this.initials});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        initials,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.5,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Settings Card ────────────────────────────────────────────────────────────
 
 class _SettingsCard extends StatelessWidget {
   final IconData icon;
@@ -1656,7 +1883,6 @@ class _BottomNavBar extends StatelessWidget {
             selected: selectedIndex == 1,
             onTap: () => onTap(1),
           ),
-          // ── Centre FAB ──────────────────────────────────────────────────
           GestureDetector(
             onTap: () => onTap(2),
             child: Transform.translate(
