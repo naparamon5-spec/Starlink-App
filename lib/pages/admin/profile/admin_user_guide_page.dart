@@ -1,5 +1,14 @@
 import 'package:flutter/material.dart';
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const _primary = Color(0xFF0F62FE);
+const _ink = Color(0xFF161616);
+const _inkSecondary = Color(0xFF6F6F6F);
+const _inkTertiary = Color(0xFFA8A8A8);
+const _surface = Color(0xFFFFFFFF);
+const _surfaceSubtle = Color(0xFFF4F4F4);
+const _border = Color(0xFFE0E0E0);
+
 class AdminUserGuidePage extends StatefulWidget {
   const AdminUserGuidePage({super.key});
 
@@ -58,7 +67,7 @@ class _AdminUserGuidePageState extends State<AdminUserGuidePage> {
     {
       'title': 'User Roles & Permissions',
       'icon': Icons.security_outlined,
-      'color': const Color(0xFF133343),
+      'color': _primary,
       'content':
           'Roles define what a user can do:\n\n• Admin – Full access to all sections\n• Agent – Can view and manage tickets and end users\n• Viewer – Read-only access\n\nChange roles via Manage Users in the top-right profile menu.',
     },
@@ -85,131 +94,180 @@ class _AdminUserGuidePageState extends State<AdminUserGuidePage> {
           .toList();
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'User Guide',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF133343),
-        foregroundColor: Colors.white,
-        elevation: 2,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
-        ),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              onChanged:
-                  (val) => setState(() {
-                    _searchQuery = val;
-                    _expandedIndex = null;
-                  }),
-              decoration: InputDecoration(
-                hintText: 'Search guide topics...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  vertical: 0,
-                  horizontal: 16,
-                ),
+      backgroundColor: _surfaceSubtle,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header ─────────────────────────────────────────────
+            Container(
+              color: _surface,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'User Guide',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: _ink,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Search
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _surfaceSubtle,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _border),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (val) {
+                        setState(() {
+                          _searchQuery = val;
+                          _expandedIndex = null;
+                        });
+                      },
+                      style: const TextStyle(fontSize: 13, color: _ink),
+                      decoration: const InputDecoration(
+                        hintText: 'Search guide topics...',
+                        hintStyle: TextStyle(color: _inkTertiary, fontSize: 13),
+                        prefixIcon: Icon(
+                          Icons.search,
+                          color: _inkTertiary,
+                          size: 20,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          Expanded(
-            child:
-                _filtered.isEmpty
-                    ? const Center(
-                      child: Text(
-                        'No topics found.',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    )
-                    : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final item = _filtered[index];
-                        final isExpanded = _expandedIndex == index;
-                        return Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap:
-                                () => setState(
-                                  () =>
-                                      _expandedIndex =
-                                          isExpanded ? null : index,
-                                ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 20,
-                                        backgroundColor: (item['color']
-                                                as Color)
-                                            .withOpacity(0.15),
-                                        child: Icon(
-                                          item['icon'] as IconData,
-                                          color: item['color'] as Color,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          item['title'],
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15,
-                                          ),
-                                        ),
-                                      ),
-                                      Icon(
-                                        isExpanded
-                                            ? Icons.expand_less
-                                            : Icons.expand_more,
-                                        color: Colors.grey,
-                                      ),
-                                    ],
-                                  ),
-                                  if (isExpanded) ...[
-                                    const SizedBox(height: 12),
-                                    const Divider(),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      item['content'],
-                                      style: const TextStyle(
-                                        height: 1.5,
-                                        color: Colors.black87,
-                                      ),
+
+            Container(height: 1, color: _border),
+
+            // ── Guide List ─────────────────────────────────────────
+            Expanded(
+              child:
+                  _filtered.isEmpty
+                      ? const Center(
+                        child: Text(
+                          'No topics found',
+                          style: TextStyle(color: _inkSecondary, fontSize: 13),
+                        ),
+                      )
+                      : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final item = _filtered[index];
+                          final isExpanded = _expandedIndex == index;
+
+                          return Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: () {
+                                setState(() {
+                                  _expandedIndex = isExpanded ? null : index;
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: _surface,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: _border),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.03),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
                                     ),
                                   ],
-                                ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color: (item['color'] as Color)
+                                                .withOpacity(0.08),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            item['icon'],
+                                            color: item['color'],
+                                            size: 20,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            item['title'],
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 14,
+                                              color: _ink,
+                                            ),
+                                          ),
+                                        ),
+                                        Icon(
+                                          isExpanded
+                                              ? Icons.expand_less
+                                              : Icons.expand_more,
+                                          color: _inkTertiary,
+                                        ),
+                                      ],
+                                    ),
+
+                                    if (isExpanded) ...[
+                                      const SizedBox(height: 12),
+                                      Container(height: 1, color: _border),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        item['content'],
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          height: 1.6,
+                                          color: _inkSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
-          ),
-        ],
+                          );
+                        },
+                      ),
+            ),
+          ],
+        ),
       ),
     );
   }
