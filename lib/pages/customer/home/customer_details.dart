@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 class CustomerDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> subscription;
 
-  const CustomerDetailsScreen({Key? key, required this.subscription})
-    : super(key: key);
+  const CustomerDetailsScreen({super.key, required this.subscription});
 
   @override
   Widget build(BuildContext context) {

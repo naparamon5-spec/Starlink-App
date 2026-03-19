@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 // ─── Billing Tab ──────────────────────────────────────────────────────────────
 
 class BillingTab extends StatefulWidget {
-  const BillingTab();
+  const BillingTab({super.key});
 
   @override
   State<BillingTab> createState() => BillingTabState();
@@ -188,7 +188,7 @@ class InvoiceData {
 
 class InvoiceCard extends StatelessWidget {
   final InvoiceData data;
-  const InvoiceCard({required this.data});
+  const InvoiceCard({super.key, required this.data});
 
   @override
   Widget build(BuildContext context) {

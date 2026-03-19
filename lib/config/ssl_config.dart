@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 
 class SSLConfig {
   // TODO: Revert this to 'kDebugMode' before production!

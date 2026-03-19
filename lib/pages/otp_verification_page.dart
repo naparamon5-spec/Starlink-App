@@ -41,8 +41,12 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
   @override
   void dispose() {
     _timer?.cancel();
-    for (var c in _controllers) c.dispose();
-    for (var f in _focusNodes) f.dispose();
+    for (var c in _controllers) {
+      c.dispose();
+    }
+    for (var f in _focusNodes) {
+      f.dispose();
+    }
     super.dispose();
   }
 
@@ -110,36 +114,55 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
         }
 
         // Get user profile using /api/v1/auth/me
-        print('[DEBUG] OTP Verification: Loading user profile from /api/v1/auth/me');
+        print(
+          '[DEBUG] OTP Verification: Loading user profile from /api/v1/auth/me',
+        );
         final profileResponse = await ApiService.getCurrentUserProfile();
-        
-        if (profileResponse['status'] == 'success' && profileResponse['data'] != null) {
+
+        if (profileResponse['status'] == 'success' &&
+            profileResponse['data'] != null) {
           final user = profileResponse['data'];
           final userId = user['id'] ?? user['userId'];
-          print('[DEBUG] OTP Verification: Profile loaded from /me - User ID: $userId');
-          
+          print(
+            '[DEBUG] OTP Verification: Profile loaded from /me - User ID: $userId',
+          );
+
           // Get detailed user profile using /api/v1/users/:id
           final userIdStr = userId?.toString() ?? 'undefined';
-          print('[DEBUG] OTP Verification: Loading detailed profile from /api/v1/users/$userIdStr');
-          final detailedProfileResponse = await ApiService.getUserById(userIdStr);
-          
-          if (detailedProfileResponse['status'] == 'success' && detailedProfileResponse['data'] != null) {
+          print(
+            '[DEBUG] OTP Verification: Loading detailed profile from /api/v1/users/$userIdStr',
+          );
+          final detailedProfileResponse = await ApiService.getUserById(
+            userIdStr,
+          );
+
+          if (detailedProfileResponse['status'] == 'success' &&
+              detailedProfileResponse['data'] != null) {
             final detailedUser = detailedProfileResponse['data'];
-            print('[DEBUG] OTP Verification: Detailed profile loaded - Full data: $detailedUser');
-            
+            print(
+              '[DEBUG] OTP Verification: Detailed profile loaded - Full data: $detailedUser',
+            );
+
             // Store detailed user data in SharedPreferences
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('userProfile', json.encode(detailedUser));
-            print('[DEBUG] OTP Verification: User profile stored in SharedPreferences');
+            print(
+              '[DEBUG] OTP Verification: User profile stored in SharedPreferences',
+            );
           } else {
-            print('[DEBUG] OTP Verification: Failed to load detailed profile: ${detailedProfileResponse['message']}');
+            print(
+              '[DEBUG] OTP Verification: Failed to load detailed profile: ${detailedProfileResponse['message']}',
+            );
           }
-          
+
           // Store user info in SharedPreferences for backward compatibility
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('userType', user['role'] ?? 'end_user');
           await prefs.setString('email', user['email'] ?? '');
-          await prefs.setString('name', user['name'] ?? user['first_name'] ?? '');
+          await prefs.setString(
+            'name',
+            user['name'] ?? user['first_name'] ?? '',
+          );
           await prefs.setString('phone', user['phone'] ?? '');
           await prefs.setString('address', user['address'] ?? '');
 
@@ -152,7 +175,10 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
               MaterialPageRoute(
                 builder:
                     (_) => HomeScreen(
-                      userId: userId is int ? userId : int.tryParse(userId.toString()) ?? 0,
+                      userId:
+                          userId is int
+                              ? userId
+                              : int.tryParse(userId.toString()) ?? 0,
                       loginMessage: 'Login successful',
                     ),
               ),
@@ -193,7 +219,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
         setState(() => _errorMessage = "Invalid OTP");
       }
     } catch (e) {
-      setState(() => _errorMessage = "OTP verification failed: ${e.toString()}");
+      setState(
+        () => _errorMessage = "OTP verification failed: ${e.toString()}",
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -217,8 +245,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
           fillColor: Colors.grey[200],
         ),
         onChanged: (value) {
-          if (value.isNotEmpty && index < 3)
+          if (value.isNotEmpty && index < 3) {
             _focusNodes[index + 1].requestFocus();
+          }
           if (value.isEmpty && index > 0) _focusNodes[index - 1].requestFocus();
           if (_otp.length == 4) _verifyOtp();
         },

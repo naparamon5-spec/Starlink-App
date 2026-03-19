@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import 'pages/splash_screen.dart'; // Import the SplashScreen
+// Import the SplashScreen
 import 'pages/login_screen.dart'; // Import the LoginScreen
-import 'services/notification_service.dart';
 import 'package:provider/provider.dart';
 import 'providers/notification_provider.dart';
 

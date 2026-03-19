@@ -171,13 +171,13 @@ class _ReusableTableState extends State<ReusableTable> {
                   sortColumnIndex:
                       _sortColumnIndex != null ? _sortColumnIndex! + 1 : null,
                   sortAscending: _sortAscending,
-                  headingRowColor: MaterialStateProperty.all(
+                  headingRowColor: WidgetStateProperty.all(
                     const Color(0xFFF5F7FA),
                   ),
-                  dataRowColor: MaterialStateProperty.resolveWith<Color?>((
-                    Set<MaterialState> states,
+                  dataRowColor: WidgetStateProperty.resolveWith<Color?>((
+                    Set<WidgetState> states,
                   ) {
-                    if (states.contains(MaterialState.selected)) {
+                    if (states.contains(WidgetState.selected)) {
                       return const Color(0xFFE3F2FD);
                     }
                     return null;
@@ -206,7 +206,7 @@ class _ReusableTableState extends State<ReusableTable> {
                             (columnIndex, ascending) =>
                                 _sort(columnIndex - 1, ascending),
                       );
-                    }).toList(),
+                    }),
                   ],
                   rows:
                       _paginatedData.asMap().entries.map((entry) {
@@ -230,20 +230,18 @@ class _ReusableTableState extends State<ReusableTable> {
                                 ),
                               ),
                             ),
-                            ...widget.headers
-                                .map(
-                                  (header) => DataCell(
-                                    SizedBox(
-                                      width: 150,
-                                      child: _buildTableCell(
-                                        rowData[header]?.toString() ?? '',
-                                        header,
-                                        context,
-                                      ),
-                                    ),
+                            ...widget.headers.map(
+                              (header) => DataCell(
+                                SizedBox(
+                                  width: 150,
+                                  child: _buildTableCell(
+                                    rowData[header]?.toString() ?? '',
+                                    header,
+                                    context,
                                   ),
-                                )
-                                .toList(),
+                                ),
+                              ),
+                            ),
                           ],
                         );
                       }).toList(),

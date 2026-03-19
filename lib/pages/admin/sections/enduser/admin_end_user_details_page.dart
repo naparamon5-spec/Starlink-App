@@ -238,7 +238,7 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                   child: Switch(
                     value: isActive,
                     onChanged: _isTogglingStatus ? null : _toggleStatus,
-                    activeColor: _primary,
+                    activeThumbColor: _primary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),

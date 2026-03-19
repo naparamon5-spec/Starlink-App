@@ -1,14 +1,25 @@
 import 'package:flutter/material.dart';
-import '../../../components/Table.dart';
 import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'customer_ticket_modal.dart';
 import 'customer_view.dart';
 import 'dart:convert';
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const _primary = Color(0xFFEB1E23);
+const _primaryDark = Color(0xFF760F12);
+const _inProgress = Color(0xFF0F62FE);
+const _success = Color(0xFF24A148);
+const _warning = Color(0xFFFF832B);
+const _ink = Color(0xFF000000);
+const _inkSecondary = Color(0xFF6F6F6F);
+const _inkTertiary = Color(0xFFA8A8A8);
+const _surface = Color(0xFFFFFFFF);
+const _surfaceSubtle = Color(0xFFF4F4F4);
+const _border = Color(0xFFE0E0E0);
+
 class CustomerTicketScreen extends StatefulWidget {
   final bool showAppBar;
-
   const CustomerTicketScreen({super.key, this.showAppBar = true});
 
   @override
@@ -17,20 +28,28 @@ class CustomerTicketScreen extends StatefulWidget {
 
 class _CustomerTicketState extends State<CustomerTicketScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
   String _selectedFilter = 'All';
+
   List<Map<String, dynamic>> _tickets = [];
   List<Map<String, dynamic>> _filteredTickets = [];
+
+  // ── Lazy loading ─────────────────────────────────────────────────────────
+  static const _pageSize = 10;
+  int _visibleCount = _pageSize;
+  bool _isLoadingMore = false;
+
   bool _isLoading = true;
   int? _userId;
 
-  // Pagination variables
-  int _itemsPerPage = 6;
-  int _currentPage = 1;
-
-  // Filter options populated from backend categories
-  List<String> _filterOptions = ['All'];
-  Map<String, String> _filterToTicketType = {'All': 'All'};
-
+  final List<String> _filterOptions = [
+    'All',
+    'Open',
+    'In Progress',
+    'Resolved',
+    'Closed',
+  ];
   final List<String> _tableHeaders = [
     'Status',
     'Ticket Type',
@@ -45,305 +64,155 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   void initState() {
     super.initState();
     _loadUserData();
-    _loadCategories();
     _searchController.addListener(_handleSearch);
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _searchController.removeListener(_handleSearch);
     _searchController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
   }
+
+  void _onScroll() {
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 250) _loadMore();
+  }
+
+  void _loadMore() {
+    if (_isLoadingMore) return;
+    if (_visibleCount >= _filteredTickets.length) return;
+    setState(() => _isLoadingMore = true);
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      setState(() {
+        _visibleCount = (_visibleCount + _pageSize).clamp(
+          0,
+          _filteredTickets.length,
+        );
+        _isLoadingMore = false;
+      });
+    });
+  }
+
+  List<Map<String, dynamic>> get _visibleTickets =>
+      _filteredTickets.take(_visibleCount).toList();
+
+  // ── Data loading ──────────────────────────────────────────────────────────
 
   Future<void> _loadUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getInt('user_id');
-      if (userId != null) {
-        setState(() {
-          _userId = userId;
-        });
-        _loadTickets();
-      }
+      if (userId != null) setState(() => _userId = userId);
+      _loadTickets();
     } catch (e) {
       debugPrint('Error loading user data: $e');
     }
   }
 
-  Future<void> _loadCategories() async {
-    try {
-      // getCategories() now returns Map<String, dynamic> with 'status' + 'data'
-      final categoriesData = await ApiService.getCategories();
-      if (categoriesData['status'] == 'success' &&
-          categoriesData['data'] != null) {
-        final categories = List<Map<String, dynamic>>.from(
-          categoriesData['data'],
-        );
-        setState(() {
-          _filterOptions = [
-            'All',
-            ...categories.map((c) => c['name'].toString()),
-          ];
-          _filterToTicketType = {'All': 'All'};
-          for (final c in categories) {
-            _filterToTicketType[c['name'].toString()] = c['name'].toString();
-          }
-        });
+  void _handleSearch() => _applyFilter();
+
+  Future<List<Map<String, dynamic>>> _fetchAllTicketsForStatus(
+    String status,
+  ) async {
+    final List<Map<String, dynamic>> all = [];
+    int page = 1;
+    const int limit = 50;
+    while (true) {
+      final response = await ApiService.getTickets(
+        page: page,
+        limit: limit,
+        status: status,
+      );
+      if (response['status'] != 'success') break;
+      final items = response['data'];
+      if (items is! List || items.isEmpty) break;
+      all.addAll(
+        List<Map<String, dynamic>>.from(
+          items.map((t) => Map<String, dynamic>.from(t as Map)),
+        ),
+      );
+      final pagination = response['pagination'];
+      if (pagination != null) {
+        final totalPages =
+            int.tryParse(pagination['totalPages'].toString()) ?? 1;
+        if (page >= totalPages) break;
+      } else {
+        break;
       }
-    } catch (e) {
-      // fallback: keep default filter options
-      debugPrint('Error loading categories: $e');
+      page++;
     }
-  }
-
-  void _handleSearch() {
-    final query = _searchController.text.toLowerCase();
-    final selectedType = _selectedFilter;
-
-    setState(() {
-      _filteredTickets =
-          _tickets.where((ticket) {
-            // Only show tickets with status OPEN or IN PROGRESS
-            final status = ticket['Status']?.toString().toUpperCase() ?? '';
-            final isOpenOrInProgress =
-                status == 'OPEN' || status == 'IN PROGRESS';
-            if (!isOpenOrInProgress) return false;
-
-            // Filter by ticket type
-            bool matchesFilter = true;
-            if (selectedType != 'All') {
-              final ticketType =
-                  (ticket['Ticket Type']?.toString() ?? '')
-                      .toLowerCase()
-                      .trim();
-              final filterType =
-                  (_filterToTicketType[selectedType]?.toLowerCase().trim() ??
-                      '');
-              matchesFilter = ticketType == filterType;
-            }
-
-            // Filter by search query
-            bool matchesQuery = true;
-            if (query.isNotEmpty) {
-              matchesQuery = _tableHeaders.any((header) {
-                final value = ticket[header]?.toString().toLowerCase() ?? '';
-                return value.contains(query);
-              });
-            }
-
-            return matchesFilter && matchesQuery;
-          }).toList();
-
-      _currentPage = 1;
-    });
-  }
-
-  List<Map<String, dynamic>> get _paginatedTickets {
-    final startIndex = (_currentPage - 1) * _itemsPerPage;
-    final endIndex = startIndex + _itemsPerPage;
-    if (startIndex >= _filteredTickets.length) {
-      _currentPage = 1;
-      return _filteredTickets.take(_itemsPerPage).toList();
-    }
-    return _filteredTickets.sublist(
-      startIndex,
-      endIndex > _filteredTickets.length ? _filteredTickets.length : endIndex,
-    );
-  }
-
-  int get _totalPages =>
-      _filteredTickets.isEmpty
-          ? 1
-          : (_filteredTickets.length / _itemsPerPage).ceil();
-
-  Widget _buildPaginationControls() {
-    if (_filteredTickets.length <= _itemsPerPage)
-      return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            onPressed:
-                _currentPage > 1 ? () => setState(() => _currentPage--) : null,
-            color: const Color(0xFF133343),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: Text(
-              'Page $_currentPage of $_totalPages',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF133343),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed:
-                _currentPage < _totalPages
-                    ? () => setState(() => _currentPage++)
-                    : null,
-            color: const Color(0xFF133343),
-          ),
-        ],
-      ),
-    );
+    return all;
   }
 
   Future<void> _loadTickets() async {
-    if (!mounted || _userId == null) return;
-
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final response = await ApiService.getTickets();
+      final results = await Future.wait([
+        _fetchAllTicketsForStatus('open'),
+        _fetchAllTicketsForStatus('in_progress'),
+        _fetchAllTicketsForStatus('resolved'),
+        _fetchAllTicketsForStatus('closed'),
+      ]);
 
-      if (response['status'] == 'success' && mounted) {
-        final List<dynamic> rawData = response['data'] ?? [];
+      final rawTickets = [
+        ...results[0],
+        ...results[1],
+        ...results[2],
+        ...results[3],
+      ];
+      final seen = <String>{};
+      final unique =
+          rawTickets.where((t) {
+            final key = t['id']?.toString() ?? '';
+            return key.isNotEmpty && seen.add(key);
+          }).toList();
 
-        final List<Map<String, dynamic>> loadedTickets =
-            rawData
-                .where((ticket) {
-                  final String ticketContact =
-                      ticket['contact_id']?.toString() ?? '';
-                  final String ticketUserId =
-                      ticket['user_id']?.toString() ?? '';
-                  final String currentUserId = _userId.toString();
-                  final bool isUserRelated =
-                      ticketContact == currentUserId ||
-                      ticketUserId == currentUserId;
+      final List<Map<String, dynamic>> loadedTickets =
+          unique.map(_mapTicket).toList();
 
-                  final String backendStatus =
-                      (ticket['status'] ?? '').toString().toLowerCase().trim();
-                  final bool isOpenOrInProgress =
-                      backendStatus == 'open' ||
-                      backendStatus == 'in_progress' ||
-                      backendStatus == 'in progress' ||
-                      backendStatus == 'inprogress';
-
-                  return isUserRelated && isOpenOrInProgress;
-                })
-                .map<Map<String, dynamic>>((ticket) {
-                  // Format attachments for display
-                  String attachmentsDisplay = 'No attachments';
-                  final rawAttachments = ticket['attachments'];
-                  if (rawAttachments != null) {
-                    if (rawAttachments is List && rawAttachments.isNotEmpty) {
-                      final fileNames =
-                          rawAttachments
-                              .where((a) => a != null)
-                              .map((a) {
-                                if (a is Map)
-                                  return a['name']?.toString() ?? '';
-                                return '';
-                              })
-                              .where((n) => n.isNotEmpty)
-                              .toList();
-                      if (fileNames.isNotEmpty) {
-                        attachmentsDisplay = fileNames.join(', ');
-                      }
-                    } else if (rawAttachments is String &&
-                        rawAttachments.isNotEmpty) {
-                      attachmentsDisplay = rawAttachments;
-                    }
-                  }
-
-                  // Map backend status to display status
-                  final String backendStatus =
-                      (ticket['status'] ?? '').toString().toLowerCase().trim();
-                  String displayStatus;
-                  switch (backendStatus) {
-                    case 'open':
-                      displayStatus = 'OPEN';
-                      break;
-                    case 'in progress':
-                    case 'in_progress':
-                    case 'inprogress':
-                      displayStatus = 'IN PROGRESS';
-                      break;
-                    case 'resolved':
-                      displayStatus = 'RESOLVED';
-                      break;
-                    case 'closed':
-                      displayStatus = 'CLOSED';
-                      break;
-                    default:
-                      displayStatus = backendStatus.toUpperCase();
-                  }
-
-                  return {
-                    'id': ticket['id'],
-                    'Status': displayStatus,
-                    'Ticket Type': ticket['type'] ?? 'N/A',
-                    'Contact': ticket['contact_name'] ?? 'N/A',
-                    'Subscription': ticket['subscription'] ?? 'N/A',
-                    'Description': ticket['description'] ?? 'No description',
-                    'Created At': _formatDate(ticket['created_at']),
-                    'Attachments': attachmentsDisplay,
-                    'full_data': {
-                      ...Map<String, dynamic>.from(ticket),
-                      'created_at': _formatDate(ticket['created_at']),
-                      'attachments': rawAttachments ?? [],
-                      'status': displayStatus,
-                      'raw_status': backendStatus,
-                    },
-                  };
-                })
-                .toList();
-
-        // Merge in-progress IDs from SharedPreferences
-        final inProgressIds = await _getInProgressTicketIds();
-        for (var ticket in loadedTickets) {
-          if (inProgressIds.contains(ticket['id'].toString())) {
-            ticket['Status'] = 'IN PROGRESS';
-            (ticket['full_data'] as Map<String, dynamic>)['status'] =
-                'IN PROGRESS';
-          }
+      final inProgressIds = await _getInProgressTicketIds();
+      for (var ticket in loadedTickets) {
+        if (inProgressIds.contains(ticket['id'].toString())) {
+          ticket['Status'] = 'IN PROGRESS';
+          (ticket['full_data'] as Map<String, dynamic>)['status'] =
+              'IN PROGRESS';
         }
+      }
 
-        // Merge any locally-stored in-progress tickets not returned by API
-        final inProgressTickets = await _getInProgressTicketsData();
-        for (var ticket in inProgressTickets) {
-          if (!loadedTickets.any(
-            (t) => t['id'].toString() == ticket['id'].toString(),
-          )) {
-            String displayStatus =
-                ticket['status']?.toString().toUpperCase() ?? 'IN PROGRESS';
-            if (displayStatus == 'IN_PROGRESS') displayStatus = 'IN PROGRESS';
-            loadedTickets.add({
-              'id': ticket['id'],
-              'Status': displayStatus,
-              'Ticket Type': ticket['type'] ?? 'N/A',
-              'Contact': ticket['contact_name'] ?? 'N/A',
-              'Subscription': ticket['subscription'] ?? 'N/A',
-              'Description': ticket['description'] ?? 'No description',
-              'Created At': ticket['created_at'] ?? 'N/A',
-              'Attachments': ticket['attachments'] ?? 'No attachments',
-              'full_data': ticket['full_data'] ?? ticket,
-            });
-          }
-        }
-
-        if (mounted) {
-          setState(() {
-            _tickets = loadedTickets;
-            _filteredTickets = loadedTickets;
-            _isLoading = false;
+      final inProgressTickets = await _getInProgressTicketsData();
+      for (var ticket in inProgressTickets) {
+        if (!loadedTickets.any(
+          (t) => t['id'].toString() == ticket['id'].toString(),
+        )) {
+          String displayStatus =
+              ticket['status']?.toString().toUpperCase() ?? 'IN PROGRESS';
+          if (displayStatus == 'IN_PROGRESS') displayStatus = 'IN PROGRESS';
+          loadedTickets.add({
+            'id': ticket['id'],
+            'Status': displayStatus,
+            'Ticket Type': ticket['type'] ?? 'N/A',
+            'Contact': ticket['contact_name'] ?? 'N/A',
+            'Subscription': ticket['subscription'] ?? 'N/A',
+            'Description': ticket['description'] ?? 'No description',
+            'Created At': ticket['created_at'] ?? 'N/A',
+            'Attachments': ticket['attachments'] ?? 'No attachments',
+            'full_data': ticket['full_data'] ?? ticket,
           });
         }
-      } else {
-        throw Exception(response['message'] ?? 'Failed to load tickets');
       }
+
+      if (!mounted) return;
+      setState(() {
+        _tickets = loadedTickets;
+        _isLoading = false;
+        _applyFilter();
+      });
     } catch (e) {
       debugPrint('Error loading tickets: $e');
       if (!mounted) return;
@@ -354,367 +223,49 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error loading tickets: ${e.toString()}'),
-          backgroundColor: Colors.red,
+          content: Text('Error loading tickets: $e'),
+          backgroundColor: _primary,
         ),
       );
     }
   }
 
-  String _formatDate(String? dateStr) {
-    if (dateStr == null) return 'N/A';
-    try {
-      final date = DateTime.parse(dateStr);
-      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} '
-          '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } catch (e) {
-      return dateStr;
-    }
+  void _applyFilter() {
+    final query = _searchController.text.toLowerCase();
+    final filtered =
+        _tickets.where((ticket) {
+          final status = ticket['Status']?.toString().toUpperCase() ?? '';
+          if (_selectedFilter != 'All') {
+            if (status != _selectedFilter.toUpperCase()) return false;
+          }
+          if (query.isNotEmpty) {
+            return _tableHeaders.any((header) {
+              final value = ticket[header]?.toString().toLowerCase() ?? '';
+              return value.contains(query);
+            });
+          }
+          return true;
+        }).toList();
+
+    setState(() {
+      _filteredTickets = filtered;
+      _visibleCount = _pageSize.clamp(0, filtered.length);
+    });
   }
 
-  void _showTicketDetails(Map<String, dynamic> ticket) {
-    final fullData = ticket['full_data'] as Map<String, dynamic>;
-    showDialog(
-      context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.6,
-                maxHeight: MediaQuery.of(context).size.height * 0.8,
-              ),
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Ticket Details',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF133343),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 24),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildDetailItem(
-                                  'Ticket Type',
-                                  fullData['type']?.toString() ?? 'N/A',
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-                              Expanded(
-                                child: _buildDetailItem(
-                                  'Subscription',
-                                  fullData['subscription']?.toString() ?? 'N/A',
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Status',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF133343),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Builder(
-                                      builder: (context) {
-                                        final status =
-                                            fullData['status']
-                                                ?.toString()
-                                                .toUpperCase() ??
-                                            'OPEN';
-                                        final statusColor = _getStatusColor(
-                                          status,
-                                        );
-                                        return Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: statusColor.withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                            border: Border.all(
-                                              color: statusColor,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            status,
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: statusColor,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-                              Expanded(
-                                child: _buildDetailItem(
-                                  'Created At',
-                                  fullData['created_at']?.toString() ?? 'N/A',
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          const Text(
-                            'Description',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF133343),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[50],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Text(
-                              fullData['description']?.toString() ??
-                                  'No description',
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                          ),
-                          if (fullData['attachments'] != null &&
-                              fullData['attachments'].toString().isNotEmpty &&
-                              fullData['attachments'].toString() != '[]') ...[
-                            const SizedBox(height: 24),
-                            const Text(
-                              'Attachments',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF133343),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey[300]!),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (fullData['attachments'] is List) ...[
-                                    ...(fullData['attachments'] as List).map((
-                                      attachment,
-                                    ) {
-                                      if (attachment is Map) {
-                                        final fileName =
-                                            attachment['name']?.toString() ??
-                                            'Unknown file';
-                                        final fileType =
-                                            attachment['type']?.toString() ??
-                                            '';
-                                        final fileSize = _formatFileSize(
-                                          attachment['size'] is int
-                                              ? attachment['size'] as int
-                                              : null,
-                                        );
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 8.0,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                _getFileIcon(fileType),
-                                                color:
-                                                    Theme.of(
-                                                      context,
-                                                    ).primaryColor,
-                                                size: 20,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      fileName,
-                                                      style: const TextStyle(
-                                                        fontSize: 14,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                    if (fileSize.isNotEmpty)
-                                                      Text(
-                                                        fileSize,
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color:
-                                                              Colors.grey[600],
-                                                        ),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.download,
-                                                  color: Color(0xFF133343),
-                                                ),
-                                                onPressed: () {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'Download functionality coming soon',
-                                                      ),
-                                                      duration: Duration(
-                                                        seconds: 2,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                                tooltip: 'Download file',
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      }
-                                      return const SizedBox.shrink();
-                                    }).toList(),
-                                  ] else ...[
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.attach_file,
-                                          color: Theme.of(context).primaryColor,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            fullData['attachments'].toString(),
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
-  Widget _buildDetailItem(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF133343),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey[300]!),
-          ),
-          child: Text(value, style: const TextStyle(fontSize: 14)),
-        ),
-      ],
-    );
-  }
-
-  String _formatFileSize(int? size) {
-    if (size == null) return '';
-    return '${(size / 1024).toStringAsFixed(1)} KB';
-  }
-
-  IconData _getFileIcon(String? extension) {
-    switch (extension?.toLowerCase()) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'docx':
-        return Icons.description;
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-        return Icons.image;
-      default:
-        return Icons.insert_drive_file;
-    }
-  }
+  // ── New ticket modal ──────────────────────────────────────────────────────
 
   void _showNewTicketModal() async {
-    final result = await showDialog(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
+      barrierDismissible: false,
       builder:
           (dialogContext) => CustomerTicketModal(
             userId: _userId ?? 0,
             onConfirm: (ticket) {
               if (ticket['id'] != null && mounted) {
                 setState(() {
-                  final newTicket = {
+                  _tickets.insert(0, {
                     'id': ticket['id'],
                     'Status': ticket['Status'] ?? 'OPEN',
                     'Ticket Type': ticket['Ticket Type'] ?? 'N/A',
@@ -728,6 +279,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                     'full_data': {
                       'id': ticket['id'],
                       'type': ticket['Ticket Type'] ?? 'N/A',
+                      'ticket_type': ticket['Ticket Type'] ?? 'N/A',
                       'contact': ticket['full_data']?['contact'],
                       'contact_name': ticket['Contact'] ?? 'N/A',
                       'subscription': ticket['Subscription'] ?? 'N/A',
@@ -737,214 +289,287 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                       'created_at':
                           ticket['Created At'] ??
                           _formatDate(DateTime.now().toString()),
-                      'created_at_raw':
-                          DateTime.tryParse(ticket['Created At'] ?? '') ??
-                          DateTime.now(),
                       'user_id': ticket['full_data']?['user_id'],
                     },
-                  };
-                  _tickets.insert(0, newTicket);
-                  _filteredTickets = List.from(_tickets);
-                  _currentPage = 1;
+                  });
+                  _applyFilter();
                 });
               }
             },
-            onCancel: () {
-              Navigator.of(dialogContext).pop();
-            },
+            onCancel: () => Navigator.of(dialogContext).pop(),
           ),
     );
 
     if (result != null && mounted) {
-      setState(() => _isLoading = true);
-      try {
-        await _loadTickets();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ticket created successfully'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error refreshing tickets: ${e.toString()}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _isLoading = false);
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: Colors.white),
+              SizedBox(width: 12),
+              Text('Ticket created successfully'),
+            ],
+          ),
+          backgroundColor: _success,
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+      _loadTickets();
     }
   }
 
-  void refreshTickets() {
-    _loadTickets();
-  }
+  void refreshTickets() => _loadTickets();
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _surfaceSubtle,
       appBar:
           widget.showAppBar
               ? AppBar(
-                title: const Text('My Tickets'),
-                centerTitle: true,
-                elevation: 2,
-                backgroundColor: const Color(0xFF133343),
-                foregroundColor: Colors.white,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(
-                    bottom: Radius.circular(15),
+                title: const Text(
+                  'My Tickets',
+                  style: TextStyle(
+                    color: _ink,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
                   ),
+                ),
+                centerTitle: true,
+                elevation: 0,
+                backgroundColor: _surface,
+                foregroundColor: _ink,
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(1),
+                  child: Container(height: 1, color: _border),
                 ),
               )
               : null,
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  offset: const Offset(0, 2),
-                  blurRadius: 4,
-                ),
-              ],
+      body: RefreshIndicator(
+        onRefresh: _loadTickets,
+        color: _primary,
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // ── Search Bar ─────────────────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: _SearchBar(controller: _searchController),
+              ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[300]!, width: 1),
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search tickets...',
-                        prefixIcon: Icon(
-                          Icons.search,
-                          color: Theme.of(context).primaryColor,
-                          size: 20,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 10,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 1,
-                  child: Container(
-                    height: 40,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[300]!, width: 1),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedFilter,
-                        isExpanded: true,
-                        icon: const Icon(Icons.keyboard_arrow_down),
-                        iconSize: 20,
-                        elevation: 16,
-                        style: TextStyle(color: Colors.grey[800], fontSize: 14),
-                        onChanged: (String? newValue) {
-                          if (newValue != null) {
-                            setState(() {
-                              _selectedFilter = newValue;
-                              _handleSearch();
-                            });
-                          }
+
+            // ── Filter chips ───────────────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 34,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _filterOptions.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      final option = _filterOptions[i];
+                      final isSelected = _selectedFilter == option;
+                      final dotColor =
+                          option == 'All' ? _primary : _statusColor(option);
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() => _selectedFilter = option);
+                          _applyFilter();
                         },
-                        items:
-                            _filterOptions
-                                .map<DropdownMenuItem<String>>(
-                                  (String value) => DropdownMenuItem<String>(
-                                    value: value,
-                                    child: Text(value),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                isSelected
+                                    ? dotColor.withOpacity(0.1)
+                                    : _surface,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? dotColor : _border,
+                              width: isSelected ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (option != 'All') ...[
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    color: dotColor,
+                                    shape: BoxShape.circle,
                                   ),
-                                )
-                                .toList(),
-                      ),
-                    ),
+                                ),
+                                const SizedBox(width: 5),
+                              ],
+                              Text(
+                                option,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight:
+                                      isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                  color: isSelected ? dotColor : _inkSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'All Tickets (${_filteredTickets.length})',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+
+            // ── Section header + count ─────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    const _SectionHeader(title: 'MY TICKETS'),
+                    const Spacer(),
+                    if (!_isLoading)
+                      Text(
+                        '${_filteredTickets.length} result${_filteredTickets.length == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: _inkTertiary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-          Expanded(
-            child:
-                _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _filteredTickets.isEmpty
-                    ? Center(
-                      child: Text(
-                        _tickets.isEmpty
-                            ? 'No tickets found. Create a new ticket to get started.'
-                            : 'No tickets match your search.',
+
+            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+            // ── List ──────────────────────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              sliver:
+                  _isLoading
+                      ? SliverList(
+                        delegate: SliverChildListDelegate([
+                          const _SkeletonCard(),
+                          const SizedBox(height: 10),
+                          const _SkeletonCard(),
+                          const SizedBox(height: 10),
+                          const _SkeletonCard(),
+                        ]),
+                      )
+                      : _filteredTickets.isEmpty
+                      ? SliverToBoxAdapter(child: _buildEmptyState())
+                      : SliverList(
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          if (index == _visibleTickets.length) {
+                            return _buildBottomIndicator();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _buildTicketCard(_visibleTickets[index]),
+                          );
+                        }, childCount: _visibleTickets.length + 1),
                       ),
-                    )
-                    : ListView.builder(
-                      itemCount: _paginatedTickets.length,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      itemBuilder: (context, index) {
-                        return _buildTicketCard(_paginatedTickets[index]);
-                      },
-                    ),
-          ),
-          if (_filteredTickets.length > _itemsPerPage)
-            _buildPaginationControls(),
-        ],
+            ),
+          ],
+        ),
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 16.0, right: 16.0),
-        child: FloatingActionButton(
-          onPressed: _showNewTicketModal,
-          backgroundColor: const Color(0xFF133343),
-          tooltip: 'Create new ticket',
-          elevation: 10,
-          child: const Icon(Icons.add, color: Colors.white),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showNewTicketModal,
+        backgroundColor: _primary,
+        tooltip: 'Create new ticket',
+        elevation: 6,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
+    );
+  }
+
+  // ── Bottom indicator ──────────────────────────────────────────────────────
+
+  Widget _buildBottomIndicator() {
+    final bool hasMore = _visibleCount < _filteredTickets.length;
+    if (hasMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2, color: _primary),
+          ),
+        ),
+      );
+    }
+    if (_filteredTickets.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Center(
+        child: Text(
+          'All ${_filteredTickets.length} ticket${_filteredTickets.length == 1 ? '' : 's'} loaded',
+          style: const TextStyle(fontSize: 11, color: _inkTertiary),
         ),
       ),
     );
   }
+
+  // ── Empty state ───────────────────────────────────────────────────────────
+
+  Widget _buildEmptyState() {
+    final query = _searchController.text.trim();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.confirmation_number_outlined,
+            color: _inkTertiary,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              query.isNotEmpty
+                  ? 'No results for "$query".'
+                  : _selectedFilter != 'All'
+                  ? 'No $_selectedFilter tickets found.'
+                  : 'No tickets yet. Tap + to create one.',
+              style: const TextStyle(
+                color: _inkSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Ticket card ───────────────────────────────────────────────────────────
 
   Widget _buildTicketCard(Map<String, dynamic> ticket) {
     final String ticketType = ticket['Ticket Type']?.toString() ?? 'N/A';
@@ -954,14 +579,14 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     final String contact = ticket['Contact']?.toString() ?? 'N/A';
     final String subscription = ticket['Subscription']?.toString() ?? 'N/A';
     final String status = ticket['Status']?.toString() ?? 'OPEN';
+    final Color statusColor = _statusColorFromLabel(status);
+    final String query = _searchController.text.trim().toLowerCase();
 
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          final Map<String, dynamic> ticketData = {
+          final ticketData = {
             'id': ticket['id'],
             'type': ticket['Ticket Type'],
             'status': ticket['Status'],
@@ -971,154 +596,153 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
             'attachments': ticket['Attachments'],
             'full_data': Map<String, dynamic>.from(ticket['full_data'] as Map),
           };
-
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => CustomerViewScreen(ticket: ticketData),
+              builder: (_) => CustomerViewScreen(ticket: ticketData),
             ),
           ).then((result) {
             if (result != null && result is Map<String, dynamic>) {
               final resultStatus =
                   result['status']?.toString().toUpperCase() ?? '';
-              if (resultStatus == 'CLOSED' || resultStatus == 'RESOLVED') {
-                setState(() {
-                  _tickets.removeWhere(
-                    (t) => t['id'].toString() == result['id'].toString(),
-                  );
-                  _filteredTickets = List.from(_tickets);
-                });
-              } else {
-                setState(() {
-                  final idx = _tickets.indexWhere(
-                    (t) => t['id'].toString() == result['id'].toString(),
-                  );
-                  if (idx != -1) {
-                    _tickets[idx]['Status'] = result['status'];
-                    (_tickets[idx]['full_data']
-                            as Map<String, dynamic>)['status'] =
-                        result['status'];
-                    _filteredTickets = List.from(_tickets);
-                  }
-                });
-              }
+              setState(() {
+                final idx = _tickets.indexWhere(
+                  (t) => t['id'].toString() == result['id'].toString(),
+                );
+                if (idx != -1) {
+                  _tickets[idx]['Status'] = resultStatus;
+                  (_tickets[idx]['full_data']
+                          as Map<String, dynamic>)['status'] =
+                      resultStatus;
+                }
+                _applyFilter();
+              });
             }
           });
         },
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF133343).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: const Icon(
-                      Icons.confirmation_number_outlined,
-                      color: Color(0xFF133343),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
+              // Icon
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(_statusIcon(status), color: statusColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+
+              // Body
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title row
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                ticketType,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF133343),
-                                ),
-                              ),
+                        Expanded(
+                          child: _HighlightText(
+                            text: ticketType,
+                            query: query,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: _ink,
                             ),
-                            _buildStatusChip(status),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Created: $createdAt',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        _StatusChip(status: status, color: statusColor),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 2),
+                    _HighlightText(
+                      text: createdAt,
+                      query: query,
+                      style: const TextStyle(fontSize: 11, color: _inkTertiary),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(height: 1, color: _border),
+                    const SizedBox(height: 10),
+
+                    // Meta
+                    Row(
                       children: [
-                        Text(
-                          'Contact',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                        Expanded(
+                          child: _MetaField(
+                            label: 'Contact',
+                            value: contact,
+                            query: query,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          contact,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Subscription',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subscription,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                        Expanded(
+                          child: _MetaField(
+                            label: 'Subscription',
+                            value: subscription,
+                            query: query,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Description',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                style: const TextStyle(fontSize: 14),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 8),
+
+                    // Description
+                    _HighlightText(
+                      text: description,
+                      query: query,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _inkSecondary,
+                        height: 1.4,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Footer
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: const [
+                        Text(
+                          'View details',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _primary,
+                          ),
+                        ),
+                        SizedBox(width: 2),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: _primary,
+                          size: 14,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -1127,60 +751,132 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status.toUpperCase()) {
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  Color _statusColor(String filterLabel) {
+    switch (filterLabel.toUpperCase()) {
       case 'OPEN':
-        return Colors.green;
+        return _warning;
       case 'IN PROGRESS':
-        return Colors.orange;
+        return _inProgress;
       case 'RESOLVED':
-        return Colors.blue;
+        return _success;
       case 'CLOSED':
-        return Colors.red;
+        return _inkTertiary;
       default:
-        return Colors.grey;
+        return _inkTertiary;
     }
   }
 
-  Widget _buildStatusChip(String status) {
-    final Color statusColor = _getStatusColor(status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: statusColor),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(_getStatusIcon(status), color: statusColor, size: 16),
-          const SizedBox(width: 4),
-          Text(
-            status,
-            style: TextStyle(
-              color: statusColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Color _statusColorFromLabel(String status) => _statusColor(status);
 
-  IconData _getStatusIcon(String status) {
+  IconData _statusIcon(String status) {
     switch (status.toUpperCase()) {
       case 'OPEN':
-        return Icons.radio_button_unchecked;
+        return Icons.error_outline;
       case 'IN PROGRESS':
-        return Icons.hourglass_empty;
+        return Icons.sync;
       case 'RESOLVED':
         return Icons.check_circle_outline;
       case 'CLOSED':
-        return Icons.cancel_outlined;
+        return Icons.lock_outline;
       default:
         return Icons.help_outline;
+    }
+  }
+
+  Map<String, dynamic> _mapTicket(Map<String, dynamic> raw) {
+    final backendStatus = (raw['status'] ?? '').toString().toLowerCase().trim();
+    String displayStatus;
+    switch (backendStatus) {
+      case 'open':
+        displayStatus = 'OPEN';
+        break;
+      case 'in_progress':
+      case 'in progress':
+      case 'inprogress':
+        displayStatus = 'IN PROGRESS';
+        break;
+      case 'resolved':
+        displayStatus = 'RESOLVED';
+        break;
+      case 'closed':
+      case 'close':
+        displayStatus = 'CLOSED';
+        break;
+      default:
+        displayStatus = backendStatus.toUpperCase();
+    }
+
+    String attachmentsDisplay = 'No attachments';
+    final rawAttachments = raw['attachments'];
+    if (rawAttachments != null) {
+      if (rawAttachments is List && rawAttachments.isNotEmpty) {
+        final names =
+            rawAttachments
+                .where((a) => a != null)
+                .map((a) => a is Map ? (a['name']?.toString() ?? '') : '')
+                .where((n) => n.isNotEmpty)
+                .toList();
+        if (names.isNotEmpty) attachmentsDisplay = names.join(', ');
+      } else if (rawAttachments is String && rawAttachments.isNotEmpty) {
+        attachmentsDisplay = rawAttachments;
+      }
+    }
+
+    final ticketType =
+        raw['ticket_type'] ??
+        _typeFromSubject(raw['subject']?.toString()) ??
+        'N/A';
+
+    return {
+      'id': raw['id'],
+      'Status': displayStatus,
+      'Ticket Type': ticketType,
+      'Contact': raw['requester'] ?? raw['created_by'] ?? 'N/A',
+      'Subscription': raw['subscription'] ?? raw['subject'] ?? 'N/A',
+      'Description': raw['description'] ?? 'No description',
+      'Created At': _formatDate(raw['created_at']),
+      'Attachments': attachmentsDisplay,
+      'full_data': {
+        ...raw,
+        'created_at': _formatDate(raw['created_at']),
+        'attachments': rawAttachments ?? [],
+        'status': displayStatus,
+        'type': ticketType,
+        'ticket_type': ticketType,
+      },
+    };
+  }
+
+  String? _typeFromSubject(String? subject) {
+    if (subject == null) return null;
+    final idx = subject.indexOf(' - ');
+    if (idx == -1) return null;
+    return subject.substring(idx + 3).trim();
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return 'N/A';
+    try {
+      final date = DateTime.parse(dateStr).toLocal();
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${months[date.month - 1]} ${date.day.toString().padLeft(2, '0')}, ${date.year}';
+    } catch (_) {
+      return dateStr;
     }
   }
 
@@ -1197,7 +893,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   }
 
   Future<void> _setTicketInProgress(String ticketId) async {
-    List<String> ids = await _getInProgressTicketIds();
+    final ids = await _getInProgressTicketIds();
     if (!ids.contains(ticketId)) {
       ids.add(ticketId);
       await _saveInProgressTicketIds(ids);
@@ -1205,15 +901,14 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   }
 
   Future<void> _removeTicketInProgress(String ticketId) async {
-    List<String> ids = await _getInProgressTicketIds();
+    final ids = await _getInProgressTicketIds();
     ids.remove(ticketId);
     await _saveInProgressTicketIds(ids);
   }
 
   Future<void> _saveInProgressTicketData(Map<String, dynamic> ticket) async {
     final prefs = await SharedPreferences.getInstance();
-    List<String> rawList =
-        prefs.getStringList('in_progress_tickets_data') ?? [];
+    final rawList = prefs.getStringList('in_progress_tickets_data') ?? [];
     rawList.removeWhere((item) {
       final data = jsonDecode(item);
       return data['id'].toString() == ticket['id'].toString();
@@ -1224,8 +919,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
 
   Future<void> _removeInProgressTicketData(String ticketId) async {
     final prefs = await SharedPreferences.getInstance();
-    List<String> rawList =
-        prefs.getStringList('in_progress_tickets_data') ?? [];
+    final rawList = prefs.getStringList('in_progress_tickets_data') ?? [];
     rawList.removeWhere((item) {
       final data = jsonDecode(item);
       return data['id'].toString() == ticketId;
@@ -1235,10 +929,343 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
 
   Future<List<Map<String, dynamic>>> _getInProgressTicketsData() async {
     final prefs = await SharedPreferences.getInstance();
-    List<String> rawList =
-        prefs.getStringList('in_progress_tickets_data') ?? [];
+    final rawList = prefs.getStringList('in_progress_tickets_data') ?? [];
     return rawList
         .map((item) => Map<String, dynamic>.from(jsonDecode(item)))
         .toList();
+  }
+}
+
+// ── Search Bar ────────────────────────────────────────────────────────────────
+
+class _SearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  const _SearchBar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(
+          fontSize: 13,
+          color: _ink,
+          fontWeight: FontWeight.w500,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Search by type, contact, description…',
+          hintStyle: const TextStyle(
+            fontSize: 13,
+            color: _inkTertiary,
+            fontWeight: FontWeight.w400,
+          ),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            color: _inkTertiary,
+            size: 18,
+          ),
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder:
+                (_, value, __) =>
+                    value.text.isNotEmpty
+                        ? GestureDetector(
+                          onTap: controller.clear,
+                          child: const Icon(
+                            Icons.close_rounded,
+                            color: _inkTertiary,
+                            size: 16,
+                          ),
+                        )
+                        : const SizedBox.shrink(),
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Section Header ────────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) => Text(
+    title,
+    style: const TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: _inkTertiary,
+      letterSpacing: 1.1,
+    ),
+  );
+}
+
+// ── Highlight Text ────────────────────────────────────────────────────────────
+
+class _HighlightText extends StatelessWidget {
+  final String text;
+  final String query;
+  final TextStyle style;
+  final int? maxLines;
+  final TextOverflow? overflow;
+
+  const _HighlightText({
+    required this.text,
+    required this.query,
+    required this.style,
+    this.maxLines,
+    this.overflow,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (query.isEmpty) {
+      return Text(text, style: style, maxLines: maxLines, overflow: overflow);
+    }
+    final lower = text.toLowerCase();
+    final spans = <TextSpan>[];
+    int start = 0;
+    while (true) {
+      final idx = lower.indexOf(query, start);
+      if (idx == -1) {
+        spans.add(TextSpan(text: text.substring(start)));
+        break;
+      }
+      if (idx > start) spans.add(TextSpan(text: text.substring(start, idx)));
+      spans.add(
+        TextSpan(
+          text: text.substring(idx, idx + query.length),
+          style: style.copyWith(
+            color: _primary,
+            backgroundColor: _primary.withOpacity(0.08),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
+      start = idx + query.length;
+    }
+    return RichText(
+      text: TextSpan(style: style, children: spans),
+      maxLines: maxLines,
+      overflow: overflow ?? TextOverflow.clip,
+    );
+  }
+}
+
+// ── Status Chip ───────────────────────────────────────────────────────────────
+
+class _StatusChip extends StatelessWidget {
+  final String status;
+  final Color color;
+  const _StatusChip({required this.status, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: color.withOpacity(0.2)),
+    ),
+    child: Text(
+      status.toUpperCase(),
+      style: TextStyle(
+        color: color,
+        fontWeight: FontWeight.w800,
+        fontSize: 9,
+        letterSpacing: 0.5,
+      ),
+    ),
+  );
+}
+
+// ── Meta Field ────────────────────────────────────────────────────────────────
+
+class _MetaField extends StatelessWidget {
+  final String label;
+  final String value;
+  final String query;
+  const _MetaField({required this.label, required this.value, this.query = ''});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: const TextStyle(fontSize: 11, color: _inkTertiary)),
+      const SizedBox(height: 2),
+      _HighlightText(
+        text: value,
+        query: query,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: _ink,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    ],
+  );
+}
+
+// ── Skeleton Card ─────────────────────────────────────────────────────────────
+
+class _SkeletonCard extends StatelessWidget {
+  const _SkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: _surfaceSubtle,
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      height: 12,
+                      width: 140,
+                      decoration: BoxDecoration(
+                        color: _surfaceSubtle,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      height: 20,
+                      width: 60,
+                      decoration: BoxDecoration(
+                        color: _surfaceSubtle,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  height: 9,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: _surfaceSubtle,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(height: 1, color: _border),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 9,
+                            width: 50,
+                            decoration: BoxDecoration(
+                              color: _surfaceSubtle,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            height: 11,
+                            width: 90,
+                            decoration: BoxDecoration(
+                              color: _surfaceSubtle,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 9,
+                            width: 60,
+                            decoration: BoxDecoration(
+                              color: _surfaceSubtle,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            height: 11,
+                            width: 80,
+                            decoration: BoxDecoration(
+                              color: _surfaceSubtle,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 9,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: _surfaceSubtle,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Container(
+                  height: 9,
+                  width: 200,
+                  decoration: BoxDecoration(
+                    color: _surfaceSubtle,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

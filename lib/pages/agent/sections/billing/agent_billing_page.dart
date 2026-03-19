@@ -4,7 +4,7 @@ import 'dart:math' as math;
 // ─── Billing (Quick Action) ───────────────────────────────────────────────────
 
 class BillingPage extends StatelessWidget {
-  const BillingPage();
+  const BillingPage({super.key});
 
   static const _invoices = [
     InvoiceItem(
@@ -115,6 +115,7 @@ class BillStat extends StatelessWidget {
   final String label, value;
   final Color color;
   const BillStat({
+    super.key,
     required this.label,
     required this.value,
     required this.color,
@@ -166,7 +167,7 @@ class InvoiceItem {
 
 class InvoiceCard extends StatelessWidget {
   final InvoiceItem data;
-  const InvoiceCard({required this.data});
+  const InvoiceCard({super.key, required this.data});
 
   @override
   Widget build(BuildContext context) {

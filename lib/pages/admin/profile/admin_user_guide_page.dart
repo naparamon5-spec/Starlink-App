@@ -364,10 +364,11 @@ class _GuideCardState extends State<_GuideCard>
   void didUpdateWidget(_GuideCard old) {
     super.didUpdateWidget(old);
     if (widget.isExpanded != old.isExpanded) {
-      if (widget.isExpanded)
+      if (widget.isExpanded) {
         _ctrl.forward();
-      else
+      } else {
         _ctrl.reverse();
+      }
     }
   }
 

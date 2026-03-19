@@ -4,7 +4,7 @@ import 'dart:math' as math;
 // ─── Subscriptions (Quick Action) ────────────────────────────────────────────
 
 class SubscriptionsPage extends StatelessWidget {
-  const SubscriptionsPage();
+  const SubscriptionsPage({super.key});
 
   static const _subs = [
     SubItem(
@@ -177,7 +177,7 @@ class SubItem {
 
 class SubCard extends StatelessWidget {
   final SubItem data;
-  const SubCard({required this.data});
+  const SubCard({super.key, required this.data});
 
   Color get _planColor =>
       data.plan == 'Enterprise'

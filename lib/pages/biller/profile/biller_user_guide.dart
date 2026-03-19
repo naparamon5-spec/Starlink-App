@@ -264,7 +264,7 @@ class _BillerUserGuidePageState extends State<BillerUserGuidePage> {
                 ),
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );

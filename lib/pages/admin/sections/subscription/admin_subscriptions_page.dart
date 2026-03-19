@@ -3,10 +3,9 @@ import '../../../../services/api_service.dart';
 import 'admin_subscription_details_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23); // Brand red
-const _primaryDark = Color(0xFF760F12); // Dark red
+const _primary = Color(0xFFEB1E23);
+const _primaryDark = Color(0xFF760F12);
 const _success = Color(0xFF24A148);
-const _danger = Color(0xFFEB1E23);
 const _ink = Color(0xFF000000);
 const _inkSecondary = Color(0xFF6F6F6F);
 const _inkTertiary = Color(0xFFA8A8A8);
@@ -23,80 +22,124 @@ class AdminSubscriptionsPage extends StatefulWidget {
 
 class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
-  List<Map<String, dynamic>> _subscriptions = [];
+  List<Map<String, dynamic>> _allSubscriptions = [];
+  List<Map<String, dynamic>> _filtered = [];
   bool _loading = false;
   String? _error;
-
-  int _currentPage = 1;
-  int _totalPages = 1;
   int _totalItems = 0;
-  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadSubscriptions();
+    _searchController.addListener(_onSearch);
   }
 
   @override
   void dispose() {
+    _searchController.removeListener(_onSearch);
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadSubscriptions({int page = 1}) async {
+  void _onSearch() {
+    final q = _searchController.text.trim().toLowerCase();
+    setState(() {
+      _filtered =
+          q.isEmpty
+              ? _allSubscriptions
+              : _allSubscriptions.where((s) {
+                final nickname = (s['nickname'] ?? '').toString().toLowerCase();
+                final id = (s['id'] ?? '').toString().toLowerCase();
+                final sln =
+                    (s['serviceLineNumber'] ?? '').toString().toLowerCase();
+                final plan =
+                    (s['subscriptionPlan'] ?? '').toString().toLowerCase();
+                final eu =
+                    (s['end_user_name'] ?? s['company_name'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                return nickname.contains(q) ||
+                    id.contains(q) ||
+                    sln.contains(q) ||
+                    plan.contains(q) ||
+                    eu.contains(q);
+              }).toList();
+    });
+  }
+
+  Future<void> _loadSubscriptions() async {
+    if (_loading) return;
     setState(() {
       _loading = true;
       _error = null;
+      _allSubscriptions = [];
+      _filtered = [];
+      _totalItems = 0;
     });
 
     try {
-      final response = await ApiService.getSubscriptionsPaginated(
-        page: page,
-        limit: 10,
-        search: _searchQuery,
-      );
+      const int pageSize = 50;
+      int page = 1;
+      int totalPages = 1;
+      final List<Map<String, dynamic>> all = [];
+
+      do {
+        final response = await ApiService.getSubscriptionsPaginated(
+          page: page,
+          limit: pageSize,
+          search: '',
+        );
+
+        if (!mounted) return;
+
+        if (response['status'] != 'success') {
+          setState(() {
+            _loading = false;
+            _error =
+                response['message']?.toString() ??
+                'Failed to load subscriptions';
+          });
+          return;
+        }
+
+        final data = response['data'];
+        final List<dynamic> items = data is List ? data : [];
+        all.addAll(
+          items.whereType<Map>().map<Map<String, dynamic>>(
+            (e) => Map<String, dynamic>.from(e),
+          ),
+        );
+
+        final pagination = response['pagination'];
+        if (pagination is Map<String, dynamic>) {
+          totalPages =
+              (pagination['totalPages'] ?? pagination['total_pages'] ?? 1)
+                  as int;
+          _totalItems =
+              (pagination['totalItems'] ?? pagination['total_items'] ?? 0)
+                  as int;
+        }
+
+        // Show first page immediately
+        if (page == 1 && mounted) {
+          setState(() {
+            _allSubscriptions = List.from(all);
+            _filtered = List.from(all);
+          });
+        }
+
+        page++;
+      } while (page <= totalPages);
 
       if (!mounted) return;
-
-      if (response['status'] != 'success') {
-        setState(() {
-          _loading = false;
-          _error =
-              response['message']?.toString() ?? 'Failed to load subscriptions';
-          _subscriptions = [];
-        });
-        return;
-      }
-
-      final data = response['data'];
-      final List<dynamic> items = data is List ? data : [];
-      final pagination = response['pagination'];
-      int currentPage = page;
-      int totalPages = 1;
-      int totalItems = 0;
-      if (pagination is Map<String, dynamic>) {
-        currentPage =
-            (pagination['currentPage'] ?? pagination['current_page'] ?? page)
-                as int;
-        totalPages =
-            (pagination['totalPages'] ?? pagination['total_pages'] ?? 1) as int;
-        totalItems =
-            (pagination['totalItems'] ?? pagination['total_items'] ?? 0) as int;
-      }
-
       setState(() {
-        _subscriptions =
-            items
-                .whereType<Map>()
-                .map<Map<String, dynamic>>(
-                  (e) => Map<String, dynamic>.from(e as Map),
-                )
-                .toList();
-        _currentPage = currentPage;
-        _totalPages = totalPages;
-        _totalItems = totalItems;
+        _allSubscriptions = all;
+        _filtered = all;
+        _totalItems = all.length > _totalItems ? all.length : _totalItems;
         _loading = false;
       });
     } catch (e) {
@@ -104,7 +147,6 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
       setState(() {
         _loading = false;
         _error = e.toString();
-        _subscriptions = [];
       });
     }
   }
@@ -142,53 +184,173 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: _surfaceSubtle,
+    final total = _totalItems > 0 ? _totalItems : _allSubscriptions.length;
+
+    return ColoredBox(
+      color: _surface,
+      child: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          // ── Pinned header ──────────────────────────────────────────────
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _StickyHeaderDelegate(child: _buildStickyHeader(total)),
+          ),
+
+          // ── Body ──────────────────────────────────────────────────────
+          if (_loading)
+            const SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                        color: _primary,
+                        strokeWidth: 2.5,
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'Loading subscriptions…',
+                      style: TextStyle(fontSize: 13, color: _inkSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_error != null && _allSubscriptions.isEmpty)
+            SliverFillRemaining(child: _buildError())
+          else if (_filtered.isEmpty)
+            SliverFillRemaining(child: _buildEmpty())
+          else ...[
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final sub = _filtered[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: RepaintBoundary(
+                      child: _SubscriptionCard(
+                        sub: sub,
+                        onTap: () => _openDetails(sub),
+                        activeColor: _activeColor(sub['active']?.toString()),
+                        formattedStart: _formatDate(
+                          sub['startDate']?.toString(),
+                        ),
+                        formattedEnd: _formatDate(sub['endDate']?.toString()),
+                      ),
+                    ),
+                  );
+                }, childCount: _filtered.length),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── Sticky header ──────────────────────────────────────────────────────────
+
+  Widget _buildStickyHeader(int total) {
+    return ColoredBox(
+      color: _surface,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Header ───────────────────────────────────────────────────────
-          Container(
-            color: _surface,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: _surfaceSubtle,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border),
+              ),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (_) => _onSearch(),
+                style: const TextStyle(fontSize: 13, color: _ink),
+                decoration: InputDecoration(
+                  hintText: 'Search subscriptions…',
+                  hintStyle: const TextStyle(color: _inkTertiary, fontSize: 13),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: _inkTertiary,
+                    size: 18,
+                  ),
+                  suffixIcon:
+                      _searchController.text.isNotEmpty
+                          ? GestureDetector(
+                            onTap: () {
+                              _searchController.clear();
+                              _onSearch();
+                            },
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: _inkTertiary,
+                            ),
+                          )
+                          : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // List title row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 16, 10),
+            child: Row(
               children: [
                 const Text(
                   'Subscriptions',
                   style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
                     color: _ink,
-                    letterSpacing: -0.4,
+                    letterSpacing: -0.2,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(width: 8),
                 Container(
-                  decoration: BoxDecoration(
-                    color: _surfaceSubtle,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _border),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
                   ),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (val) {
-                      _searchQuery = val;
-                      _loadSubscriptions(page: 1);
-                    },
-                    style: const TextStyle(fontSize: 13, color: _ink),
-                    decoration: const InputDecoration(
-                      hintText: 'Search subscriptions...',
-                      hintStyle: TextStyle(color: _inkTertiary, fontSize: 13),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: _inkTertiary,
-                        size: 20,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 16,
-                      ),
+                  decoration: BoxDecoration(
+                    color: _primary.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$total',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: _primary,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _loadSubscriptions,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Icon(
+                      Icons.refresh_rounded,
+                      size: 18,
+                      color: _inkTertiary,
                     ),
                   ),
                 ),
@@ -196,479 +358,335 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
             ),
           ),
 
-          if (!_loading && _error == null)
-            Container(
-              color: _surface,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _primary.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${_subscriptions.length} of $_totalItems subscriptions',
-                      style: const TextStyle(
-                        color: _primary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
           Container(height: 1, color: _border),
-
-          // ── List ─────────────────────────────────────────────────────────
-          Expanded(
-            child:
-                _loading
-                    ? const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 26,
-                            height: 26,
-                            child: CircularProgressIndicator(
-                              color: _primary,
-                              strokeWidth: 2.5,
-                            ),
-                          ),
-                          SizedBox(height: 12),
-                          Text(
-                            'Loading subscriptions…',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: _inkSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                    : _error != null
-                    ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: _danger.withOpacity(0.08),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.error_outline_rounded,
-                                color: _danger,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Text(
-                              _error!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: _inkSecondary,
-                                height: 1.5,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            TextButton.icon(
-                              onPressed:
-                                  () => _loadSubscriptions(page: _currentPage),
-                              icon: const Icon(Icons.refresh_rounded, size: 16),
-                              label: const Text('Try again'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: _primary,
-                                textStyle: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                    : _subscriptions.isEmpty
-                    ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: _surfaceSubtle,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.subscriptions_outlined,
-                              color: _inkTertiary,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No subscriptions found.',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: _inkSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                    : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _subscriptions.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final sub = _subscriptions[index];
-                        final id = sub['id']?.toString() ?? '—';
-                        final serviceLineNumber =
-                            sub['serviceLineNumber']?.toString() ?? '—';
-                        final nickname = sub['nickname']?.toString() ?? '—';
-                        final active = sub['active']?.toString() ?? '—';
-                        final startDate = _formatDate(
-                          sub['startDate']?.toString(),
-                        );
-                        final endDate = _formatDate(sub['endDate']?.toString());
-                        final subscriptionPlan =
-                            sub['subscriptionPlan']?.toString() ?? '—';
-                        final address = sub['address']?.toString() ?? '';
-                        final dataplan = sub['dataplan']?.toString() ?? '—';
-                        final endUserName =
-                            sub['end_user_name']?.toString() ??
-                            sub['company_name']?.toString() ??
-                            '';
-                        final canNavigate =
-                            serviceLineNumber.trim().isNotEmpty &&
-                            serviceLineNumber != '—';
-                        final color = _activeColor(active);
-
-                        final initial =
-                            nickname.isNotEmpty
-                                ? nickname[0].toUpperCase()
-                                : '?';
-
-                        return Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: canNavigate ? () => _openDetails(sub) : null,
-                            borderRadius: BorderRadius.circular(14),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: _surface,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: _border),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.03),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      14,
-                                      14,
-                                      14,
-                                      10,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // Avatar
-                                        Container(
-                                          width: 44,
-                                          height: 44,
-                                          decoration: BoxDecoration(
-                                            color: _primary.withOpacity(0.08),
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              initial,
-                                              style: const TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.w800,
-                                                color: _primary,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-
-                                        // Info
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      nickname,
-                                                      style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        fontSize: 14,
-                                                        color: _ink,
-                                                        letterSpacing: -0.2,
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 7,
-                                                          vertical: 3,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: color.withOpacity(
-                                                        0.08,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            6,
-                                                          ),
-                                                    ),
-                                                    child: Text(
-                                                      active,
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        color: color,
-                                                        letterSpacing: 0.4,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 3),
-                                              Text(
-                                                'ID: $id · $serviceLineNumber',
-                                                style: const TextStyle(
-                                                  fontSize: 11.5,
-                                                  color: _inkSecondary,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                              if (subscriptionPlan != '—')
-                                                Text(
-                                                  'Plan: $subscriptionPlan',
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: _inkTertiary,
-                                                  ),
-                                                ),
-                                              if (address.isNotEmpty)
-                                                Text(
-                                                  address,
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: _inkTertiary,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              if (endUserName.isNotEmpty)
-                                                Text(
-                                                  'End user: $endUserName',
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: _inkTertiary,
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  Container(height: 1, color: _surfaceSubtle),
-
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      14,
-                                      10,
-                                      14,
-                                      12,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        _DateChip(
-                                          label: 'Start',
-                                          value: startDate,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        _DateChip(label: 'End', value: endDate),
-                                        if (dataplan != '—') ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: _primary.withOpacity(0.06),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              '$dataplan GB',
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w800,
-                                                color: _primary,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                        const Spacer(),
-                                        if (canNavigate)
-                                          const Icon(
-                                            Icons.chevron_right_rounded,
-                                            color: _inkTertiary,
-                                            size: 16,
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-          ),
-
-          // ── Pagination ────────────────────────────────────────────────────
-          if (_totalPages > 1)
-            Container(
-              color: _surface,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _PaginationButton(
-                    label: 'Previous',
-                    enabled: _currentPage > 1,
-                    onTap: () => _loadSubscriptions(page: _currentPage - 1),
-                  ),
-                  Text(
-                    'Page $_currentPage of $_totalPages',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _inkSecondary,
-                    ),
-                  ),
-                  _PaginationButton(
-                    label: 'Next',
-                    enabled: _currentPage < _totalPages,
-                    onTap: () => _loadSubscriptions(page: _currentPage + 1),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
   }
-}
 
-class _DateChip extends StatelessWidget {
-  final String label;
-  final String value;
-  const _DateChip({required this.label, required this.value});
+  Widget _buildError() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: _primary.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.error_outline_rounded,
+              color: _primary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              color: _inkSecondary,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextButton.icon(
+            onPressed: _loadSubscriptions,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Try again'),
+            style: TextButton.styleFrom(
+              foregroundColor: _primary,
+              textStyle: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildEmpty() => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 9,
+        Container(
+          width: 52,
+          height: 52,
+          decoration: const BoxDecoration(
+            color: _surfaceSubtle,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.subscriptions_outlined,
             color: _inkTertiary,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.4,
+            size: 24,
           ),
         ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 11,
-            color: _inkSecondary,
-            fontWeight: FontWeight.w600,
-          ),
+        const SizedBox(height: 12),
+        const Text(
+          'No subscriptions found.',
+          style: TextStyle(fontSize: 14, color: _inkSecondary),
         ),
       ],
-    );
-  }
+    ),
+  );
 }
 
-class _PaginationButton extends StatelessWidget {
-  final String label;
-  final bool enabled;
-  final VoidCallback onTap;
+// ── Sticky header delegate ─────────────────────────────────────────────────────
 
-  const _PaginationButton({
-    required this.label,
-    required this.enabled,
+class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  // search(16+44+0) + title(12+36+10) + divider(1) = 119
+  static const double _height = 120.0;
+
+  const _StickyHeaderDelegate({required this.child});
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => SizedBox(height: _height, child: child);
+
+  @override
+  bool shouldRebuild(_StickyHeaderDelegate old) => true;
+}
+
+// ── Subscription card ──────────────────────────────────────────────────────────
+
+class _SubscriptionCard extends StatelessWidget {
+  final Map<String, dynamic> sub;
+  final VoidCallback onTap;
+  final Color activeColor;
+  final String formattedStart;
+  final String formattedEnd;
+
+  static const _primary = Color(0xFFEB1E23);
+  static const _ink = Color(0xFF000000);
+  static const _inkSecondary = Color(0xFF6F6F6F);
+  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _surface = Color(0xFFFFFFFF);
+  static const _surfaceSubtle = Color(0xFFF4F4F4);
+  static const _border = Color(0xFFE0E0E0);
+
+  const _SubscriptionCard({
+    required this.sub,
     required this.onTap,
+    required this.activeColor,
+    required this.formattedStart,
+    required this.formattedEnd,
   });
+
+  String get _nickname => (sub['nickname'] ?? '—').toString();
+  String get _id => (sub['id'] ?? '—').toString();
+  String get _serviceLineNumber => (sub['serviceLineNumber'] ?? '—').toString();
+  String get _active => (sub['active'] ?? '—').toString();
+  String get _subscriptionPlan => (sub['subscriptionPlan'] ?? '—').toString();
+  String get _address => (sub['address'] ?? '').toString();
+  String get _dataplan => (sub['dataplan'] ?? '—').toString();
+  String get _endUserName =>
+      (sub['end_user_name'] ?? sub['company_name'] ?? '').toString();
+  bool get _canNavigate =>
+      _serviceLineNumber.trim().isNotEmpty && _serviceLineNumber != '—';
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: enabled ? _primary.withOpacity(0.08) : _surfaceSubtle,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: enabled ? _primary.withOpacity(0.25) : _border,
+    final initial = _nickname.isNotEmpty ? _nickname[0].toUpperCase() : '?';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _canNavigate ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: enabled ? _primary : _inkTertiary,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Avatar
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: _primary.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      initial,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: _primary,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Nickname + status badge
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _nickname,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: _ink,
+                                letterSpacing: -0.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: activeColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              _active,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: activeColor,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+
+                      // ID + service line
+                      Text(
+                        'ID: $_id · $_serviceLineNumber',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _inkSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+
+                      // Meta tags row
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (_subscriptionPlan != '—')
+                            _MetaTag(label: 'Plan', value: _subscriptionPlan),
+                          if (_dataplan != '—')
+                            _MetaTag(label: 'Data', value: '$_dataplan GB'),
+                        ],
+                      ),
+
+                      if (_endUserName.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          _endUserName,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: _inkTertiary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+
+                      const SizedBox(height: 8),
+                      Container(height: 1, color: _border),
+                      const SizedBox(height: 8),
+
+                      // Footer: dates + chevron
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.calendar_today_outlined,
+                            size: 11,
+                            color: _inkTertiary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$formattedStart → $formattedEnd',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: _inkTertiary,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_canNavigate)
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 18,
+                              color: _inkTertiary,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+// ── Meta tag ───────────────────────────────────────────────────────────────────
+
+class _MetaTag extends StatelessWidget {
+  final String label, value;
+  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _surfaceSubtle = Color(0xFFF4F4F4);
+  static const _border = Color(0xFFE0E0E0);
+
+  const _MetaTag({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+    decoration: BoxDecoration(
+      color: _surfaceSubtle,
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: _border),
+    ),
+    child: Text(
+      '$label: $value',
+      style: const TextStyle(
+        fontSize: 9,
+        color: _inkTertiary,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
 }

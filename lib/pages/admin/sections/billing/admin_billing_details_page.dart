@@ -62,7 +62,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
         }
         if (data is List && data.isNotEmpty) data = data.first;
 
-        if (data is Map && (data as Map).isNotEmpty) {
+        if (data is Map && (data).isNotEmpty) {
           setState(() {
             _billing = {
               ...?_billing,
@@ -93,8 +93,9 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
           : v.toString().trim();
 
   String _formatDate(String? raw) {
-    if (raw == null || raw.isEmpty || raw == 'null' || raw == '0000-00-00')
+    if (raw == null || raw.isEmpty || raw == 'null' || raw == '0000-00-00') {
       return '—';
+    }
     try {
       final dt = DateTime.parse(raw);
       if (dt.year < 1900) return '—';

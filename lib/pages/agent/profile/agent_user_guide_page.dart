@@ -403,7 +403,7 @@ class _AgentUserGuidePageState extends State<AgentUserGuidePage> {
                                 ],
                               ),
                             );
-                          }).toList(),
+                          }),
                         ],
                       ),
                     ),
@@ -411,7 +411,7 @@ class _AgentUserGuidePageState extends State<AgentUserGuidePage> {
                 ),
               ),
             );
-          }).toList(),
+          }),
 
           const SizedBox(height: 8),
 

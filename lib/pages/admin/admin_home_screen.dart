@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import '../../services/api_service.dart';
 import 'sections/ticket/admin_tickets_page.dart';
 import 'sections/ticket/admin_ticket_details_page.dart';
-import 'sections/ticket/admin_create_ticket_page.dart'; // ← FIXED: added import
+import 'sections/ticket/admin_create_ticket_page.dart';
 import 'sections/agent/admin_agents_page.dart';
 import 'sections/billing/admin_billing_page.dart';
 import 'sections/subscription/admin_subscriptions_page.dart';
@@ -12,6 +12,7 @@ import 'sections/enduser/admin_end_users_page.dart';
 import 'profile/admin_edit_profile_page.dart';
 import 'profile/admin_manage_users_page.dart';
 import 'profile/admin_user_guide_page.dart';
+import 'sections/agent/admin_create_agent_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -42,6 +43,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   QuickActionType? _quickAction;
   bool _quickMenuOpen = false;
 
+  OverlayEntry? _overlayEntry;
+
   bool _loadingDashboard = true;
   String? _dashboardError;
   Map<String, dynamic>? _me;
@@ -57,6 +60,46 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     super.initState();
     _loadDashboard();
   }
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    super.dispose();
+  }
+
+  // ── Overlay helpers ───────────────────────────────────────────────────────
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  void _openQuickMenu() {
+    setState(() => _quickMenuOpen = true);
+    _overlayEntry = OverlayEntry(
+      builder:
+          (_) => _AdminQuickMenuOverlay(
+            activeAction: _quickAction,
+            onDismiss: _closeQuickMenu,
+            onSelect: _selectQuickAction,
+          ),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _closeQuickMenu() {
+    _removeOverlay();
+    if (mounted) setState(() => _quickMenuOpen = false);
+  }
+
+  void _toggleQuickMenu() {
+    if (_quickMenuOpen) {
+      _closeQuickMenu();
+    } else {
+      _openQuickMenu();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _loadDashboard() async {
     setState(() {
@@ -201,7 +244,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     });
   }
 
-  // ── FIXED: properly fetches token then navigates to AdminCreateTicketPage ──
   Future<void> _openCreateTicket() async {
     final token = await ApiService.getValidAccessToken();
     if (!mounted) return;
@@ -211,17 +253,22 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         builder: (_) => AdminCreateTicketPage(bearerToken: token),
       ),
     );
-    // Refresh dashboard counts after a ticket is created
     if (created == true) _loadDashboard();
   }
 
-  void _toggleQuickMenu() => setState(() => _quickMenuOpen = !_quickMenuOpen);
+  Future<void> _openCreateAgent() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminCreateAgentPage()),
+    );
+    if (created == true) _loadDashboard();
+  }
 
   void _selectQuickAction(QuickActionType type) {
+    _closeQuickMenu();
     setState(() {
       _selectedIndex = 2;
       _quickAction = type;
-      _quickMenuOpen = false;
     });
   }
 
@@ -230,10 +277,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       _toggleQuickMenu();
       return;
     }
-    setState(() {
-      _selectedIndex = index;
-      _quickMenuOpen = false;
-    });
+    _closeQuickMenu();
+    setState(() => _selectedIndex = index);
   }
 
   List<Widget> _buildBodySlivers() {
@@ -244,8 +289,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // FIXED: pass the callback — no more broken inline navigation
-                _QuickCreateSection(onNewTicket: _openCreateTicket),
+                _QuickCreateSection(
+                  onNewTicket: _openCreateTicket,
+                  onNewAgent: _openCreateAgent,
+                ),
                 const SizedBox(height: 16),
                 _TicketOverviewCard(
                   isLoading: _loadingDashboard,
@@ -369,94 +416,74 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       body: SafeArea(
         top: true,
         bottom: false,
-        child: Stack(
-          children: [
-            RefreshIndicator(
-              onRefresh: _loadDashboard,
-              color: _primary,
-              strokeWidth: 2,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  if (_selectedIndex == 0 && _dashboardError != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _danger.withOpacity(0.06),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _danger.withOpacity(0.25),
+        child: RefreshIndicator(
+          onRefresh: _loadDashboard,
+          color: _primary,
+          strokeWidth: 2,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              if (_selectedIndex == 0 && _dashboardError != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _danger.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _danger.withOpacity(0.25)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            color: _danger,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _dashboardError!,
+                              style: const TextStyle(
+                                color: _danger,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.warning_amber_rounded,
-                                color: _danger,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _dashboardError!,
-                                  style: const TextStyle(
-                                    color: _danger,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        ],
                       ),
                     ),
-                  ..._buildBodySlivers(),
-                ],
-              ),
-            ),
-
-            if (_quickMenuOpen)
-              Positioned.fill(
-                child: GestureDetector(
-                  onTap: () => setState(() => _quickMenuOpen = false),
-                  child: Container(color: Colors.black.withOpacity(0.3)),
+                  ),
                 ),
-              ),
-
-            _QuickActionBubbles(
-              isOpen: _quickMenuOpen,
-              onSelect: _selectQuickAction,
-              activeAction: _quickAction,
-            ),
-          ],
+              ..._buildBodySlivers(),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ─── Quick Action Bubbles ─────────────────────────────────────────────────────
+// ── Admin Quick Menu Overlay (full-screen, renders above bottom nav) ───────────
 
-class _QuickActionBubbles extends StatefulWidget {
-  final bool isOpen;
-  final ValueChanged<QuickActionType> onSelect;
+class _AdminQuickMenuOverlay extends StatefulWidget {
   final QuickActionType? activeAction;
+  final VoidCallback onDismiss;
+  final ValueChanged<QuickActionType> onSelect;
 
-  const _QuickActionBubbles({
-    required this.isOpen,
-    required this.onSelect,
+  const _AdminQuickMenuOverlay({
     required this.activeAction,
+    required this.onDismiss,
+    required this.onSelect,
   });
 
   @override
-  State<_QuickActionBubbles> createState() => _QuickActionBubblesState();
+  State<_AdminQuickMenuOverlay> createState() => _AdminQuickMenuOverlayState();
 }
 
-class _QuickActionBubblesState extends State<_QuickActionBubbles>
+class _AdminQuickMenuOverlayState extends State<_AdminQuickMenuOverlay>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
@@ -466,17 +493,7 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
-    );
-  }
-
-  @override
-  void didUpdateWidget(_QuickActionBubbles oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isOpen) {
-      _controller.forward();
-    } else {
-      _controller.reverse();
-    }
+    )..forward();
   }
 
   @override
@@ -487,165 +504,179 @@ class _QuickActionBubblesState extends State<_QuickActionBubbles>
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-    final navBarHeight = 60.0 + bottomInset;
+    final mq = MediaQuery.of(context);
+    final screenWidth = mq.size.width;
+    final screenHeight = mq.size.height;
+    final bottomInset = mq.padding.bottom;
+    const navBarContentHeight = 60.0;
+    final navBarHeight =
+        navBarContentHeight + (bottomInset > 0 ? bottomInset : 10);
+    // FAB center: horizontally centered, vertically at nav bar middle, lifted 12px
     final fabCenterX = screenWidth / 2;
-    final fabCenterY = screenHeight - navBarHeight / 2 - 8;
+    final fabCenterY = screenHeight - navBarHeight / 2 - 12;
+
     const bubbleSize = 56.0;
     const labelHeight = 20.0;
-    const totalBubbleHeight = bubbleSize + 6 + labelHeight;
+    const gap = 6.0;
+    const totalH = bubbleSize + gap + labelHeight;
 
     final actions = [
-      _BubbleData(
+      _AdminBubbleSpec(
         type: QuickActionType.tickets,
         icon: Icons.confirmation_number_outlined,
-        label: 'Tickets',
+        label: 'Ticket',
         color: _warning,
-        targetDx: -76.0,
-        targetDy: -100.0,
+        dx: -76.0,
+        dy: -78.0,
         delay: 0.0,
       ),
-      _BubbleData(
+      _AdminBubbleSpec(
         type: QuickActionType.subscriptions,
         icon: Icons.subscriptions_outlined,
         label: 'Subs',
         color: _primary,
-        targetDx: 0.0,
-        targetDy: -155.0,
+        dx: 0.0,
+        dy: -118.0,
         delay: 0.07,
       ),
-      _BubbleData(
+      _AdminBubbleSpec(
         type: QuickActionType.billing,
         icon: Icons.receipt_long_outlined,
         label: 'Billing',
         color: _success,
-        targetDx: 76.0,
-        targetDy: -100.0,
+        dx: 76.0,
+        dy: -78.0,
         delay: 0.14,
       ),
     ];
 
     return Stack(
-      children:
-          actions.map((data) {
-            final anim = CurvedAnimation(
-              parent: _controller,
-              curve: Interval(
-                data.delay,
-                math.min(data.delay + 0.65, 1.0),
-                curve: Curves.elasticOut,
-              ),
-            );
-            return AnimatedBuilder(
-              animation: anim,
-              builder: (context, child) {
-                final t = anim.value;
-                final left = fabCenterX + data.targetDx * t - bubbleSize / 2;
-                final top = fabCenterY + data.targetDy * t - bubbleSize / 2;
-                return Positioned(
-                  left: left,
-                  top: top,
-                  child: Opacity(
-                    opacity: t.clamp(0.0, 1.0),
-                    child: Transform.scale(
-                      scale: t.clamp(0.0, 1.0),
-                      alignment: Alignment.bottomCenter,
-                      child: child,
-                    ),
+      children: [
+        // Dim backdrop
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: widget.onDismiss,
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder:
+                  (_, __) => Container(
+                    color: Colors.black.withOpacity(0.55 * _controller.value),
                   ),
-                );
-              },
-              child: GestureDetector(
-                onTap: () => widget.onSelect(data.type),
-                child: SizedBox(
-                  width: bubbleSize,
-                  height: totalBubbleHeight,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: bubbleSize,
-                        height: bubbleSize,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color:
-                              widget.activeAction == data.type
-                                  ? data.color
-                                  : _surface,
-                          border: Border.all(
-                            color: data.color,
-                            width: widget.activeAction == data.type ? 0 : 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: data.color.withOpacity(
-                                widget.activeAction == data.type ? 0.35 : 0.2,
-                              ),
-                              blurRadius: 16,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          data.icon,
-                          color:
-                              widget.activeAction == data.type
-                                  ? Colors.white
-                                  : data.color,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        data.label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color:
-                              widget.activeAction == data.type
-                                  ? data.color
-                                  : _ink,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
+            ),
+          ),
+        ),
+        // Bubbles
+        ...actions.map((spec) {
+          final anim = CurvedAnimation(
+            parent: _controller,
+            curve: Interval(
+              spec.delay,
+              math.min(spec.delay + 0.65, 1.0),
+              curve: Curves.elasticOut,
+            ),
+          );
+          return AnimatedBuilder(
+            animation: anim,
+            builder: (_, child) {
+              final t = anim.value.clamp(0.0, 1.0);
+              final cx = fabCenterX + spec.dx * t;
+              final cy = fabCenterY + spec.dy * t;
+              final left = cx - bubbleSize / 2;
+              final top = cy - bubbleSize / 2;
+              return Positioned(
+                left: left,
+                top: top,
+                width: bubbleSize,
+                height: totalH,
+                child: Opacity(
+                  opacity: t,
+                  child: Transform.scale(
+                    scale: t,
+                    alignment: Alignment.bottomCenter,
+                    child: child,
                   ),
                 ),
+              );
+            },
+            child: GestureDetector(
+              onTap: () => widget.onSelect(spec.type),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: bubbleSize,
+                    height: bubbleSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color:
+                          widget.activeAction == spec.type
+                              ? spec.color
+                              : _surface,
+                      border: Border.all(
+                        color: spec.color.withOpacity(0.5),
+                        width: widget.activeAction == spec.type ? 0 : 1.5,
+                      ),
+                    ),
+                    child: Icon(
+                      spec.icon,
+                      color:
+                          widget.activeAction == spec.type
+                              ? Colors.white
+                              : spec.color,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(height: gap),
+                  Text(
+                    spec.label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color:
+                          widget.activeAction == spec.type
+                              ? spec.color
+                              : Colors.white.withOpacity(0.85),
+                      letterSpacing: 0.2,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ],
               ),
-            );
-          }).toList(),
+            ),
+          );
+        }),
+      ],
     );
   }
 }
 
-class _BubbleData {
+class _AdminBubbleSpec {
   final QuickActionType type;
   final IconData icon;
   final String label;
   final Color color;
-  final double targetDx, targetDy, delay;
+  final double dx, dy, delay;
 
-  const _BubbleData({
+  const _AdminBubbleSpec({
     required this.type,
     required this.icon,
     required this.label,
     required this.color,
-    required this.targetDx,
-    required this.targetDy,
+    required this.dx,
+    required this.dy,
     required this.delay,
   });
 }
 
 // ─── Quick Create Buttons ─────────────────────────────────────────────────────
-// FIXED: now a const-friendly widget that receives the callback from State,
-// instead of trying to do async token work inside a StatelessWidget.
 
 class _QuickCreateSection extends StatelessWidget {
-  final VoidCallback onNewTicket; // ← callback from _AdminHomeScreenState
-
-  const _QuickCreateSection({required this.onNewTicket});
+  final VoidCallback onNewTicket;
+  final VoidCallback onNewAgent;
+  const _QuickCreateSection({
+    required this.onNewTicket,
+    required this.onNewAgent,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -656,7 +687,7 @@ class _QuickCreateSection extends StatelessWidget {
             icon: Icons.confirmation_number_outlined,
             label: 'New Ticket',
             color: _primary,
-            onTap: onNewTicket, // ← clean, no broken `yourToken` reference
+            onTap: onNewTicket,
           ),
         ),
         const SizedBox(width: 12),
@@ -665,7 +696,7 @@ class _QuickCreateSection extends StatelessWidget {
             icon: Icons.person_add_outlined,
             label: 'New Agent',
             color: _primaryDark,
-            onTap: () {},
+            onTap: onNewAgent,
           ),
         ),
       ],
@@ -979,8 +1010,9 @@ class _SubscriptionSection extends StatelessWidget {
     required String serviceLineNumber,
     required String nickname,
   }) {
-    if (serviceLineNumber.trim().isEmpty || serviceLineNumber.trim() == '—')
+    if (serviceLineNumber.trim().isEmpty || serviceLineNumber.trim() == '—') {
       return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder:
@@ -1433,16 +1465,18 @@ class _SettingsSection extends StatelessWidget {
     if (me == null) return null;
     for (final k in keys) {
       final v = me![k];
-      if (v != null && v.toString().trim().isNotEmpty)
+      if (v != null && v.toString().trim().isNotEmpty) {
         return v.toString().trim();
+      }
     }
     return null;
   }
 
   String _initials(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2)
+    if (parts.length >= 2) {
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    }
     return name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'A';
   }
 
@@ -1483,7 +1517,6 @@ class _SettingsSection extends StatelessWidget {
             style: TextStyle(fontSize: 13, color: _inkSecondary),
           ),
           const SizedBox(height: 20),
-
           GestureDetector(
             onTap:
                 () => Navigator.of(context).push(
@@ -1631,7 +1664,6 @@ class _SettingsSection extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 24),
           const _SectionHeader(title: 'ACCOUNT'),
           const SizedBox(height: 12),
@@ -1677,7 +1709,60 @@ class _SettingsSection extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => Navigator.of(context).maybePop(),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder:
+                      (ctx) => AlertDialog(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: const Text(
+                          'Logout',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                        content: const Text(
+                          'Are you sure you want to logout?',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF6F6F6F),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFEB1E23),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: const Text(
+                              'Logout',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                );
+                if (confirm == true && context.mounted) {
+                  await ApiService.logout();
+                  if (context.mounted) {
+                    Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/', (route) => false);
+                  }
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _primaryDark,
                 foregroundColor: Colors.white,
@@ -1805,7 +1890,7 @@ class _SettingsCard extends StatelessWidget {
   }
 }
 
-// ─── Fixed Bottom Nav Bar ─────────────────────────────────────────────────────
+// ─── Bottom Nav Bar ───────────────────────────────────────────────────────────
 
 class _BottomNavBar extends StatelessWidget {
   final int selectedIndex;

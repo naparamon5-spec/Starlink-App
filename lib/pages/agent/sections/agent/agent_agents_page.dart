@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 // ─── Agents Tab (index 1) ─────────────────────────────────────────────────────
 
 class AgentTeamPage extends StatelessWidget {
-  const AgentTeamPage();
+  const AgentTeamPage({super.key});
 
   static const _agents = [
     AgentData(
@@ -154,7 +154,12 @@ class AgentData {
 class TStat extends StatelessWidget {
   final String value, label;
   final Color color;
-  const TStat({required this.value, required this.label, required this.color});
+  const TStat({
+    super.key,
+    required this.value,
+    required this.label,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +185,7 @@ class TStat extends StatelessWidget {
 
 class AgentTeamCard extends StatelessWidget {
   final AgentData data;
-  const AgentTeamCard({required this.data});
+  const AgentTeamCard({super.key, required this.data});
 
   @override
   Widget build(BuildContext context) {

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../../services/api_service.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
@@ -18,15 +19,23 @@ const _surfaceSubtle = Color(0xFFF4F4F4);
 const _border = Color(0xFFE0E0E0);
 const _errorColor = Color(0xFFEB1E23);
 
-/// Explicit dark style used on every DropdownMenuItem child.
-/// This is the fix for white-on-white text — Flutter's DropdownButtonFormField
-/// does NOT inherit the `style` property into its overlay menu items, so each
-/// item's Text widget must carry its own TextStyle.
 const _dropItemStyle = TextStyle(
   color: _ink,
   fontSize: 14,
   fontWeight: FontWeight.w500,
 );
+
+// ── Allowed file extensions ────────────────────────────────────────────────────
+const _allowedExtensions = [
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'pdf',
+  'doc',
+  'docx',
+  'txt',
+];
 
 class AdminCreateTicketPage extends StatefulWidget {
   final String? bearerToken;
@@ -48,6 +57,10 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
   Map<String, dynamic>? _selectedTicketType;
   Map<String, dynamic>? _selectedContact;
   Map<String, dynamic>? _selectedSubscription;
+
+  // ── Attachment state ────────────────────────────────────────────────────────
+  /// Each entry: { 'name': String, 'path': String, 'size': int, 'mimeType': String }
+  final List<Map<String, dynamic>> _pickedFiles = [];
 
   // ── API data ───────────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _ticketTypes = [];
@@ -101,6 +114,27 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     return token;
   }
 
+  String _firstNonEmpty(Iterable<dynamic> values) {
+    for (final v in values) {
+      final s = (v ?? '').toString().trim();
+      if (s.isNotEmpty && s.toLowerCase() != 'null') return s;
+    }
+    return '';
+  }
+
+  String _extractSubscriptionId(Map<String, dynamic> sub) {
+    // Backend expects a subscription identifier; in this project it's often the
+    // service line number (varies by endpoint payload shape).
+    return _firstNonEmpty([
+      sub['service_line_number'],
+      sub['serviceLineNumber'],
+      sub['serviceLine'],
+      sub['subscription_id'],
+      sub['subscriptionId'],
+      sub['id'],
+    ]);
+  }
+
   // ── Load all data in parallel ──────────────────────────────────────────────
   Future<void> _loadAllData() async {
     setState(() {
@@ -124,7 +158,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
       };
 
       final results = await Future.wait([
-        // 0 — subscriptions (paginated endpoint so we get nickname)
         _client
             .get(
               Uri.parse(
@@ -133,14 +166,12 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
               headers: headers,
             )
             .timeout(const Duration(seconds: 20)),
-        // 1 — ticket categories
         _client
             .get(
               Uri.parse('$_baseUrl/api/v1/tickets/list/categories'),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20)),
-        // 2 — contacts (returns { data: [ { value, label } ] })
         _client
             .get(
               Uri.parse('$_baseUrl/api/v1/users/list/contact/'),
@@ -154,32 +185,31 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
       final contactBody = json.decode(results[2].body);
 
       setState(() {
-        // ── Subscriptions ──────────────────────────────────────────────────
         if (results[0].statusCode == 200) {
-          // paginated endpoint wraps items under data.data
           dynamic raw = subsBody['data'];
           if (raw is Map) raw = raw['data'] ?? raw;
-          _subscriptions = _asList(raw);
+          // Sanitize: replace null values with '' so label builders never crash
+          _subscriptions =
+              _asList(raw).map((item) {
+                return Map<String, dynamic>.fromEntries(
+                  item.entries.map((e) => MapEntry(e.key, e.value ?? '')),
+                );
+              }).toList();
         }
 
-        // ── Ticket types ───────────────────────────────────────────────────
         if (results[1].statusCode == 200) {
           final raw = typesBody['data'] ?? typesBody['results'] ?? typesBody;
           _ticketTypes = _asList(raw);
         }
 
-        // ── Contacts ───────────────────────────────────────────────────────
-        // API shape: { "data": [ { "value": 10, "label": "Name" } ], ... }
         if (results[2].statusCode == 200) {
           final raw =
               contactBody['data'] ?? contactBody['results'] ?? contactBody;
-          // Normalise to always have both `value` (int id) and `label` (name)
           _contacts =
               _asList(raw).map((e) {
                 return <String, dynamic>{
                   'value': e['value'] ?? e['id'],
                   'label': (e['label'] ?? e['name'] ?? '').toString(),
-                  // keep original keys too, for submit
                   ...e,
                 };
               }).toList();
@@ -205,7 +235,77 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     return [];
   }
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  // ── File picker ────────────────────────────────────────────────────────────
+  Future<void> _pickFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: _allowedExtensions,
+        withData: false, // use path, not bytes, to avoid memory pressure
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      setState(() {
+        for (final f in result.files) {
+          // Skip duplicates by name
+          if (_pickedFiles.any((p) => p['name'] == f.name)) continue;
+          _pickedFiles.add({
+            'name': f.name,
+            'path': f.path ?? '',
+            'size': f.size,
+            'mimeType': _mimeFromExtension(f.extension ?? ''),
+          });
+        }
+      });
+    } catch (e) {
+      _showError(
+        'Could not pick files: ${e.toString().replaceAll("Exception: ", "")}',
+      );
+    }
+  }
+
+  void _removeFile(int index) {
+    setState(() => _pickedFiles.removeAt(index));
+  }
+
+  String _mimeFromExtension(String ext) {
+    switch (ext.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'txt':
+        return 'text/plain';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+  }
+
+  IconData _iconForMime(String mime) {
+    if (mime.startsWith('image/')) return Icons.image_outlined;
+    if (mime == 'application/pdf') return Icons.picture_as_pdf_outlined;
+    if (mime.contains('word')) return Icons.description_outlined;
+    return Icons.insert_drive_file_outlined;
+  }
+
+  // ── Submit — creates ticket then uploads attachments ───────────────────────
   Future<void> _submitTicket() async {
     setState(() {
       _typeError = _selectedTicketType == null;
@@ -214,8 +314,12 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
       _descriptionError = _descriptionController.text.trim().isEmpty;
     });
 
-    if (_typeError || _contactError || _subscriptionError || _descriptionError)
+    if (_typeError ||
+        _contactError ||
+        _subscriptionError ||
+        _descriptionError) {
       return;
+    }
 
     setState(() => _isSubmitting = true);
 
@@ -233,12 +337,15 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
           _selectedTicketType!['category']?.toString() ??
           '';
 
-      final subscriptionId =
-          _selectedSubscription!['id']?.toString() ??
-          _selectedSubscription!['subscription_id']?.toString() ??
-          '';
+      final subscriptionId = _extractSubscriptionId(_selectedSubscription!);
+      if (subscriptionId.isEmpty) {
+        setState(() {
+          _subscriptionError = true;
+        });
+        _showError('Selected subscription is invalid. Please re-select.');
+        return;
+      }
 
-      // Use `value` (int ID) from the contact — that's what the API returns
       final contactValue =
           _selectedContact!['value']?.toString() ??
           _selectedContact!['id']?.toString() ??
@@ -253,6 +360,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
           'subject': _subjectController.text.trim(),
       });
 
+      // ── Step 1: Create the ticket ──────────────────────────────────────────
       final response = await _client
           .post(
             Uri.parse('$_baseUrl/api/v1/tickets/'),
@@ -267,29 +375,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
 
       final decoded = json.decode(response.body);
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: _success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-                SizedBox(width: 10),
-                Text(
-                  'Ticket created successfully!',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        );
-        Navigator.pop(context, true);
-      } else {
+      if (response.statusCode != 200 && response.statusCode != 201) {
         final msg =
             decoded is Map
                 ? (decoded['message'] ??
@@ -297,7 +383,64 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                     'Failed to create ticket.')
                 : 'Failed to create ticket.';
         _showError(msg.toString());
+        return;
       }
+
+      // ── Step 2: Upload attachments if any ─────────────────────────────────
+      if (_pickedFiles.isNotEmpty) {
+        // Extract the new ticket ID from the response
+        final ticketId =
+            (decoded is Map
+                    ? (decoded['data']?['id'] ??
+                        decoded['data']?['ticket_id'] ??
+                        decoded['id'] ??
+                        decoded['ticket_id'])
+                    : null)
+                ?.toString() ??
+            '';
+
+        if (ticketId.isNotEmpty) {
+          final uploadResult = await ApiService.uploadAttachments(
+            ticketId: ticketId,
+            files: _pickedFiles,
+            bearerToken: token,
+          );
+
+          if (uploadResult['status'] != 'success') {
+            // Ticket was created — warn but don't block success
+            _showError(
+              'Ticket created, but attachment upload failed: ${uploadResult['message']}',
+            );
+          }
+        } else {
+          _showError(
+            'Ticket created, but could not determine ticket ID for attachments.',
+          );
+        }
+      }
+
+      // ── Success ────────────────────────────────────────────────────────────
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: _success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Text(
+                'Ticket created successfully!',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      );
+      Navigator.pop(context, true);
     } catch (e) {
       _showError(e.toString().replaceAll('Exception: ', ''));
     } finally {
@@ -360,11 +503,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     child: child,
   );
 
-  /// ─── THE FIX ───────────────────────────────────────────────────────────────
-  /// Flutter's DropdownButtonFormField renders menu items in a separate overlay
-  /// that does NOT inherit the widget-level `style`. To prevent white text on a
-  /// white/light background every DropdownMenuItem's child Text must carry an
-  /// explicit TextStyle with a dark color.
   Widget _dropdown<T extends Map<String, dynamic>>({
     required String hint,
     required IconData icon,
@@ -388,9 +526,8 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
             ),
           ),
           child: DropdownButtonFormField<T>(
-            value: value,
+            initialValue: value,
             isExpanded: true,
-            // ✅ style only affects the selected-value display inside the field
             style: _dropItemStyle,
             dropdownColor: _surface,
             icon: Icon(
@@ -421,7 +558,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                     child: Text(
                       labelBuilder(item),
                       overflow: TextOverflow.ellipsis,
-                      // ✅ explicit dark style so menu items are visible on white
                       style: _dropItemStyle,
                     ),
                   );
@@ -475,10 +611,11 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
             maxLines: maxLines,
             style: const TextStyle(color: _ink, fontSize: 14),
             onChanged: (_) {
-              if (hasError)
+              if (hasError) {
                 setState(() {
                   if (c == _descriptionController) _descriptionError = false;
                 });
+              }
             },
             decoration: InputDecoration(
               prefixIcon:
@@ -528,8 +665,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
       item['label']?.toString() ??
       '—';
 
-  /// Contact API returns { "value": int, "label": "Name" }
-  /// Always prefer `label`; fall back to name/email.
   String _contactLabel(Map<String, dynamic> item) {
     final label = item['label']?.toString() ?? '';
     if (label.isNotEmpty) return label;
@@ -539,26 +674,168 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     return name.isNotEmpty ? name : (email.isNotEmpty ? email : '—');
   }
 
-  /// Subscription: show `nickname` first, then fall back gracefully.
-  String _subscriptionLabel(Map<String, dynamic> item) {
-    final nickname = item['nickname']?.toString().trim() ?? '';
-    if (nickname.isNotEmpty) return nickname;
+  String _safeStr(Map<String, dynamic> item, String key) =>
+      (item[key] == null ? '' : item[key].toString()).trim();
 
-    final sln = item['service_line_number']?.toString().trim() ?? '';
+  String _subscriptionLabel(Map<String, dynamic> item) {
+    final nickname = _safeStr(item, 'nickname');
+    if (nickname.isNotEmpty) return nickname;
+    final sln = _safeStr(item, 'service_line_number');
     if (sln.isNotEmpty) {
-      final plan = item['plan_name']?.toString().trim() ?? '';
+      final plan = _safeStr(item, 'plan_name');
       return plan.isNotEmpty ? '$sln – $plan' : sln;
     }
-
     final plan =
-        item['plan_name']?.toString().trim() ??
-        item['name']?.toString().trim() ??
-        item['subscription_name']?.toString().trim() ??
-        '';
+        _safeStr(item, 'plan_name').isNotEmpty
+            ? _safeStr(item, 'plan_name')
+            : _safeStr(item, 'name').isNotEmpty
+            ? _safeStr(item, 'name')
+            : _safeStr(item, 'subscription_name');
     if (plan.isNotEmpty) return plan;
-
-    final id = item['id']?.toString() ?? '';
+    final id = _safeStr(item, 'id');
     return id.isNotEmpty ? 'Subscription #$id' : '—';
+  }
+
+  // ── Attachments section ────────────────────────────────────────────────────
+
+  Widget _buildAttachmentsSection() {
+    return _card(
+      child: Column(
+        children: [
+          // Drop zone (visual only on mobile; tap triggers picker)
+          GestureDetector(
+            onTap: _pickFiles,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              decoration: BoxDecoration(
+                color: _surfaceSubtle,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: _primary.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _primary.withOpacity(0.2)),
+                    ),
+                    child: const Icon(
+                      Icons.cloud_upload_outlined,
+                      color: _primary,
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Tap to select files',
+                    style: TextStyle(color: _inkSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Images, PDF, DOC, DOCX, TXT',
+                    style: TextStyle(color: _inkTertiary, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Choose Files button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _pickFiles,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _primary,
+                side: const BorderSide(color: _primary),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text(
+                'Choose Files',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+            ),
+          ),
+
+          // Selected files list
+          if (_pickedFiles.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Divider(color: _border, height: 1),
+            const SizedBox(height: 10),
+            ...List.generate(_pickedFiles.length, (i) {
+              final f = _pickedFiles[i];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: _primary.withOpacity(0.07),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        _iconForMime(f['mimeType'] as String),
+                        color: _primary,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            f['name'] as String,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _ink,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            _formatFileSize(f['size'] as int),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: _inkTertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _removeFile(i),
+                      icon: const Icon(
+                        Icons.close,
+                        size: 16,
+                        color: _inkTertiary,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
   }
 
   // ── Main build ─────────────────────────────────────────────────────────────
@@ -800,7 +1077,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                   icon: Icons.person_outline,
                   items: _contacts,
                   value: _selectedContact,
-                  // Uses `label` key from the API { value, label } shape
                   labelBuilder: _contactLabel,
                   hasError: _contactError,
                   errorText: 'Contact is required',
@@ -814,7 +1090,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
           ),
           const SizedBox(height: 20),
 
-          // Subscription — shows nickname
+          // Subscription
           _sectionLabel('SUBSCRIPTION'),
           _card(
             child: _dropdown<Map<String, dynamic>>(
@@ -822,7 +1098,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
               icon: Icons.router_outlined,
               items: _subscriptions,
               value: _selectedSubscription,
-              // Uses `nickname` as primary label
               labelBuilder: _subscriptionLabel,
               hasError: _subscriptionError,
               errorText: 'Subscription is required',
@@ -871,8 +1146,9 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                     controller: _descriptionController,
                     maxLines: 6,
                     onChanged: (_) {
-                      if (_descriptionError)
+                      if (_descriptionError) {
                         setState(() => _descriptionError = false);
+                      }
                     },
                     style: const TextStyle(color: _ink, fontSize: 14),
                     decoration: InputDecoration(
@@ -896,72 +1172,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
 
           // Attachments
           _sectionLabel('ATTACHMENTS'),
-          _card(
-            child: Column(
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  decoration: BoxDecoration(
-                    color: _surfaceSubtle,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _border),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: _primary.withOpacity(0.08),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: _primary.withOpacity(0.2)),
-                        ),
-                        child: const Icon(
-                          Icons.cloud_upload_outlined,
-                          color: _primary,
-                          size: 26,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Drag and drop file here to upload',
-                        style: TextStyle(color: _inkSecondary, fontSize: 13),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Images, PDF, DOC, DOCX, TXT',
-                        style: TextStyle(color: _inkTertiary, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _primary,
-                      side: const BorderSide(color: _primary),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text(
-                      'Choose Files',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildAttachmentsSection(),
           const SizedBox(height: 28),
 
           // Action buttons

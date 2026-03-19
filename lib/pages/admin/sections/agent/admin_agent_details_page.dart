@@ -60,9 +60,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
 
       final cd = r0['data'];
       final company =
-          cd is Map
-              ? Map<String, dynamic>.from(cd as Map)
-              : <String, dynamic>{};
+          cd is Map ? Map<String, dynamic>.from(cd) : <String, dynamic>{};
 
       List<Map<String, dynamic>> subs = [];
       if (r1['status'] == 'success') {
@@ -70,7 +68,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
         final list =
             d is List
                 ? d
-                : (d is Map && (d as Map)['data'] is List
+                : (d is Map && (d)['data'] is List
                     ? (d)['data'] as List
                     : <dynamic>[]);
         subs =
@@ -86,7 +84,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
         final list =
             d is List
                 ? d
-                : (d is Map && (d as Map)['data'] is List
+                : (d is Map && (d)['data'] is List
                     ? (d)['data'] as List
                     : <dynamic>[]);
         users =

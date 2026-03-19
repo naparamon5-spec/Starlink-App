@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'dart:io';
 import '../../../services/api_service.dart';
+import '../../change-password.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -173,53 +174,9 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
   }
 
   void _changePassword() {
-    showDialog(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            backgroundColor: _surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: const Text(
-              'Change Password',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            content: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _DialogField(
-                  label: 'Current Password',
-                  hint: 'Enter current password',
-                ),
-                SizedBox(height: 12),
-                _DialogField(label: 'New Password', hint: 'Enter new password'),
-                SizedBox(height: 12),
-                _DialogField(
-                  label: 'Confirm Password',
-                  hint: 'Confirm new password',
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: _inkSecondary),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _primary,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                ),
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Update'),
-              ),
-            ],
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminChangePasswordPage()),
     );
   }
 
@@ -599,7 +556,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
                 children: [
                   SwitchListTile(
                     value: _twoFactorEnabled,
-                    activeColor: _primary,
+                    activeThumbColor: _primary,
                     title: const Text(
                       'Two-Factor Authentication',
                       style: TextStyle(
@@ -653,7 +610,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
             _card(
               child: SwitchListTile(
                 value: _notificationsEnabled,
-                activeColor: _primary,
+                activeThumbColor: _primary,
                 title: const Text(
                   'Email Notifications',
                   style: TextStyle(

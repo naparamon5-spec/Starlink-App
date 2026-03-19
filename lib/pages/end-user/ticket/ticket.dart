@@ -29,23 +29,20 @@ class TicketScreen extends StatefulWidget {
 
 class _TicketScreenState extends State<TicketScreen> {
   final TextEditingController _searchController = TextEditingController();
+
+  /// Holds the API status `value` e.g. "open", "in_progress".
+  /// 'All' means no filter.
   String _selectedFilter = 'All';
+
   List<Map<String, dynamic>> _tickets = [];
   List<Map<String, dynamic>> _filteredTickets = [];
   bool _isLoading = true;
   Map<String, dynamic>? _selectedTicket;
   List<Map<String, dynamic>> _subscriptions = [];
 
-  // Updated filter options to match backend ticket_type values
-  final List<String> _filterOptions = [
-    'All',
-    'Billing',
-    'Connection Issue',
-    'Request for Off/On',
-    'Request for Reactivate',
-    'Request for Deactivate',
-    'Device/Kit/Router Issue',
-  ];
+  /// Each entry: { 'value': 'in_progress', 'label': 'In Progress' }
+  /// Populated entirely from the API — zero hardcoded statuses.
+  List<Map<String, dynamic>> _statusFilters = [];
 
   final List<String> _tableHeaders = [
     'Status',
@@ -58,7 +55,7 @@ class _TicketScreenState extends State<TicketScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSubscriptionsAndTickets();
+    _loadCategoriesAndTickets();
     _searchController.addListener(_handleSearch);
   }
 
@@ -69,22 +66,29 @@ class _TicketScreenState extends State<TicketScreen> {
     super.dispose();
   }
 
+  // ── Normalize raw API status value → display string ───────────────────────
+  // e.g. "in_progress" → "IN PROGRESS", "open" → "OPEN"
+  String _normalizeStatus(String raw) {
+    return raw.replaceAll('_', ' ').toUpperCase();
+  }
+
+  // ── Search + filter ───────────────────────────────────────────────────────
   void _handleSearch() {
     final query = _searchController.text.toLowerCase();
-    final selectedType = _selectedFilter;
 
     setState(() {
       _filteredTickets =
           _tickets.where((ticket) {
-            // Filter by ticket type
+            // Status filter — _selectedFilter holds raw API value e.g. "in_progress"
+            // ticket['Status'] is already normalized e.g. "IN PROGRESS"
             bool matchesFilter = true;
-            if (selectedType != 'All') {
-              matchesFilter =
-                  ticket['Ticket Type'].toString().toLowerCase() ==
-                  selectedType.toLowerCase();
+            if (_selectedFilter != 'All') {
+              final ticketStatus = ticket['Status']?.toString() ?? '';
+              final filterNormalized = _normalizeStatus(_selectedFilter);
+              matchesFilter = ticketStatus == filterNormalized;
             }
 
-            // Filter by search query
+            // Text search across table columns
             bool matchesQuery = true;
             if (query.isNotEmpty) {
               matchesQuery = _tableHeaders.any((header) {
@@ -98,35 +102,69 @@ class _TicketScreenState extends State<TicketScreen> {
     });
   }
 
+  // ── Load filters from API ─────────────────────────────────────────────────
+  Future<void> _loadCategoriesAndTickets() async {
+    try {
+      debugPrint('🔵 [FILTERS] Fetching ticket filters...');
+      final res = await ApiService.getTicketFilters();
+      debugPrint('🔵 [FILTERS] Raw response: $res');
+
+      // API response shape:
+      // { "data": { "statuses": [ { "value": "open", "label": "Open" }, ... ] } }
+      final data = res['data'];
+      final statuses = data is Map ? (data['statuses'] ?? []) : [];
+
+      if (statuses is List && statuses.isNotEmpty) {
+        final parsed =
+            statuses
+                .whereType<Map>()
+                .map(
+                  (s) => {
+                    'value': s['value']?.toString() ?? '',
+                    'label': s['label']?.toString() ?? '',
+                  },
+                )
+                .where((s) => s['value']!.isNotEmpty && s['label']!.isNotEmpty)
+                .toList();
+
+        debugPrint('✅ [FILTERS] Loaded ${parsed.length} statuses: $parsed');
+        setState(() => _statusFilters = parsed);
+      } else {
+        debugPrint('⚠️  [FILTERS] No statuses found in response');
+      }
+    } catch (e) {
+      debugPrint('🔴 [FILTERS] Exception: $e');
+    }
+
+    await _loadSubscriptionsAndTickets();
+  }
+
+  // ── Load subscriptions ────────────────────────────────────────────────────
   Future<void> _loadSubscriptionsAndTickets() async {
     try {
-      // FIX: getSubscriptions() returns List<dynamic>, not Map<String,dynamic>
       final subsList = await ApiService.getSubscriptions();
       _subscriptions = subsList.whereType<Map<String, dynamic>>().toList();
     } catch (e) {
-      // If subscriptions fail, continue with empty list so tickets still load
       _subscriptions = [];
     }
     await _loadTickets();
   }
 
+  // ── Load tickets ──────────────────────────────────────────────────────────
   Future<void> _loadTickets() async {
     if (!mounted) return;
-
     setState(() => _isLoading = true);
-    try {
-      // FIX: getTickets() throws on error, so wrap in try/catch properly
-      final response = await ApiService.getTickets();
 
+    try {
+      final response = await ApiService.getTickets();
       if (!mounted) return;
 
       setState(() {
         _tickets = List<Map<String, dynamic>>.from(
           response['data'].map((ticket) {
-            // Process attachments
+            // Attachments
             String attachmentsDisplay = 'No attachments';
             List<dynamic> attachments = [];
-
             if (ticket['attachments'] != null) {
               attachmentsDisplay = ticket['attachments'].toString();
               attachments = [
@@ -134,32 +172,17 @@ class _TicketScreenState extends State<TicketScreen> {
               ];
             }
 
-            // Map backend status to display status
-            String displayStatus = 'OPEN';
-            String backendStatus =
-                (ticket['status'] ?? 'open').toString().toLowerCase().trim();
+            // Normalize status from raw API value → uppercase display string
+            final rawStatus = (ticket['status'] ?? 'open').toString().trim();
+            final displayStatus = _normalizeStatus(rawStatus);
 
-            if (backendStatus == 'open' || backendStatus == 'opened') {
-              displayStatus = 'OPEN';
-            } else if (backendStatus == 'in progress' ||
-                backendStatus == 'in_progress' ||
-                backendStatus == 'inprogress') {
-              displayStatus = 'IN PROGRESS';
-            } else if (backendStatus == 'resolved') {
-              displayStatus = 'RESOLVED';
-            } else if (backendStatus == 'closed') {
-              displayStatus = 'CLOSED';
-            } else {
-              displayStatus = backendStatus.toUpperCase();
-            }
-
-            // Compose contact name
+            // Contact name
             String contactName =
                 ticket['contact_name']?.toString() ??
                 ticket['contact']?.toString() ??
                 'Not Assigned';
 
-            final processedTicket = {
+            return {
               'id': ticket['id'],
               'Status': displayStatus,
               'name': contactName,
@@ -183,11 +206,9 @@ class _TicketScreenState extends State<TicketScreen> {
                 ),
               },
             };
-
-            return processedTicket;
           }),
         );
-        _filteredTickets = _tickets;
+        _filteredTickets = List.from(_tickets);
         _isLoading = false;
       });
     } catch (e) {
@@ -268,7 +289,6 @@ class _TicketScreenState extends State<TicketScreen> {
 
   void _showTicketDetails(Map<String, dynamic> ticket) {
     final fullData = ticket['full_data'] as Map<String, dynamic>;
-
     debugPrint(fullData.toString());
 
     showDialog(
@@ -456,16 +476,13 @@ class _TicketScreenState extends State<TicketScreen> {
                                             attachment['file_name']
                                                 ?.toString() ??
                                             'Unknown file';
-
                                         final fileType =
                                             attachment['file_type']
                                                 ?.toString() ??
                                             fileName.split('.').last;
-
                                         final fileSize = _formatFileSize(
                                           attachment['file_size'],
                                         );
-
                                         final fileId =
                                             attachment['id']?.toString();
 
@@ -526,7 +543,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                         );
                                       }
                                       return const SizedBox.shrink();
-                                    }).toList(),
+                                    }),
                                   ] else ...[
                                     Row(
                                       children: [
@@ -592,13 +609,12 @@ class _TicketScreenState extends State<TicketScreen> {
             _filteredTickets = List.from(_tickets);
           }
         });
-
         await _loadTickets();
       }
     });
   }
 
-  /// Shared download helper used in both dialog and details screen
+  /// Shared download helper
   Future<void> _downloadAttachment(BuildContext ctx, String? fileId) async {
     if (fileId == null) {
       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -627,7 +643,6 @@ class _TicketScreenState extends State<TicketScreen> {
             fileName = matches.group(1)!;
           }
         }
-
         final directory = await getApplicationDocumentsDirectory();
         final file = File('${directory.path}/$fileName');
         await file.writeAsBytes(response.bodyBytes);
@@ -656,15 +671,25 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
-  Color _getStatusColor(String status) {
-    switch (status.toUpperCase()) {
-      case 'OPEN':
+  // ── Status chip color — keyed on API value via reverse-lookup ─────────────
+  Color _getStatusColor(String normalizedStatus) {
+    final match = _statusFilters.firstWhere(
+      (s) => _normalizeStatus(s['value'] ?? '') == normalizedStatus,
+      orElse: () => {},
+    );
+    final value =
+        match.isNotEmpty
+            ? match['value']?.toString() ?? ''
+            : normalizedStatus.toLowerCase().replaceAll(' ', '_');
+
+    switch (value) {
+      case 'open':
         return Colors.green;
-      case 'IN PROGRESS':
+      case 'in_progress':
         return Colors.orange;
-      case 'RESOLVED':
+      case 'resolved':
         return Colors.blue;
-      case 'CLOSED':
+      case 'closed':
         return Colors.red;
       default:
         return Colors.grey;
@@ -712,6 +737,7 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -734,6 +760,7 @@ class _TicketScreenState extends State<TicketScreen> {
       ),
       body: Column(
         children: [
+          // ── Search + status filter bar ──────────────────────────────
           Container(
             padding: const EdgeInsets.all(16.0),
             decoration: BoxDecoration(
@@ -748,6 +775,7 @@ class _TicketScreenState extends State<TicketScreen> {
             ),
             child: Row(
               children: [
+                // Search field
                 Expanded(
                   flex: 3,
                   child: Container(
@@ -776,6 +804,8 @@ class _TicketScreenState extends State<TicketScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
+
+                // ── Status filter — 100% from API, zero hardcoded ─────
                 Expanded(
                   flex: 1,
                   child: Container(
@@ -798,19 +828,24 @@ class _TicketScreenState extends State<TicketScreen> {
                           if (newValue != null) {
                             setState(() {
                               _selectedFilter = newValue;
-                              _handleSearch();
                             });
+                            _handleSearch();
                           }
                         },
-                        items:
-                            _filterOptions.map<DropdownMenuItem<String>>((
-                              String value,
-                            ) {
-                              return DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(value),
-                              );
-                            }).toList(),
+                        items: [
+                          // "All" is the only fixed option
+                          const DropdownMenuItem(
+                            value: 'All',
+                            child: Text('All'),
+                          ),
+                          // Rest come entirely from the API
+                          ..._statusFilters.map(
+                            (s) => DropdownMenuItem(
+                              value: s['value'], // e.g. "in_progress"
+                              child: Text(s['label']!), // e.g. "In Progress"
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -818,6 +853,8 @@ class _TicketScreenState extends State<TicketScreen> {
               ],
             ),
           ),
+
+          // ── Ticket table ────────────────────────────────────────────
           Expanded(
             child:
                 _isLoading
@@ -846,15 +883,17 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 }
 
+// ── Ticket Details Screen ─────────────────────────────────────────────────────
+
 class TicketDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> ticket;
   final List<Map<String, dynamic>> subscriptions;
 
   const TicketDetailsScreen({
-    Key? key,
+    super.key,
     required this.ticket,
     required this.subscriptions,
-  }) : super(key: key);
+  });
 
   @override
   _TicketDetailsScreenState createState() => _TicketDetailsScreenState();
@@ -941,7 +980,6 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
           '${ApiService.baseUrl}/api.php?action=download_attachment&attachment_id=$fileId',
         ),
       );
-
       if (response.statusCode == 200) {
         String? contentDisposition = response.headers['content-disposition'];
         String fileName = 'downloaded_file';
@@ -953,11 +991,9 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
             fileName = matches.group(1)!;
           }
         }
-
         final directory = await getApplicationDocumentsDirectory();
         final file = File('${directory.path}/$fileName');
         await file.writeAsBytes(response.bodyBytes);
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1011,7 +1047,6 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with Ticket Type and Status
               Row(
                 children: [
                   Expanded(
@@ -1058,7 +1093,6 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                 ],
               ),
               const SizedBox(height: 32),
-              // Ticket Information
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
@@ -1120,7 +1154,6 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              // Attachments Section
               _buildAttachmentsSection(),
             ],
           ),
@@ -1164,7 +1197,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (attachments is List) ...[
-                      ...(attachments as List).map((attachment) {
+                      ...(attachments).map((attachment) {
                         String fileName;
                         String fileType = '';
                         String fileSize = '';
@@ -1236,7 +1269,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                             ],
                           ),
                         );
-                      }).toList(),
+                      }),
                     ] else if (attachments is String) ...[
                       Row(
                         children: [

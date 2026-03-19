@@ -3027,8 +3027,8 @@ class _SettingsTile extends StatelessWidget {
     required this.label,
     required this.subtitle,
     this.onTap, // ✅ ADD THIS
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -4,7 +4,7 @@ import 'dart:math' as math;
 // ─── End Users (index 3) ──────────────────────────────────────────────────────
 
 class EndUsersPage extends StatelessWidget {
-  const EndUsersPage();
+  const EndUsersPage({super.key});
 
   static const _users = [
     UserItem(
@@ -147,7 +147,7 @@ class UserItem {
 
 class UserCard extends StatelessWidget {
   final UserItem data;
-  const UserCard({required this.data});
+  const UserCard({super.key, required this.data});
 
   Color get _planColor =>
       data.plan == 'Enterprise'

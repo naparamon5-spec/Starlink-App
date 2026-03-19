@@ -1,12 +1,24 @@
 import 'package:flutter/material.dart';
-import '../../../services/api_service.dart';
-import '../../../services/notification_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:typed_data';
+import '../../../services/api_service.dart';
+import '../../../utils/file_download/file_downloader.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+// ── Design tokens — MATCHING home screen exactly ──────────────────────────────
+const _brandRed = Color(0xFFEB1E23);
+const _inProgress = Color(0xFF0F62FE);
+const _success = Color(0xFF24A148); // matches home _success
+const _warning = Color(0xFFFF832B); // matches home _warning (orange)
+const _ink = Color(0xFF000000);
+const _inkSecondary = Color(0xFF374151);
+const _inkTertiary = Color(0xFF8A96A3);
+const _surface = Color(0xFFFFFFFF);
+const _surfaceSubtle = Color(0xFFF5F7FA);
+const _border = Color(0xFFE8ECF0);
 
 class CustomerViewScreen extends StatefulWidget {
   final Map<String, dynamic> ticket;
-
   const CustomerViewScreen({super.key, required this.ticket});
 
   @override
@@ -14,473 +26,407 @@ class CustomerViewScreen extends StatefulWidget {
 }
 
 class _CustomerViewScreenState extends State<CustomerViewScreen> {
-  final TextEditingController _searchController = TextEditingController();
-  String _selectedFilter = 'All';
-  List<Map<String, dynamic>> _tickets = [];
-  List<Map<String, dynamic>> _filteredTickets = [];
-  bool _isLoading = true;
-  int? _userId;
-  bool _isAccepted = false;
+  bool _isActionLoading = false;
 
-  // Updated filter options to match backend ticket_type values
-  final List<String> _filterOptions = [
-    'All',
-    'Billing',
-    'Connection Issue',
-    'Request for Off/On',
-    'Request for Reactivate',
-    'Request for Deactivate',
-    'Device/Kit/Router Issue',
-  ];
+  Map<String, dynamic>? _fetchedTicket;
+  bool _isFetchingDetails = true;
+  String? _fetchError;
+
+  List<dynamic> _attachments = [];
+  String? _attachmentsError;
+  final Map<String, bool> _downloadingMap = {};
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-    _searchController.addListener(_handleSearch);
+    _loadTicketDetails();
   }
 
-  @override
-  void didUpdateWidget(CustomerViewScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Refresh tickets when the widget updates
-    if (widget.ticket != oldWidget.ticket) {
-      _loadTickets();
-    }
-  }
-
-  @override
-  void dispose() {
-    _searchController.removeListener(_handleSearch);
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadUserData() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getInt('user_id');
-      if (userId != null) {
-        setState(() {
-          _userId = userId;
-        });
-        _loadTickets();
-      }
-    } catch (e) {
-      print('Error loading user data: $e');
-    }
-  }
-
-  void _handleSearch() {
-    final query = _searchController.text.toLowerCase();
-    final selectedType = _selectedFilter;
-
+  Future<void> _loadTicketDetails() async {
+    if (!mounted) return;
     setState(() {
-      _filteredTickets =
-          _tickets.where((ticket) {
-            // Filter by ticket type
-            bool matchesFilter = true;
-            if (selectedType != 'All') {
-              matchesFilter =
-                  ticket['type'].toString().toLowerCase() ==
-                  selectedType.toLowerCase();
-            }
+      _isFetchingDetails = true;
+      _fetchError = null;
+      _attachments = [];
+      _attachmentsError = null;
+    });
+    try {
+      final ticketId =
+          widget.ticket['id']?.toString() ??
+          widget.ticket['full_data']?['id']?.toString() ??
+          '';
+      if (ticketId.isEmpty) {
+        setState(() {
+          _isFetchingDetails = false;
+          _fetchError = 'Ticket ID not found.';
+        });
+        return;
+      }
 
-            // Filter by search query
-            bool matchesQuery = true;
-            if (query.isNotEmpty) {
-              matchesQuery = ticket.values.any(
-                (value) => value.toString().toLowerCase().contains(query),
-              );
-            }
+      final results = await Future.wait([
+        ApiService.getTicketById(ticketId),
+        ApiService.getTicketAttachments(ticketId),
+      ]);
+      if (!mounted) return;
 
-            return matchesFilter && matchesQuery;
-          }).toList();
+      Map<String, dynamic>? ticket;
+      String? ticketError;
+      final ticketRes = results[0];
+      if (ticketRes['status'] == 'success') {
+        final d = ticketRes['data'];
+        ticket = d is Map ? Map<String, dynamic>.from(d) : null;
+      } else {
+        ticketError =
+            ticketRes['message']?.toString() ??
+            'Failed to load ticket details.';
+      }
+
+      List<dynamic> attachments = [];
+      String? attachmentsErr;
+      final attRes = results[1];
+      if (attRes['status'] == 'success') {
+        attachments = _extractList(attRes['data']);
+        if (attachments.isEmpty) attachments = _extractList(attRes['raw']);
+      } else {
+        attachmentsErr =
+            attRes['message']?.toString() ?? 'Failed to load attachments.';
+      }
+
+      setState(() {
+        _fetchedTicket = ticket;
+        _fetchError = ticketError;
+        _attachments = attachments;
+        _attachmentsError = attachmentsErr;
+        _isFetchingDetails = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _fetchError = 'Error loading ticket: $e';
+        _isFetchingDetails = false;
+      });
+    }
+  }
+
+  // ── Status helpers ────────────────────────────────────────────────────────
+
+  String get _currentStatus {
+    final raw =
+        _fetchedTicket?['status']?.toString() ??
+        widget.ticket['full_data']?['status']?.toString() ??
+        widget.ticket['status']?.toString() ??
+        'OPEN';
+    return _normalizeStatus(raw);
+  }
+
+  String _normalizeStatus(String raw) {
+    switch (raw.toLowerCase().trim()) {
+      case 'open':
+      case 'opened':
+        return 'OPEN';
+      case 'in_progress':
+      case 'in progress':
+      case 'inprogress':
+        return 'IN PROGRESS';
+      case 'resolved':
+      case 'done':
+      case 'completed':
+        return 'RESOLVED';
+      case 'closed':
+      case 'close':
+        return 'CLOSED';
+      default:
+        return raw.toUpperCase();
+    }
+  }
+
+  void _updateLocalStatus(String newStatus) {
+    setState(() {
+      widget.ticket['status'] = newStatus;
+      if (widget.ticket['full_data'] != null) {
+        widget.ticket['full_data']['status'] = newStatus;
+      }
+      if (_fetchedTicket != null) _fetchedTicket!['status'] = newStatus;
     });
   }
 
-  Future<void> _loadTickets() async {
-    if (!mounted || _userId == null) return;
+  // ── Status color — aligned with home screen tokens ────────────────────────
+  Color _statusColor(String s) {
+    switch (s.toUpperCase()) {
+      case 'OPEN':
+        return _warning; // orange  0xFFFF832B ✓
+      case 'IN PROGRESS':
+        return _inProgress; // blue    0xFF0F62FE ✓
+      case 'RESOLVED':
+        return _success; // green   0xFF24A148 ✓
+      case 'CLOSED':
+        return const Color(0xFFA8A8A8); // grey ✓
+      default:
+        return const Color(0xFF94A3B8);
+    }
+  }
 
-    setState(() => _isLoading = true);
+  // ── Timeline helpers ──────────────────────────────────────────────────────
+
+  IconData _activityIcon(String? action) {
+    final v = (action ?? '').toLowerCase();
+    if (v.contains('creat')) return Icons.add_circle_outline_rounded;
+    if (v.contains('updat') || v.contains('edit')) return Icons.edit_outlined;
+    if (v.contains('resolv')) return Icons.check_circle_outline_rounded;
+    if (v.contains('close') || v.contains('clos')) return Icons.cancel_outlined;
+    if (v.contains('comment') || v.contains('note')) {
+      return Icons.comment_outlined;
+    }
+    if (v.contains('assign')) return Icons.person_add_alt_outlined;
+    if (v.contains('status') || v.contains('chang')) {
+      return Icons.swap_horiz_rounded;
+    }
+    return Icons.history_toggle_off_outlined;
+  }
+
+  Color _activityColor(String? action) {
+    final v = (action ?? '').toLowerCase();
+    if (v.contains('creat')) return _success;
+    if (v.contains('resolv')) return _success;
+    if (v.contains('close')) return _warning;
+    if (v.contains('comment') || v.contains('note')) {
+      return const Color(0xFF6366F1);
+    }
+    if (v.contains('assign')) return _brandRed;
+    if (v.contains('status') || v.contains('chang')) return _inProgress;
+    return const Color(0xFF94A3B8);
+  }
+
+  String _timeAgo(String? raw) {
+    if (raw == null || raw.isEmpty || raw == 'null') return '';
     try {
-      final response = await ApiService.getTickets();
+      final dt = DateTime.parse(raw).toLocal();
+      final diff = DateTime.now().difference(dt);
+      if (diff.inSeconds < 60) return 'just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      if (diff.inDays < 7) return '${diff.inDays}d ago';
+      return _formatDate(raw);
+    } catch (_) {
+      return '';
+    }
+  }
 
-      if (response['status'] == 'success' && mounted) {
-        setState(() {
-          _tickets = List<Map<String, dynamic>>.from(
-            response['data']
-                .where((ticket) {
-                  // Show tickets where this user is the contact and status is DONE, COMPLETED, or CLOSED
-                  final status =
-                      ticket['status']?.toString()?.toLowerCase() ?? '';
-                  return ticket['contact'] == _userId &&
-                      (status == 'done' ||
-                          status == 'completed' ||
-                          status == 'closed');
-                })
-                .map((ticket) {
-                  String attachmentsDisplay = 'No attachments';
-                  if (ticket['attachments'] != null &&
-                      ticket['attachments'].isNotEmpty) {
-                    if (ticket['attachments'] is List) {
-                      final fileNames =
-                          (ticket['attachments'] as List)
-                              .where((attachment) => attachment != null)
-                              .map((attachment) {
-                                if (attachment is Map) {
-                                  return attachment['name']?.toString() ?? '';
-                                }
-                                return '';
-                              })
-                              .where((name) => name.isNotEmpty)
-                              .toList();
-                      attachmentsDisplay =
-                          fileNames.isNotEmpty
-                              ? fileNames.join(', ')
-                              : 'No attachments';
-                    } else if (ticket['attachments'] is String) {
-                      attachmentsDisplay = ticket['attachments'].toString();
-                    }
-                  }
+  String _formatDate(String? raw) {
+    if (raw == null || raw.isEmpty || raw == 'null') return '—';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final m = dt.minute.toString().padLeft(2, '0');
+      final period = dt.hour >= 12 ? 'PM' : 'AM';
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}  $h:$m $period';
+    } catch (_) {
+      return raw;
+    }
+  }
 
-                  // Map backend status to display status
-                  String displayStatus = 'OPEN';
-                  String backendStatus =
-                      (ticket['status'] ?? 'open')
-                          .toString()
-                          .toLowerCase()
-                          .trim();
+  String _str(dynamic v, {String fallback = '—'}) {
+    if (v == null || v.toString() == 'null' || v.toString().isEmpty) {
+      return fallback;
+    }
+    return v.toString();
+  }
 
-                  if (backendStatus == 'open' || backendStatus == 'opened') {
-                    displayStatus = 'OPEN';
-                  } else if (backendStatus == 'in progress' ||
-                      backendStatus == 'in_progress' ||
-                      backendStatus == 'inprogress') {
-                    displayStatus = 'IN PROGRESS';
-                  } else if (backendStatus == 'resolved' ||
-                      backendStatus == 'done' ||
-                      backendStatus == 'completed') {
-                    displayStatus = 'RESOLVED';
-                  } else if (backendStatus == 'closed' ||
-                      backendStatus == 'close') {
-                    displayStatus = 'CLOSED';
-                  } else {
-                    displayStatus = backendStatus.toUpperCase();
-                  }
+  String _resolveValue(List<String?> candidates, {String fallback = 'N/A'}) {
+    for (final v in candidates) {
+      if (v != null && v.isNotEmpty && v != 'null') return v;
+    }
+    return fallback;
+  }
 
-                  return {
-                    'id': ticket['id'],
-                    'type': ticket['type'] ?? 'N/A',
-                    'status': displayStatus,
-                    'subscription': ticket['subscription'] ?? 'N/A',
-                    'description': ticket['description'] ?? 'No description',
-                    'created_at': _formatDate(ticket['created_at']),
-                    'attachments': attachmentsDisplay,
-                    'full_data': {
-                      ...ticket,
-                      'created_at': _formatDate(ticket['created_at']),
-                      'attachments': ticket['attachments'] ?? [],
-                      'status': displayStatus,
-                    },
-                  };
-                }),
-          );
-          _filteredTickets = _tickets;
-          _isLoading = false;
-        });
-      } else {
-        throw Exception(response['message'] ?? 'Failed to load tickets');
+  String _prettifyValue(String v) {
+    switch (v.toLowerCase()) {
+      case 'in_progress':
+        return 'In Progress';
+      case 'open':
+        return 'Open';
+      case 'closed':
+        return 'Closed';
+      case 'resolved':
+        return 'Resolved';
+      default:
+        return v.isNotEmpty ? v[0].toUpperCase() + v.substring(1) : v;
+    }
+  }
+
+  List<dynamic> _extractList(dynamic d) {
+    if (d is List) return d;
+    if (d is Map) {
+      for (final key in [
+        'data',
+        'attachments',
+        'items',
+        'records',
+        'results',
+        'list',
+      ]) {
+        final v = d[key];
+        if (v is List) return v;
+        if (v is Map) {
+          final inner = _extractList(v);
+          if (inner.isNotEmpty) return inner;
+        }
       }
-    } catch (e) {
-      print('Error loading tickets: $e');
-      if (!mounted) return;
-      setState(() {
-        _tickets = [];
-        _filteredTickets = [];
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading tickets: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    }
+    return [];
+  }
+
+  Color _extColor(String ext) {
+    switch (ext) {
+      case 'pdf':
+        return _brandRed;
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+      case 'gif':
+      case 'webp':
+        return _success;
+      case 'doc':
+      case 'docx':
+        return _inProgress;
+      case 'xls':
+      case 'xlsx':
+        return _success;
+      case 'zip':
+      case 'rar':
+        return _warning;
+      default:
+        return const Color(0xFF6366F1);
     }
   }
 
-  String _formatDate(String? dateStr) {
-    if (dateStr == null) return 'N/A';
-    try {
-      final date = DateTime.parse(dateStr);
-      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} '
-          '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } catch (e) {
-      return dateStr;
-    }
-  }
+  // ── Actions ───────────────────────────────────────────────────────────────
+  //
+  // NOTE: Accept / Resolve / Close are ADMIN actions.
+  // Customers can only VIEW their tickets — the action bar is intentionally
+  // hidden for all customer-created tickets (see build() below).
+  // These methods are kept in case a future role distinction is needed.
 
   Future<void> _acceptTicket() async {
+    setState(() => _isActionLoading = true);
     try {
       final response = await ApiService.updateTicketStatus(
         widget.ticket['id'].toString(),
-        'in progress',
+        'in_progress',
       );
-
       if (response['status'] == 'success') {
-        setState(() {
-          _isAccepted = true;
-          widget.ticket['status'] = 'IN PROGRESS';
-          if (widget.ticket['full_data'] != null) {
-            widget.ticket['full_data']['status'] = 'IN PROGRESS';
-          }
-        });
+        _updateLocalStatus('IN PROGRESS');
+        await _setTicketInProgress(widget.ticket['id'].toString());
         await _saveInProgressTicketData(widget.ticket);
-
-        // Store notification in the database for ticket acceptance
-        print('DEBUG: Ticket object: ${widget.ticket}');
-        final recipientUserId =
-            widget.ticket['user_id'] ??
-            (widget.ticket['full_data'] != null
-                ? widget.ticket['full_data']['user_id']
-                : null) ??
-            widget.ticket['contact'] ??
-            widget.ticket['customer_id'];
-        print('DEBUG: Using recipientUserId: $recipientUserId');
-        final acceptancePayload = {
-          'user_id': recipientUserId,
-          'title': 'Ticket Accepted',
-          'message':
-              'Ticket #${widget.ticket['id']} (${widget.ticket['type']}) has been accepted by ${widget.ticket['contact_name'] ?? 'Customer'}',
-          'type': 'ticket_accepted',
-          'icon': 'check_circle',
-          'color': '#4CAF50',
-          'data': {
-            'ticket_id': widget.ticket['id'],
-            'ticket_type': widget.ticket['type'],
-            'customer_name': widget.ticket['contact_name'],
-            'action': 'ticket_accepted',
-          },
-        };
-        print(
-          'DEBUG: Acceptance notification payload: ' +
-              acceptancePayload.toString(),
-        );
-        // await NotificationService.createCustomerNotification(acceptancePayload);
-
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ticket accepted successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          // Pop back to the ticket screen and trigger a refresh with the new status
+          _showSnack('Ticket accepted successfully');
           Navigator.pop(context, {
             'status': 'IN PROGRESS',
             'id': widget.ticket['id'].toString(),
           });
-
-          await _setTicketInProgress(widget.ticket['id'].toString());
         }
       } else {
         throw Exception(response['message'] ?? 'Failed to accept ticket');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error accepting ticket: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (mounted) _showSnack('Error accepting ticket: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isActionLoading = false);
     }
   }
 
   Future<void> _resolveTicket() async {
+    setState(() => _isActionLoading = true);
     try {
       final response = await ApiService.updateTicketStatus(
         widget.ticket['id'].toString(),
         'resolved',
       );
-
       if (response['status'] == 'success') {
-        setState(() {
-          widget.ticket['status'] = 'RESOLVED';
-          if (widget.ticket['full_data'] != null) {
-            widget.ticket['full_data']['status'] = 'RESOLVED';
-          }
-        });
-
-        // Store notification in the database for ticket resolution
-        print('DEBUG: Ticket object: ${widget.ticket}');
-        final resolveRecipientUserId =
-            widget.ticket['user_id'] ??
-            (widget.ticket['full_data'] != null
-                ? widget.ticket['full_data']['user_id']
-                : null) ??
-            widget.ticket['contact'] ??
-            widget.ticket['customer_id'];
-        print('DEBUG: Using recipientUserId: $resolveRecipientUserId');
-        final resolvePayload = {
-          'user_id': resolveRecipientUserId,
-          'title': 'Ticket Resolved',
-          'message':
-              'Ticket #${widget.ticket['id']} (${widget.ticket['type']}) has been resolved by ${widget.ticket['contact_name'] ?? 'Customer'}',
-          'type': 'ticket_resolved',
-          'icon': 'task_alt',
-          'color': '#2196F3',
-          'data': {
-            'ticket_id': widget.ticket['id'],
-            'ticket_type': widget.ticket['type'],
-            'customer_name': widget.ticket['contact_name'],
-            'action': 'ticket_resolved',
-          },
-        };
-        print(
-          'DEBUG: Resolve notification payload: ' + resolvePayload.toString(),
-        );
-        // await NotificationService.createCustomerNotification(resolvePayload);
-
+        _updateLocalStatus('RESOLVED');
+        await _removeTicketInProgress(widget.ticket['id'].toString());
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ticket marked as resolved successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          // Pop back to the ticket screen with updated status and force refresh
+          _showSnack('Ticket resolved successfully');
           Navigator.pop(context, {
             'status': 'RESOLVED',
             'id': widget.ticket['id'].toString(),
-            'shouldRefresh': true,
-            'forceRefresh': true,
           });
-
-          await _removeTicketInProgress(widget.ticket['id'].toString());
         }
       } else {
         throw Exception(response['message'] ?? 'Failed to resolve ticket');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error resolving ticket: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (mounted) _showSnack('Error resolving ticket: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isActionLoading = false);
     }
   }
 
   Future<void> _closeTicket() async {
+    setState(() => _isActionLoading = true);
     try {
       final response = await ApiService.updateTicketStatus(
         widget.ticket['id'].toString(),
         'closed',
       );
-
       if (response['status'] == 'success') {
-        setState(() {
-          widget.ticket['status'] = 'CLOSED';
-          if (widget.ticket['full_data'] != null) {
-            widget.ticket['full_data']['status'] = 'closed';
-          }
-        });
-
-        // Store notification in the database for ticket closure
-        print('DEBUG: Ticket object: ${widget.ticket}');
-        final closeRecipientUserId =
-            widget.ticket['user_id'] ??
-            (widget.ticket['full_data'] != null
-                ? widget.ticket['full_data']['user_id']
-                : null) ??
-            widget.ticket['contact'] ??
-            widget.ticket['customer_id'];
-        print('DEBUG: Using recipientUserId: $closeRecipientUserId');
-        final closePayload = {
-          'user_id': closeRecipientUserId,
-          'title': 'Ticket Closed',
-          'message':
-              'Ticket #${widget.ticket['id']} (${widget.ticket['type']}) has been closed by ${widget.ticket['contact_name'] ?? 'Customer'}',
-          'type': 'ticket_closed',
-          'icon': 'cancel',
-          'color': '#F44336',
-          'data': {
-            'ticket_id': widget.ticket['id'],
-            'ticket_type': widget.ticket['type'],
-            'customer_name': widget.ticket['contact_name'],
-            'action': 'ticket_closed',
-          },
-        };
-        print('DEBUG: Close notification payload: ' + closePayload.toString());
-        // await NotificationService.createCustomerNotification(closePayload);
-
+        _updateLocalStatus('CLOSED');
+        await _removeTicketInProgress(widget.ticket['id'].toString());
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ticket closed successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          // Pop back to the ticket screen and trigger a refresh
+          _showSnack('Ticket closed successfully');
           Navigator.pop(context, {
             'status': 'CLOSED',
             'id': widget.ticket['id'].toString(),
           });
-
-          await _removeTicketInProgress(widget.ticket['id'].toString());
         }
       } else {
         throw Exception(response['message'] ?? 'Failed to close ticket');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error closing ticket: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (mounted) _showSnack('Error closing ticket: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isActionLoading = false);
     }
   }
 
-  Future<void> _updateTicketStatus(String ticketId, String newStatus) async {
-    try {
-      final response = await ApiService.updateTicketStatus(ticketId, newStatus);
-      if (response['status'] == 'success') {
-        setState(() {
-          widget.ticket['status'] = newStatus.toUpperCase();
-          if (widget.ticket['full_data'] != null) {
-            widget.ticket['full_data']['status'] = newStatus;
-          }
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ticket status updated successfully'),
-              backgroundColor: Colors.green,
+  void _showSnack(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: Colors.white,
+              size: 18,
             ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating ticket status: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+            const SizedBox(width: 10),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isError ? _brandRed : _success,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
+
+  // ── SharedPreferences helpers ─────────────────────────────────────────────
 
   Future<void> _saveInProgressTicketIds(List<String> ids) async {
     final prefs = await SharedPreferences.getInstance();
@@ -493,7 +439,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   }
 
   Future<void> _setTicketInProgress(String ticketId) async {
-    List<String> ids = await _getInProgressTicketIds();
+    final ids = await _getInProgressTicketIds();
     if (!ids.contains(ticketId)) {
       ids.add(ticketId);
       await _saveInProgressTicketIds(ids);
@@ -501,16 +447,14 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   }
 
   Future<void> _removeTicketInProgress(String ticketId) async {
-    List<String> ids = await _getInProgressTicketIds();
+    final ids = await _getInProgressTicketIds();
     ids.remove(ticketId);
     await _saveInProgressTicketIds(ids);
   }
 
   Future<void> _saveInProgressTicketData(Map<String, dynamic> ticket) async {
     final prefs = await SharedPreferences.getInstance();
-    List<String> rawList =
-        prefs.getStringList('in_progress_tickets_data') ?? [];
-    // Remove any existing entry for this ticket
+    final rawList = prefs.getStringList('in_progress_tickets_data') ?? [];
     rawList.removeWhere((item) {
       final data = jsonDecode(item);
       return data['id'].toString() == ticket['id'].toString();
@@ -519,362 +463,1177 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
     await prefs.setStringList('in_progress_tickets_data', rawList);
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final ticket = widget.ticket;
-    final fullData = ticket['full_data'] as Map<String, dynamic>;
-    String status = fullData['status']?.toString().toUpperCase() ?? 'OPEN';
-    if (status.trim().isEmpty) status = 'OPEN';
-    print('Ticket status in UI: $status');
+    final passedFull =
+        (widget.ticket['full_data'] as Map<String, dynamic>?) ?? widget.ticket;
+    final data = _fetchedTicket ?? passedFull;
+
+    final status = _currentStatus;
+    final statusColor = _statusColor(status);
+
+    final String ticketId = _str(data['id'] ?? widget.ticket['id']);
+    final String subject = _resolveValue([
+      data['subject']?.toString(),
+      passedFull['subject']?.toString(),
+      widget.ticket['Subscription']?.toString(),
+    ], fallback: 'Ticket #$ticketId');
+
+    final String ticketType = _resolveValue([
+      data['ticket_type']?.toString(),
+      data['type']?.toString(),
+      widget.ticket['Ticket Type']?.toString(),
+    ]);
+
+    final String contact = _resolveValue([
+      data['contact_name']?.toString(),
+      data['created_by']?.toString(),
+      data['requester']?.toString(),
+      widget.ticket['Contact']?.toString(),
+    ]);
+
+    final String createdAt = _resolveValue([
+      data['created_at']?.toString(),
+      passedFull['created_at']?.toString(),
+      widget.ticket['Created At']?.toString(),
+    ]);
+
+    final String description = _resolveValue([
+      data['description']?.toString(),
+      passedFull['description']?.toString(),
+      widget.ticket['Description']?.toString(),
+    ], fallback: 'No description provided.');
+
+    final dynamic rawTimeline = data['timeline'];
+    final List<dynamic> timeline = rawTimeline is List ? rawTimeline : [];
+
+    final dynamic rawAttachments =
+        data['attachments'] ?? passedFull['attachments'];
+    final List attachments =
+        _attachments.isNotEmpty
+            ? _attachments
+            : (rawAttachments is List ? rawAttachments : []);
+
+    // ── Determine if action bar should be shown ───────────────────────────
+    // Customers create tickets and should NOT be able to accept/resolve/close
+    // their own tickets — those are admin-only actions.
+    // We detect "customer-created" by checking the role stored in SharedPrefs.
+    // Since this screen is always in the customer flow, we simply hide the bar.
+    const bool isCustomerView = true; // always true in this screen
 
     return Scaffold(
+      backgroundColor: _surfaceSubtle,
       appBar: AppBar(
-        title: const Text('Ticket Details'),
-        centerTitle: true,
-        elevation: 2,
-        backgroundColor: const Color(0xFF133343),
-        foregroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
+        backgroundColor: _surface,
+        foregroundColor: _ink,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildDetailItem('Ticket Type', fullData['type'] ?? 'N/A'),
-            const SizedBox(height: 16),
-            _buildDetailItem('Subscription', fullData['subscription'] ?? 'N/A'),
-            const SizedBox(height: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Status',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF133343),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(status).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _getStatusColor(status)),
-                  ),
-                  child: Text(
-                    status,
-                    style: TextStyle(
-                      color: _getStatusColor(status),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildDetailItem('Created At', fullData['created_at'] ?? 'N/A'),
-            const SizedBox(height: 24),
-            const Text(
-              'Description',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF133343),
+            Text(
+              subject,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: _ink,
               ),
             ),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: Text(
-                fullData['description'] ?? 'No description',
-                style: const TextStyle(fontSize: 14),
-              ),
+            Text(
+              'Ticket #$ticketId',
+              style: const TextStyle(fontSize: 11, color: _inkTertiary),
             ),
-            if (fullData['attachments'] != null &&
-                fullData['attachments'].toString().isNotEmpty) ...[
-              const SizedBox(height: 24),
-              const Text(
-                'Attachments',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF133343),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (fullData['attachments'] is List) ...[
-                      ...(fullData['attachments'] as List).map((attachment) {
-                        if (attachment is Map) {
-                          final fileName =
-                              attachment['name']?.toString() ?? 'Unknown file';
-                          final fileType = attachment['type']?.toString() ?? '';
-                          final fileSize = _formatFileSize(
-                            attachment['size'] as int?,
-                          );
-
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _getFileIcon(fileType),
-                                  color: Theme.of(context).primaryColor,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        fileName,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      if (fileSize.isNotEmpty)
-                                        Text(
-                                          fileSize,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.download,
-                                    color: Color(0xFF133343),
-                                  ),
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Download functionality coming soon',
-                                        ),
-                                        duration: Duration(seconds: 2),
-                                      ),
-                                    );
-                                  },
-                                  tooltip: 'Download file',
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      }).toList(),
-                    ] else ...[
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.attach_file,
-                            color: Theme.of(context).primaryColor,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              fullData['attachments'].toString(),
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.download,
-                              color: Color(0xFF133343),
-                            ),
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Download functionality coming soon',
-                                  ),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            },
-                            tooltip: 'Download file',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 24),
-            if (!_isAccepted && status == 'OPEN')
-              Center(
-                child: ElevatedButton(
-                  onPressed: _acceptTicket,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF133343),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 16,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text(
-                    'Accept Ticket',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            if ((_isAccepted || status == 'IN PROGRESS') &&
-                status != 'RESOLVED' &&
-                status != 'CLOSED') ...[
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+          ],
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh_rounded, color: _brandRed, size: 20),
+            onPressed: _isFetchingDetails ? null : _loadTicketDetails,
+            tooltip: 'Refresh',
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: _border),
+        ),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadTicketDetails,
+        color: _brandRed,
+        // ── No Stack/Positioned needed — no action bar for customers ──────
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          children: [
+            // ── Ticket Info Card ──────────────────────────────────────────
+            _Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ElevatedButton(
-                    onPressed: _resolveTicket,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'Resolve Ticket',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                  // Subject + status badge
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Subject',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: _inkTertiary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                subject,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: _ink,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _StatusBadge(label: status, color: statusColor),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: _closeTicket,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                  const SizedBox(height: 12),
+                  const _HDivider(),
+
+                  // Type chip
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: _InfoChip(
+                      icon: Icons.label_outline_rounded,
+                      label: 'Type',
+                      value: ticketType,
+                      color: const Color(0xFF6366F1),
                     ),
-                    child: const Text(
-                      'Close Ticket',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                  ),
+                  const SizedBox(height: 12),
+                  const _HDivider(),
+
+                  // Description
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Description',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: _inkTertiary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Text(
+                            description,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: _inkSecondary,
+                              height: 1.55,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const _HDivider(),
+
+                  // KV rows
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: Column(
+                      children: [
+                        _KVRow(label: 'Contact', value: contact),
+                        const SizedBox(height: 8),
+                        _KVRow(
+                          label: 'Created At',
+                          value: _formatDate(createdAt),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ],
+            ),
+
+            const SizedBox(height: 14),
+
+            // ── Attachments Card ──────────────────────────────────────────
+            _Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: _warning.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.attach_file_rounded,
+                            color: _warning,
+                            size: 17,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Attachments',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: _ink,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (attachments.isNotEmpty)
+                          _CountBadge(
+                            count: attachments.length,
+                            color: _warning,
+                          ),
+                      ],
+                    ),
+                  ),
+                  const _HDivider(),
+                  if (attachments.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            color: _inkTertiary,
+                            size: 16,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'No attachments',
+                            style: TextStyle(color: _inkTertiary, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                      itemCount: attachments.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final att = attachments[i];
+                        if (att is! Map) return const SizedBox.shrink();
+                        final name = _str(
+                          att['name'] ?? att['filename'] ?? att['file_name'],
+                          fallback: 'Unknown file',
+                        );
+                        final ext =
+                            name.contains('.')
+                                ? name.split('.').last.toLowerCase()
+                                : '';
+                        final size = _str(
+                          att['size'] ?? att['file_size'],
+                          fallback: '',
+                        );
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: _extColor(ext).withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    ext.isNotEmpty
+                                        ? ext.toUpperCase().substring(
+                                          0,
+                                          ext.length > 4 ? 4 : ext.length,
+                                        )
+                                        : 'FILE',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: _extColor(ext),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: _ink,
+                                      ),
+                                    ),
+                                    if (size.isNotEmpty)
+                                      Text(
+                                        size,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: _inkTertiary,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Builder(
+                                builder: (_) {
+                                  final attId =
+                                      att['id']?.toString() ??
+                                      att['attachment_id']?.toString() ??
+                                      att['attachmentId']?.toString() ??
+                                      '';
+                                  final isDownloading =
+                                      attId.isNotEmpty &&
+                                      _downloadingMap[attId] == true;
+                                  if (isDownloading) {
+                                    return const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: _inkTertiary,
+                                      ),
+                                    );
+                                  }
+                                  return IconButton(
+                                    icon: const Icon(
+                                      Icons.download_outlined,
+                                      color: _inkTertiary,
+                                      size: 20,
+                                    ),
+                                    onPressed: () => _downloadAttachment(att),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // ── Activity Timeline Card ────────────────────────────────────
+            _Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: _brandRed.withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.timeline_rounded,
+                            color: _brandRed,
+                            size: 17,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Activity Timeline',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: _ink,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (_isFetchingDetails)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _brandRed,
+                            ),
+                          )
+                        else if (timeline.isNotEmpty)
+                          _CountBadge(count: timeline.length, color: _brandRed),
+                      ],
+                    ),
+                  ),
+                  const _HDivider(),
+
+                  if (_isFetchingDetails)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _brandRed,
+                            ),
+                            SizedBox(height: 10),
+                            Text(
+                              'Loading timeline…',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _inkTertiary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (_fetchError != null)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 11,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF1F0),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _brandRed.withOpacity(0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: _brandRed,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _fetchError!,
+                                style: const TextStyle(
+                                  color: _brandRed,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (timeline.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            color: _inkTertiary,
+                            size: 16,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'No activity yet',
+                            style: TextStyle(color: _inkTertiary, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      child: Column(
+                        children: List.generate(timeline.length, (i) {
+                          final act = timeline[i];
+                          if (act is! Map) return const SizedBox.shrink();
+                          final action = _str(
+                            act['action'],
+                            fallback: 'Activity',
+                          );
+                          final userName = _str(
+                            act['user_name'] ?? act['performed_by'],
+                            fallback: '',
+                          );
+                          final oldVal = act['old_value']?.toString();
+                          final newVal = act['new_value']?.toString();
+                          final timestamp = act['created_at']?.toString();
+                          String? changeDesc;
+                          if (oldVal != null &&
+                              newVal != null &&
+                              oldVal != 'null' &&
+                              newVal != 'null') {
+                            changeDesc =
+                                '${_prettifyValue(oldVal)}  →  ${_prettifyValue(newVal)}';
+                          }
+                          final color = _activityColor(action);
+                          final icon = _activityIcon(action);
+                          final isLast = i == timeline.length - 1;
+                          return _TimelineRow(
+                            icon: icon,
+                            color: color,
+                            isLast: isLast,
+                            action: action,
+                            changeDesc: changeDesc,
+                            performedBy:
+                                (userName.isNotEmpty && userName != '—')
+                                    ? userName
+                                    : null,
+                            formattedDate:
+                                timestamp != null
+                                    ? _formatDate(timestamp)
+                                    : null,
+                            timeAgo: _timeAgo(timestamp),
+                          );
+                        }),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // ── Status info pill (read-only, replaces action buttons) ─────
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: statusColor.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _statusIcon(status),
+                      color: statusColor,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Current Status',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: statusColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          _statusDescription(status),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: _inkSecondary,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _StatusBadge(label: status, color: statusColor),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildDetailItem(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF133343),
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'OPEN':
+        return Icons.error_outline;
+      case 'IN PROGRESS':
+        return Icons.sync;
+      case 'RESOLVED':
+        return Icons.check_circle_outline;
+      case 'CLOSED':
+        return Icons.lock_outline;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  String _statusDescription(String status) {
+    switch (status) {
+      case 'OPEN':
+        return 'Your ticket is awaiting review by our support team.';
+      case 'IN PROGRESS':
+        return 'Our support team is currently working on your ticket.';
+      case 'RESOLVED':
+        return 'Your ticket has been resolved. Thank you for your patience.';
+      case 'CLOSED':
+        return 'This ticket has been closed.';
+      default:
+        return 'Status: $status';
+    }
+  }
+
+  Future<void> _downloadAttachment(dynamic att) async {
+    final attachmentId =
+        att is Map
+            ? _str(
+              att['id'] ?? att['attachment_id'] ?? att['attachmentId'],
+              fallback: '—',
+            )
+            : '—';
+
+    if (attachmentId == '—' || attachmentId.isEmpty) {
+      _showSnack('Cannot download: attachment ID is missing.', isError: true);
+      return;
+    }
+
+    setState(() => _downloadingMap[attachmentId] = true);
+
+    try {
+      final result = await ApiService.downloadAttachment(attachmentId);
+
+      if (!mounted) return;
+
+      if (result['status'] != 'success') {
+        _showSnack(
+          result['message']?.toString() ?? 'Download failed.',
+          isError: true,
+        );
+        return;
+      }
+
+      final filename =
+          result['filename']?.toString().trim().isNotEmpty == true
+              ? result['filename'].toString().trim()
+              : _attFilename(att);
+
+      final base64Str = result['base64']?.toString() ?? '';
+
+      if (base64Str.isEmpty) {
+        _showSnack('Download failed: empty file data.', isError: true);
+        return;
+      }
+
+      Uint8List bytes;
+      try {
+        bytes = base64Decode(base64Str);
+      } catch (e) {
+        _showSnack('Download failed: invalid file data.', isError: true);
+        return;
+      }
+
+      final mimeType = _resolveMimeType(
+        apiMime: result['mimeType']?.toString(),
+        filename: filename,
+        bytes: bytes,
+      );
+
+      final savedPath = await saveBytesAsFile(
+        bytes: bytes,
+        filename: filename,
+        mimeType: mimeType,
+      );
+
+      if (!mounted) return;
+
+      if (savedPath != null && savedPath.isNotEmpty) {
+        _showSnack('Saved to: $savedPath');
+      } else {
+        _showSnack('Downloaded: $filename');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack('Download error: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _downloadingMap.remove(attachmentId));
+    }
+  }
+
+  String _attFilename(dynamic att) {
+    if (att is Map) {
+      final f =
+          att['name'] ?? att['filename'] ?? att['file_name'] ?? att['fileName'];
+      if (f is String && f.trim().isNotEmpty) return f.trim();
+    }
+    return 'attachment';
+  }
+
+  String _resolveMimeType({
+    required String? apiMime,
+    required String filename,
+    required Uint8List bytes,
+  }) {
+    final trimmed = apiMime?.trim() ?? '';
+    if (trimmed.isNotEmpty &&
+        trimmed != 'application/octet-stream' &&
+        trimmed.contains('/')) {
+      return trimmed;
+    }
+    final byExt = _mimeFromFilename(filename);
+    if (byExt != null) return byExt;
+    final byMagic = _mimeFromMagic(bytes);
+    if (byMagic != null) return byMagic;
+    return trimmed.isNotEmpty ? trimmed : 'application/octet-stream';
+  }
+
+  String? _mimeFromFilename(String filename) {
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.doc')) return 'application/msword';
+    if (lower.endsWith('.docx')) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+    if (lower.endsWith('.xls')) return 'application/vnd.ms-excel';
+    if (lower.endsWith('.xlsx')) {
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    }
+    if (lower.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+    if (lower.endsWith('.pptx')) {
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    }
+    if (lower.endsWith('.txt')) return 'text/plain';
+    if (lower.endsWith('.csv')) return 'text/csv';
+    if (lower.endsWith('.zip')) return 'application/zip';
+    if (lower.endsWith('.rar')) return 'application/x-rar-compressed';
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    if (lower.endsWith('.mp3')) return 'audio/mpeg';
+    if (lower.endsWith('.json')) return 'application/json';
+    if (lower.endsWith('.xml')) return 'application/xml';
+    return null;
+  }
+
+  String? _mimeFromMagic(Uint8List bytes) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return 'image/jpeg';
+    }
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return 'image/png';
+    }
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x47 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x38) {
+      return 'image/gif';
+    }
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x25 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x44 &&
+        bytes[3] == 0x46) {
+      return 'application/pdf';
+    }
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x50 &&
+        bytes[1] == 0x4B &&
+        bytes[2] == 0x03 &&
+        bytes[3] == 0x04) {
+      return 'application/zip';
+    }
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Timeline Row widget
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TimelineRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final bool isLast;
+  final String action;
+  final String? changeDesc;
+  final String? performedBy;
+  final String? formattedDate;
+  final String timeAgo;
+
+  const _TimelineRow({
+    required this.icon,
+    required this.color,
+    required this.isLast,
+    required this.action,
+    required this.timeAgo,
+    this.changeDesc,
+    this.performedBy,
+    this.formattedDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 32,
+            child: Column(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: color.withOpacity(0.35),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Icon(icon, color: color, size: 15),
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey[300]!),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(top: 4, bottom: isLast ? 0 : 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          action,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                      if (timeAgo.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          timeAgo,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: Color(0xFF8A96A3),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (changeDesc != null && changeDesc!.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.07),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: color.withOpacity(0.2)),
+                      ),
+                      child: Text(
+                        changeDesc!,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (performedBy != null && performedBy!.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.person_outline_rounded,
+                          size: 12,
+                          color: Color(0xFF8A96A3),
+                        ),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            performedBy!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF8A96A3),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (formattedDate != null && formattedDate!.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      formattedDate!,
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        color: Color(0xFFB0BAC9),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
-          child: Text(value, style: const TextStyle(fontSize: 14)),
-        ),
-      ],
+        ],
+      ),
     );
   }
+}
 
-  String _formatFileSize(int? size) {
-    if (size == null) return '';
-    return '${(size / 1024).toStringAsFixed(1)} KB';
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared small widgets
+// ─────────────────────────────────────────────────────────────────────────────
 
-  IconData _getFileIcon(String? extension) {
-    switch (extension?.toLowerCase()) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'docx':
-        return Icons.description;
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-        return Icons.image;
-      default:
-        return Icons.insert_drive_file;
-    }
-  }
+class _Card extends StatelessWidget {
+  final Widget child;
+  const _Card({required this.child});
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0xFFE8ECF0)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.04),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
+        ),
+      ],
+    ),
+    child: child,
+  );
+}
 
-  Color _getStatusColor(String status) {
-    switch (status.toUpperCase()) {
-      case 'OPEN':
-        return Colors.green;
-      case 'IN PROGRESS':
-        return Colors.orange;
-      case 'RESOLVED':
-      case 'RESOLVE':
-        return Colors.blue;
-      case 'CLOSED':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
+class _HDivider extends StatelessWidget {
+  const _HDivider();
+  @override
+  Widget build(BuildContext context) =>
+      Container(height: 1, color: const Color(0xFFF0F4F8));
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _StatusBadge({required this.label, required this.color});
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: color.withOpacity(0.4), width: 1.2),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            color: color,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.07),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: color.withOpacity(0.2)),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, color: color, size: 15),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: _ink,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _KVRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _KVRow({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 110,
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: _inkTertiary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          value,
+          style: const TextStyle(
+            fontSize: 12,
+            color: _ink,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _CountBadge extends StatelessWidget {
+  final int count;
+  final Color color;
+  const _CountBadge({required this.count, required this.color});
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Text(
+      '$count',
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+    ),
+  );
 }

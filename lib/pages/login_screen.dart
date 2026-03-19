@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:convert';
-import 'end-user/home/home_screen.dart';
 import 'customer/home/customer_home_screen.dart';
 import 'admin/admin_home_screen.dart';
-import 'biller/biller_home_screen.dart';
-import 'agent/agent_home_screen.dart';
 import 'forgot_password.dart';
 import '../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -44,13 +41,13 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Returns the correct home screen widget based on the user's role.
   Widget _getScreenForRole(String role) {
     switch (role.toLowerCase()) {
-      case 'admin':
+      case 'admin' || 'agent':
         return const AdminHomeScreen();
-      case 'biller':
-        return const BillerApp();
-      case 'agent':
-        return const AgentApp();
-      case 'customer':
+      // case 'biller':
+      //   return const BillerApp();
+      // case 'agent':
+      //   return const AgentApp();
+      case 'customer' || 'biller':
       default:
         return CustomerHomeScreen(loginMessage: 'Login successful');
     }

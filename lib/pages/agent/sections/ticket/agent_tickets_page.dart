@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
 class MyTicketsPage extends StatefulWidget {
-  const MyTicketsPage();
+  const MyTicketsPage({super.key});
 
   @override
   State<MyTicketsPage> createState() => MyTicketsPageState();
@@ -218,7 +218,7 @@ class TicketItem {
 
 class TicketCard extends StatelessWidget {
   final TicketItem data;
-  const TicketCard({required this.data});
+  const TicketCard({super.key, required this.data});
 
   @override
   Widget build(BuildContext context) {
