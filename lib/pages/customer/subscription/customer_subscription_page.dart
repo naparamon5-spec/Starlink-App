@@ -275,7 +275,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
         );
       }
 
-      if (response == null || response['status'] != 'success') {
+      if (response['status'] != 'success') {
         return null;
       }
 

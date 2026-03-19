@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../components/Table.dart';
 import '../../../services/api_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'dart:convert';
 
 // Top-level function for mapping serviceLineNumber to nickname
 String getNickname(

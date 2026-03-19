@@ -3026,8 +3026,7 @@ class _SettingsTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.subtitle,
-    this.onTap, // ✅ ADD THIS
-    super.key,
+    this.onTap,
   });
 
   @override

@@ -158,8 +158,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     final inactiveRaw = data['inactive'];
     if (inactiveRaw != null) {
       final s = inactiveRaw.toString().toUpperCase().trim();
-      if (s == 'N' || s == 'FALSE' || s == '0')
+      if (s == 'N' || s == 'FALSE' || s == '0') {
         return true; // not inactive → active
+      }
       if (s == 'Y' || s == 'TRUE' || s == '1') return false; // inactive
     }
 
@@ -170,10 +171,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       if (raw is bool) return raw;
       if (raw is int) return raw == 1;
       final s = raw.toString().toLowerCase().trim();
-      if (s == 'true' || s == '1' || s == 'active' || s == 'enabled')
+      if (s == 'true' || s == '1' || s == 'active' || s == 'enabled') {
         return true;
-      if (s == 'false' || s == '0' || s == 'inactive' || s == 'disabled')
+      }
+      if (s == 'false' || s == '0' || s == 'inactive' || s == 'disabled') {
         return false;
+      }
     }
 
     return null; // unknown
