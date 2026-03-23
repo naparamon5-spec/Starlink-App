@@ -931,13 +931,124 @@ class _UserCard extends StatelessWidget {
                     onViewDetail,
                   ),
                   const SizedBox(height: 6),
-                  _iconBtn(Icons.delete_outline, _primary, onDelete),
+                  _iconBtn(
+                    Icons.delete_outline,
+                    _primary,
+                    () => _confirmDelete(context),
+                  ),
                 ],
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context) {
+    final first = user['first_name']?.toString().trim() ?? '';
+    final last = user['last_name']?.toString().trim() ?? '';
+    final name =
+        (first.isNotEmpty || last.isNotEmpty)
+            ? '$first $last'.trim()
+            : (user['name']?.toString().trim() ?? 'this user');
+
+    showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            title: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: _primary.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline,
+                    color: _primary,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Remove User',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                  ),
+                ),
+              ],
+            ),
+            content: RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _inkSecondary,
+                  height: 1.5,
+                ),
+                children: [
+                  const TextSpan(text: 'Are you sure you want to remove '),
+                  TextSpan(
+                    text: name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: _ink,
+                    ),
+                  ),
+                  const TextSpan(
+                    text: ' from the list? This action cannot be undone.',
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                style: TextButton.styleFrom(
+                  foregroundColor: _inkSecondary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx, true);
+                  onDelete();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
+                ),
+                child: const Text(
+                  'Remove',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
     );
   }
 
