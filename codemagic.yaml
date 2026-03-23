@@ -27,6 +27,17 @@ workflows:
             -configuration Release \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
             archive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+      - name: Export .ipa
+        script: |
+          xcodebuild -exportArchive \
+            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
+            -exportPath $CM_BUILD_DIR/output \
+            -exportOptionsPlist /tmp/ExportOptions.plist \
+            || true
+          cd $CM_BUILD_DIR/Runner.xcarchive/Products/Applications/
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r $CM_BUILD_DIR/Runner.ipa Payload/
     artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
+      - $CM_BUILD_DIR/Runner.ipa
+      - $CM_BUILD_DIR/Runner.xcarchive
