@@ -232,7 +232,7 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
       backgroundColor: Colors.transparent,
       useSafeArea: true,
       builder:
-          (_) => _CreateUserSheet(
+          (_) => CreateUserSheet(
             currentUserRole: _currentUserRole,
             onCreated: () {
               _fetchUsers();
@@ -566,24 +566,6 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
                                       ),
                                     ),
                                     const Spacer(),
-                                    GestureDetector(
-                                      onTap: _fetchUsers,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(6),
-                                        decoration: BoxDecoration(
-                                          color: _surface,
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          border: Border.all(color: _border),
-                                        ),
-                                        child: const Icon(
-                                          Icons.refresh_rounded,
-                                          size: 16,
-                                          color: _inkSecondary,
-                                        ),
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -1127,23 +1109,26 @@ class _StatPill extends StatelessWidget {
 }
 
 // ── Create User Bottom Sheet ───────────────────────────────────────────────────
+// NOTE: renamed from _CreateUserSheet → CreateUserSheet (public)
+// so it can be imported and reused from other pages.
 
-class _CreateUserSheet extends StatefulWidget {
+class CreateUserSheet extends StatefulWidget {
   final VoidCallback onCreated;
   final void Function(String msg) onError;
   final String currentUserRole;
 
-  const _CreateUserSheet({
+  const CreateUserSheet({
+    super.key,
     required this.onCreated,
     required this.onError,
     required this.currentUserRole,
   });
 
   @override
-  State<_CreateUserSheet> createState() => _CreateUserSheetState();
+  State<CreateUserSheet> createState() => _CreateUserSheetState();
 }
 
-class _CreateUserSheetState extends State<_CreateUserSheet> {
+class _CreateUserSheetState extends State<CreateUserSheet> {
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
   final _middleNameCtrl = TextEditingController();
@@ -1227,7 +1212,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                         .toString()
                         .toLowerCase()
                         .trim();
-                // Also match display labels like "End User" -> "end_user"
                 final lbl =
                     (r['label'] ?? r['display_name'] ?? '')
                         .toString()
@@ -1251,9 +1235,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
     }
   }
 
-  /// Loads the dropdown list based on the selected role:
-  /// - End User role  → GET /v1/end-user/list/all   (value is int)
-  /// - All other roles → GET /v1/customers/list/all  (value is string)
   Future<void> _loadCompanies() async {
     setState(() {
       _loadingCompanies = true;
@@ -1264,7 +1245,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
 
     try {
       if (_isEndUserRole) {
-        // End User → /v1/end-user/list/all
         final result = await ApiService.getEndUserListAll();
         if (!mounted) return;
         final isOk =
@@ -1285,7 +1265,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                     .map(
                       (e) => <String, dynamic>{
                         'label': e['label'].toString().trim(),
-                        // value is int — normalize to string
                         'value': e['value'].toString(),
                       },
                     )
@@ -1293,7 +1272,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
           });
         }
       } else {
-        // Admin / Agent / Customer / Biller → /v1/customers/list/all
         final result = await ApiService.getCustomersListAll();
         if (!mounted) return;
         final isOk =
@@ -1323,7 +1301,7 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
         }
       }
     } catch (_) {
-      // silently ignore — dropdown just stays empty
+      // silently ignore
     } finally {
       if (mounted) setState(() => _loadingCompanies = false);
     }
@@ -1392,7 +1370,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                 _selectedRoleValue = value.toString();
                 _roleError = null;
               });
-              // Load the correct list for the newly selected role
               _loadCompanies();
             },
           ),
@@ -1425,8 +1402,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-    // Dynamic label for company field based on role
     final companyFieldLabel = _isEndUserRole ? 'End User' : 'Company Name';
 
     return Container(
@@ -1437,7 +1412,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Drag handle ──────────────────────────────────────────────────
           const SizedBox(height: 12),
           Container(
             width: 40,
@@ -1449,7 +1423,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
           ),
           const SizedBox(height: 18),
 
-          // ── Header ───────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
@@ -1512,18 +1485,15 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
           const SizedBox(height: 16),
           const Divider(height: 1, color: _border),
 
-          // ── Scrollable form ───────────────────────────────────────────────
           Flexible(
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(20, 20, 20, bottomInset + 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Section: Users Information ──────────────────────────
                   _sectionHeader('Users Information'),
                   const SizedBox(height: 14),
 
-                  // Role + Position row
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1553,7 +1523,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // First / Last / Middle row
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1595,7 +1564,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Email
                   _fieldLabel(
                     'Email',
                     required: true,
@@ -1609,7 +1577,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                   ),
                   const SizedBox(height: 22),
 
-                  // ── Section: Company Details ────────────────────────────
                   Row(
                     children: [
                       _sectionHeader('Company Details'),
@@ -1637,7 +1604,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Company / End User dropdown
                   _fieldLabel(
                     companyFieldLabel,
                     disabled: !_companyEnabled,
@@ -1659,7 +1625,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Company Email
                   _fieldLabel(
                     'Company Email',
                     disabled: !_companyEnabled,
@@ -1672,7 +1637,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                   ),
                   const SizedBox(height: 28),
 
-                  // ── Save button ─────────────────────────────────────────
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -1714,8 +1678,6 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
       ),
     );
   }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
 
   Widget _sectionHeader(String title) => Text(
     title,

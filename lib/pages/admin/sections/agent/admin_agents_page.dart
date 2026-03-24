@@ -19,14 +19,12 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   List<Map<String, dynamic>> _agents = [];
 
   bool _isLoading = false;
-  bool _loadingMore = false;
+  bool _fetchingMore = false;
   String? _error;
 
-  int _currentPage = 1;
-  int _totalPages = 1;
   int _totalItems = 0;
-  bool _hasMore = true;
-
+  int _totalPages = 1;
+  int _currentPage = 1;
   static const int _pageSize = 10;
 
   // ── Design tokens ──────────────────────────────────────────────────────────
@@ -43,26 +41,25 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   @override
   void initState() {
     super.initState();
+    _loadFirstPage();
     _scrollController.addListener(_onScroll);
-    _loadAgents();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchDebounce?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _searchDebounce?.cancel();
     super.dispose();
   }
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent - 200 &&
-        !_loadingMore &&
-        !_isLoading &&
-        _hasMore) {
-      _loadMoreAgents();
+        !_fetchingMore &&
+        _currentPage < _totalPages) {
+      _loadNextPage();
     }
   }
 
@@ -76,16 +73,66 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     }).toList();
   }
 
-  Future<void> _loadAgents() async {
+  // ── Parse response ─────────────────────────────────────────────────────────
+  ({int totalPages, int totalItems, List<Map<String, dynamic>> items})
+  _parsePage(Map<String, dynamic> response) {
+    final data = response['data'];
+
+    // Items may be nested under data['data'] or be the flat list directly
+    final rawList =
+        (data is Map && data['data'] is List)
+            ? data['data'] as List
+            : (data is List ? data : []);
+
+    final List<Map<String, dynamic>> items =
+        rawList.whereType<Map>().map<Map<String, dynamic>>((e) {
+          final c = Map<String, dynamic>.from(e);
+          final name = (c['name'] ?? 'Agent').toString();
+          final code = (c['code'] ?? '').toString();
+          final id = (c['id'] ?? c['customer_id'] ?? '').toString();
+          final inactiveRaw = (c['inactive'] ?? 'N').toString();
+          return {
+            'id': id,
+            'name': name,
+            'code': code,
+            'inactive': inactiveRaw,
+            'avatar': _initials(name),
+          };
+        }).toList();
+
+    // Pagination may be nested under data['pagination'] or top-level
+    final pag =
+        (data is Map && data['pagination'] != null)
+            ? data['pagination']
+            : response['pagination'];
+
+    int totalPages = 1;
+    int totalItems = 0;
+    if (pag is Map) {
+      totalPages = int.tryParse(pag['totalPages']?.toString() ?? '1') ?? 1;
+      totalItems = int.tryParse(pag['totalItems']?.toString() ?? '0') ?? 0;
+    }
+
+    return (totalPages: totalPages, totalItems: totalItems, items: items);
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || name.trim().isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  // ── First page ─────────────────────────────────────────────────────────────
+  Future<void> _loadFirstPage() async {
     if (_isLoading) return;
     setState(() {
       _isLoading = true;
       _error = null;
       _agents = [];
-      _currentPage = 1;
-      _totalPages = 1;
       _totalItems = 0;
-      _hasMore = true;
+      _totalPages = 1;
+      _currentPage = 1;
     });
 
     try {
@@ -94,7 +141,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         limit: _pageSize,
         search: _searchController.text.trim(),
       );
-
       if (!mounted) return;
 
       final data = response['data'];
@@ -106,19 +152,13 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         return;
       }
 
-      final items = data['data'] as List? ?? [];
-      final pagination = data['pagination'];
-      final totalPages =
-          int.tryParse(pagination?['totalPages']?.toString() ?? '1') ?? 1;
-      final totalItems =
-          int.tryParse(pagination?['totalItems']?.toString() ?? '0') ?? 0;
+      final parsed = _parsePage(response);
 
       setState(() {
-        _agents = _parseList(items);
+        _agents = parsed.items;
+        _totalPages = parsed.totalPages;
+        _totalItems = parsed.totalItems;
         _currentPage = 1;
-        _totalPages = totalPages;
-        _totalItems = totalItems;
-        _hasMore = 1 < totalPages;
         _isLoading = false;
       });
     } catch (e) {
@@ -130,76 +170,46 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     }
   }
 
-  Future<void> _loadMoreAgents() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() => _loadingMore = true);
-
-    final nextPage = _currentPage + 1;
+  // ── Next page — completely silent ──────────────────────────────────────────
+  Future<void> _loadNextPage() async {
+    if (_fetchingMore || _currentPage >= _totalPages) return;
+    setState(() => _fetchingMore = true);
 
     try {
+      final nextPage = _currentPage + 1;
       final response = await ApiService.getCustomersPaginated(
         page: nextPage,
         limit: _pageSize,
         search: _searchController.text.trim(),
       );
-
       if (!mounted) return;
 
       final data = response['data'];
       if (data != null) {
-        final items = _parseList(data['data'] as List? ?? []);
-        final pagination = data['pagination'];
-        final totalPages =
-            int.tryParse(pagination?['totalPages']?.toString() ?? '1') ?? 1;
+        final parsed = _parsePage(response);
+        final existingIds = _agents.map((a) => a['id'].toString()).toSet();
+        final newItems =
+            parsed.items
+                .where((a) => !existingIds.contains(a['id'].toString()))
+                .toList();
 
         setState(() {
-          final existingIds = _agents.map((a) => a['id'].toString()).toSet();
-          final newItems =
-              items
-                  .where((a) => !existingIds.contains(a['id'].toString()))
-                  .toList();
           _agents = [..._agents, ...newItems];
           _currentPage = nextPage;
-          _totalPages = totalPages;
-          _hasMore = nextPage < totalPages;
+          if (parsed.totalItems > 0) _totalItems = parsed.totalItems;
+          if (parsed.totalPages > 0) _totalPages = parsed.totalPages;
         });
       } else {
-        setState(() => _hasMore = false);
+        setState(() => _currentPage++);
       }
     } catch (_) {
-      // silently ignore
+      // Silent — scroll again to retry
     } finally {
-      if (mounted) setState(() => _loadingMore = false);
+      if (mounted) setState(() => _fetchingMore = false);
     }
   }
 
-  List<Map<String, dynamic>> _parseList(dynamic data) {
-    if (data is List) {
-      return data.map<Map<String, dynamic>>((e) {
-        final c = Map<String, dynamic>.from(e);
-        final name = (c['name'] ?? 'Agent').toString();
-        final code = (c['code'] ?? '').toString();
-        final id = (c['id'] ?? c['customer_id'] ?? '').toString();
-        final inactiveRaw = (c['inactive'] ?? 'N').toString();
-        return {
-          'id': id,
-          'name': name,
-          'code': code,
-          'inactive': inactiveRaw,
-          'avatar': _initials(name),
-        };
-      }).toList();
-    }
-    return [];
-  }
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || name.trim().isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
-
+  // ── Navigation ─────────────────────────────────────────────────────────────
   void _openDetails(Map<String, dynamic> agent) {
     Navigator.push(
       context,
@@ -219,176 +229,20 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       context,
       MaterialPageRoute(builder: (_) => const AdminCreateAgentPage()),
     );
-    if (created == true) _loadAgents();
+    if (created == true) _loadFirstPage();
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredAgents;
-    final total = _totalItems > 0 ? _totalItems : _agents.length;
 
-    return ColoredBox(
-      color: _surface,
-      child: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          // ── Pinned header ────────────────────────────────────────────────
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _StickyHeaderDelegate(child: _buildStickyHeader(total)),
-          ),
-
-          // ── Body ─────────────────────────────────────────────────────────
-          if (_isLoading)
-            const SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        color: _primary,
-                        strokeWidth: 2.5,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Loading agents…',
-                      style: TextStyle(fontSize: 13, color: _inkSecondary),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else if (_error != null && _agents.isEmpty)
-            SliverFillRemaining(child: _buildError())
-          else if (filtered.isEmpty)
-            SliverFillRemaining(child: _buildEmpty())
-          else ...[
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final agent = filtered[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    // RepaintBoundary isolates each card so scrolling
-                    // does not trigger repaints — fixes the fading issue.
-                    child: RepaintBoundary(
-                      child: _AgentCard(
-                        agent: agent,
-                        onTap: () => _openDetails(agent),
-                      ),
-                    ),
-                  );
-                }, childCount: filtered.length),
-              ),
-            ),
-
-            // Bottom loader / end indicator
-            SliverToBoxAdapter(
-              child:
-                  _loadingMore
-                      ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: _primary,
-                              strokeWidth: 2,
-                            ),
-                          ),
-                        ),
-                      )
-                      : !_hasMore && _agents.isNotEmpty
-                      ? Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        child: Center(
-                          child: Text(
-                            'All $_totalItems agents loaded',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _inkTertiary,
-                            ),
-                          ),
-                        ),
-                      )
-                      : const SizedBox(height: 100),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // ── Sticky header ──────────────────────────────────────────────────────────
-
-  Widget _buildStickyHeader(int total) {
     return ColoredBox(
       color: _surface,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          // Stats banner
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.support_agent_outlined,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Total Agents',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$total',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -1,
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          // Stats banner — shows totalItems immediately from page 1
+          if (!_isLoading) _buildStatsBanner(),
 
           // Search bar
           Padding(
@@ -435,7 +289,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                           : null,
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
-                    vertical: 12,
+                    vertical: 14,
                     horizontal: 16,
                   ),
                 ),
@@ -443,9 +297,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
             ),
           ),
 
-          // List title row
+          // List header
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 16, 10),
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
             child: Row(
               children: [
                 const Text(
@@ -477,17 +331,17 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                   ),
                 ),
                 const Spacer(),
-                GestureDetector(
-                  onTap: _loadAgents,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Icon(
-                      Icons.refresh_rounded,
-                      size: 18,
-                      color: _inkTertiary,
-                    ),
-                  ),
-                ),
+                // GestureDetector(
+                //   onTap: _loadFirstPage,
+                //   child: const Padding(
+                //     padding: EdgeInsets.symmetric(horizontal: 8),
+                //     child: Icon(
+                //       Icons.refresh_rounded,
+                //       size: 18,
+                //       color: _inkTertiary,
+                //     ),
+                //   ),
+                // ),
                 GestureDetector(
                   onTap: _openCreateAgent,
                   child: Container(
@@ -520,8 +374,125 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
             ),
           ),
 
-          // Divider
-          Container(height: 1, color: _border),
+          // List
+          Expanded(
+            child:
+                _isLoading
+                    ? _SkeletonList()
+                    : _error != null && _agents.isEmpty
+                    ? _buildError()
+                    : filtered.isEmpty
+                    ? _buildEmpty()
+                    : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      itemCount: filtered.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == filtered.length) {
+                          if (_fetchingMore) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 20),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: _primary,
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          if (_currentPage >= _totalPages &&
+                              _agents.isNotEmpty) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: Center(
+                                child: Text(
+                                  'All $_totalItems agents loaded',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: _inkTertiary,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return const SizedBox(height: 80);
+                        }
+                        final agent = filtered[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: RepaintBoundary(
+                            child: _AgentCard(
+                              agent: agent,
+                              onTap: () => _openDetails(agent),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Stats banner ───────────────────────────────────────────────────────────
+  Widget _buildStatsBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.support_agent_outlined,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Total Agents',
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$_totalItems',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -558,7 +529,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           ),
           const SizedBox(height: 16),
           TextButton.icon(
-            onPressed: _loadAgents,
+            onPressed: _loadFirstPage,
             icon: const Icon(Icons.refresh_rounded, size: 16),
             label: const Text('Try again'),
             style: TextButton.styleFrom(
@@ -598,29 +569,112 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   );
 }
 
-// ── Sticky header delegate ─────────────────────────────────────────────────────
+// ── Skeleton shimmer list ──────────────────────────────────────────────────────
 
-class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  static const double _height = 230.0;
+class _SkeletonList extends StatefulWidget {
+  @override
+  State<_SkeletonList> createState() => _SkeletonListState();
+}
 
-  const _StickyHeaderDelegate({required this.child});
+class _SkeletonListState extends State<_SkeletonList>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  static const _border = Color(0xFFE0E0E0);
+  static const _surface = Color(0xFFFFFFFF);
 
   @override
-  double get minExtent => _height;
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
 
   @override
-  double get maxExtent => _height;
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) => SizedBox.expand(child: child);
-
-  @override
-  bool shouldRebuild(_StickyHeaderDelegate oldDelegate) => true;
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) {
+        final opacity = 0.35 + (_anim.value * 0.35);
+        return ListView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+          itemCount: 8,
+          itemBuilder:
+              (_, __) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _border),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _border.withOpacity(opacity),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 12,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: _border.withOpacity(opacity),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              height: 10,
+                              width: 160,
+                              decoration: BoxDecoration(
+                                color: _border.withOpacity(opacity),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              height: 16,
+                              width: 70,
+                              decoration: BoxDecoration(
+                                color: _border.withOpacity(opacity),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        );
+      },
+    );
+  }
 }
 
 // ── Agent card ─────────────────────────────────────────────────────────────────
@@ -660,7 +714,6 @@ class _AgentCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: _surface,
             borderRadius: BorderRadius.circular(14),
-            // No boxShadow — prevents fading/flickering on scroll
             border: Border.all(color: _border),
           ),
           child: Row(

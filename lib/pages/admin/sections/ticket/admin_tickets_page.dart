@@ -27,7 +27,8 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   int _totalItems = 0;
   int _totalPages = 1;
-  static const int _pageSize = 50;
+  int _currentPage = 1;
+  static const int _pageSize = 10;
 
   // ── Design tokens ──────────────────────────────────────────────────────────
   static const _primary = Color(0xFFEB1E23);
@@ -48,12 +49,8 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) setState(() {});
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _loadTickets();
-        _measureHeader();
-      }
-    });
+    _loadFirstPage();
+    _scrollController.addListener(_onScroll);
   }
 
   @override
@@ -61,8 +58,20 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     _searchDebounce?.cancel();
     _tabController.dispose();
     _searchController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  // ── Scroll ─────────────────────────────────────────────────────────────────
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_fetchingMore &&
+        _currentPage < _totalPages) {
+      _loadNextPage();
+    }
   }
 
   // ── Filtering ──────────────────────────────────────────────────────────────
@@ -147,9 +156,44 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
           )
           .length;
 
+  // ── Parse ──────────────────────────────────────────────────────────────────
+
+  ({int totalPages, int totalItems, List<Map<String, dynamic>> items})
+  _parsePage(Map<String, dynamic> response) {
+    final List<Map<String, dynamic>> items = _parseList(response['data']);
+
+    // Pagination lives inside response['raw']['data']['pagination']
+    int totalPages = 1;
+    int totalItems = 0;
+    final raw = response['raw'];
+    if (raw is Map) {
+      final wrapper = raw['data'];
+      if (wrapper is Map) {
+        final pagination = wrapper['pagination'];
+        if (pagination is Map) {
+          totalPages =
+              int.tryParse(pagination['totalPages']?.toString() ?? '1') ?? 1;
+          totalItems =
+              int.tryParse(pagination['totalItems']?.toString() ?? '0') ?? 0;
+        }
+      }
+    }
+
+    return (totalPages: totalPages, totalItems: totalItems, items: items);
+  }
+
+  List<Map<String, dynamic>> _parseList(dynamic data) {
+    if (data is List) {
+      return data
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return [];
+  }
+
   // ── Data loading ───────────────────────────────────────────────────────────
 
-  Future<void> _loadTickets() async {
+  Future<void> _loadFirstPage() async {
     if (_loading) return;
     setState(() {
       _loading = true;
@@ -157,6 +201,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
       _allTickets = [];
       _totalItems = 0;
       _totalPages = 1;
+      _currentPage = 1;
     });
 
     try {
@@ -171,31 +216,15 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
         return;
       }
 
-      final raw = response['raw'];
-      int totalPages = 1;
-      int totalItems = 0;
-      if (raw is Map) {
-        final wrapper = raw['data'];
-        if (wrapper is Map) {
-          final pagination = wrapper['pagination'];
-          if (pagination is Map) {
-            totalPages =
-                int.tryParse(pagination['totalPages']?.toString() ?? '1') ?? 1;
-            totalItems =
-                int.tryParse(pagination['totalItems']?.toString() ?? '0') ?? 0;
-          }
-        }
-      }
+      final parsed = _parsePage(response);
 
-      final page1Items = _parseList(response['data']);
       setState(() {
-        _allTickets = page1Items;
-        _totalPages = totalPages;
-        _totalItems = totalItems;
+        _allTickets = parsed.items;
+        _totalPages = parsed.totalPages;
+        _totalItems = parsed.totalItems;
+        _currentPage = 1;
         _loading = false;
       });
-
-      if (totalPages > 1) _fetchRemainingPages(totalPages);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -205,46 +234,40 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     }
   }
 
-  Future<void> _fetchRemainingPages(int totalPages) async {
-    if (!mounted) return;
+  Future<void> _loadNextPage() async {
+    if (_fetchingMore || _currentPage >= _totalPages) return;
     setState(() => _fetchingMore = true);
+
     try {
-      for (int page = 2; page <= totalPages; page++) {
-        if (!mounted) break;
-        final response = await ApiService.getTickets(
-          page: page,
-          limit: _pageSize,
-        );
-        if (!mounted) break;
-        if (response['status'] == 'success') {
-          final items = _parseList(response['data']);
-          if (mounted && items.isNotEmpty) {
-            setState(() {
-              final existingIds =
-                  _allTickets.map((t) => t['id'].toString()).toSet();
-              final newItems =
-                  items
-                      .where((t) => !existingIds.contains(t['id'].toString()))
-                      .toList();
-              _allTickets = [..._allTickets, ...newItems];
-            });
-          }
-        }
+      final nextPage = _currentPage + 1;
+      final response = await ApiService.getTickets(
+        page: nextPage,
+        limit: _pageSize,
+      );
+      if (!mounted) return;
+
+      if (response['status'] == 'success') {
+        final parsed = _parsePage(response);
+        final existingIds = _allTickets.map((t) => t['id'].toString()).toSet();
+        final newItems =
+            parsed.items
+                .where((t) => !existingIds.contains(t['id'].toString()))
+                .toList();
+
+        setState(() {
+          _allTickets = [..._allTickets, ...newItems];
+          _currentPage = nextPage;
+          if (parsed.totalItems > 0) _totalItems = parsed.totalItems;
+          if (parsed.totalPages > 0) _totalPages = parsed.totalPages;
+        });
+      } else {
+        setState(() => _currentPage++);
       }
     } catch (_) {
-      // silently ignore
+      // Silent — scroll again to retry
     } finally {
       if (mounted) setState(() => _fetchingMore = false);
     }
-  }
-
-  List<Map<String, dynamic>> _parseList(dynamic data) {
-    if (data is List) {
-      return data
-          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-    return [];
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -300,26 +323,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
       context,
       MaterialPageRoute(builder: (_) => const AdminCreateTicketPage()),
     );
-    if (created == true && mounted) _loadTickets();
-  }
-
-  // ── Self-measuring header height ──────────────────────────────────────────
-
-  final GlobalKey _headerKey = GlobalKey();
-  double _headerHeight = 180.0; // safe initial estimate
-
-  void _measureHeader() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final ctx = _headerKey.currentContext;
-      if (ctx == null) return;
-      final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null) return;
-      final h = box.size.height;
-      if (h > 0 && (h - _headerHeight).abs() > 1) {
-        setState(() => _headerHeight = h);
-      }
-    });
+    if (created == true && mounted) _loadFirstPage();
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -327,11 +331,9 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredTickets;
-    final total = _totalItems > 0 ? _totalItems : _allTickets.length;
 
     return Scaffold(
       backgroundColor: _surface,
-      // FAB stays bottom-right (unchanged)
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openCreateTicket,
         backgroundColor: _primary,
@@ -343,106 +345,12 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
         ),
       ),
-      body:
-          _loading
-              ? _buildLoader()
-              : _error != null && _allTickets.isEmpty
-              ? _buildError()
-              : RefreshIndicator(
-                onRefresh: _loadTickets,
-                color: _primary,
-                strokeWidth: 2,
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    // ── Pinned header ──────────────────────────────
-                    SliverPersistentHeader(
-                      pinned: true,
-                      delegate: _StickyHeaderDelegate(
-                        height: _headerHeight,
-                        child: _buildStickyHeader(total, filtered.length),
-                      ),
-                    ),
-
-                    // ── Ticket list ────────────────────────────────────
-                    if (filtered.isEmpty)
-                      SliverFillRemaining(child: _buildEmpty())
-                    else ...[
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: RepaintBoundary(
-                                child: _TicketCard(
-                                  ticket: filtered[index],
-                                  onTap: () => _openTicket(filtered[index]),
-                                  statusColor: _statusColor(
-                                    (filtered[index]['status'] ?? '')
-                                        .toString(),
-                                  ),
-                                  formattedDate: _formatDate(
-                                    filtered[index]['created_at']?.toString(),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            childCount: filtered.length,
-                          ),
-                        ),
-                      ),
-
-                      // Bottom indicator
-                      SliverToBoxAdapter(
-                        child:
-                            _fetchingMore
-                                ? const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 20),
-                                  child: Center(
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(
-                                            color: _primary,
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Loading more tickets…',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: _inkTertiary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                                : const SizedBox(height: 100),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-    );
-  }
-
-  // ── Sticky header ──────────────────────────────────────────────────────────
-
-  Widget _buildStickyHeader(int total, int filteredCount) {
-    return ColoredBox(
-      key: _headerKey,
-      color: _surface,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      body: Column(
         children: [
-          // ── Search bar ─────────────────────────────────────────────────
+          // Stats banner
+          if (!_loading) _buildStatsBanner(),
+
+          // Search bar
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Container(
@@ -495,7 +403,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
             ),
           ),
 
-          // ── Tab bar ────────────────────────────────────────────────────
+          // Tab bar
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
             child: TabBar(
@@ -508,7 +416,11 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
               tabAlignment: TabAlignment.start,
               dividerColor: Colors.transparent,
               tabs: [
-                _tab('All', _allTickets.length, _inkSecondary),
+                _tab(
+                  'All',
+                  _totalItems > 0 ? _totalItems : _allTickets.length,
+                  _inkSecondary,
+                ),
                 _tab('Open', _openCount, _warning),
                 _tab('In Progress', _inProgressCount, _inProgressColor),
                 _tab('Resolved', _resolvedCount, _success),
@@ -517,9 +429,9 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
             ),
           ),
 
-          // ── List title row ─────────────────────────────────────────────
+          // List header
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
+            padding: const EdgeInsets.fromLTRB(20, 10, 16, 8),
             child: Row(
               children: [
                 const Text(
@@ -542,7 +454,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '$filteredCount${_fetchingMore ? '+' : ''}',
+                    _totalItems > 0 ? '$_totalItems' : '${_allTickets.length}',
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -550,40 +462,157 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                     ),
                   ),
                 ),
-                if (_fetchingMore) ...[
-                  const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 11,
-                    height: 11,
-                    child: CircularProgressIndicator(
-                      color: _primary,
-                      strokeWidth: 1.5,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    '${_allTickets.length} / $_totalItems',
-                    style: const TextStyle(fontSize: 11, color: _inkTertiary),
-                  ),
-                ],
                 const Spacer(),
-                GestureDetector(
-                  onTap: _loadTickets,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Icon(
-                      Icons.refresh_rounded,
-                      size: 18,
-                      color: _inkTertiary,
-                    ),
-                  ),
-                ),
+                // GestureDetector(
+                //   onTap: _loadFirstPage,
+                //   child: const Padding(
+                //     padding: EdgeInsets.symmetric(horizontal: 8),
+                //     child: Icon(
+                //       Icons.refresh_rounded,
+                //       size: 18,
+                //       color: _inkTertiary,
+                //     ),
+                //   ),
+                // ),
               ],
             ),
           ),
 
-          // Divider
           Container(height: 1, color: _border),
+
+          // List
+          Expanded(
+            child:
+                _loading
+                    ? _SkeletonList()
+                    : _error != null && _allTickets.isEmpty
+                    ? _buildError()
+                    : filtered.isEmpty
+                    ? _buildEmpty()
+                    : RefreshIndicator(
+                      onRefresh: _loadFirstPage,
+                      color: _primary,
+                      strokeWidth: 2,
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                        itemCount: filtered.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == filtered.length) {
+                            if (_fetchingMore) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 20),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: _primary,
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            if (_currentPage >= _totalPages &&
+                                _allTickets.isNotEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 20,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'All $_totalItems tickets loaded',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: _inkTertiary,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox(height: 80);
+                          }
+                          final t = filtered[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: RepaintBoundary(
+                              child: _TicketCard(
+                                ticket: t,
+                                onTap: () => _openTicket(t),
+                                statusColor: _statusColor(
+                                  (t['status'] ?? '').toString(),
+                                ),
+                                formattedDate: _formatDate(
+                                  t['created_at']?.toString(),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Stats banner ───────────────────────────────────────────────────────────
+
+  Widget _buildStatsBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.confirmation_num_outlined,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Total Tickets',
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$_totalItems',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -612,26 +641,6 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
               color: color,
             ),
           ),
-        ),
-      ],
-    ),
-  );
-
-  // ── State widgets ──────────────────────────────────────────────────────────
-
-  Widget _buildLoader() => const Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
-        ),
-        SizedBox(height: 14),
-        Text(
-          'Loading tickets…',
-          style: TextStyle(fontSize: 13, color: _inkSecondary),
         ),
       ],
     ),
@@ -668,7 +677,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
           ),
           const SizedBox(height: 16),
           TextButton.icon(
-            onPressed: _loadTickets,
+            onPressed: _loadFirstPage,
             icon: const Icon(Icons.refresh_rounded, size: 16),
             label: const Text('Try again'),
             style: TextButton.styleFrom(
@@ -708,29 +717,140 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   );
 }
 
-// ── Sticky header delegate ─────────────────────────────────────────────────────
+// ── Skeleton shimmer list ──────────────────────────────────────────────────────
 
-class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  final double height;
+class _SkeletonList extends StatefulWidget {
+  @override
+  State<_SkeletonList> createState() => _SkeletonListState();
+}
 
-  const _StickyHeaderDelegate({required this.child, required this.height});
+class _SkeletonListState extends State<_SkeletonList>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  static const _border = Color(0xFFE0E0E0);
+  static const _surface = Color(0xFFFFFFFF);
 
   @override
-  double get minExtent => height;
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
 
   @override
-  double get maxExtent => height;
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) => SizedBox(height: height, child: child);
-
-  @override
-  bool shouldRebuild(_StickyHeaderDelegate old) => old.height != height;
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) {
+        final opacity = 0.35 + (_anim.value * 0.35);
+        return ListView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+          itemCount: 6,
+          itemBuilder:
+              (_, __) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _border),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _border.withOpacity(opacity),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 12,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: _border.withOpacity(opacity),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              height: 10,
+                              width: 200,
+                              decoration: BoxDecoration(
+                                color: _border.withOpacity(opacity),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Container(
+                                  height: 16,
+                                  width: 60,
+                                  decoration: BoxDecoration(
+                                    color: _border.withOpacity(opacity),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  height: 16,
+                                  width: 80,
+                                  decoration: BoxDecoration(
+                                    color: _border.withOpacity(opacity),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              height: 1,
+                              color: _border.withOpacity(opacity),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              height: 10,
+                              width: 180,
+                              decoration: BoxDecoration(
+                                color: _border.withOpacity(opacity),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        );
+      },
+    );
+  }
 }
 
 // ── Ticket card ────────────────────────────────────────────────────────────────
@@ -742,7 +862,6 @@ class _TicketCard extends StatelessWidget {
   final String formattedDate;
 
   static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
   static const _inkTertiary = Color(0xFFA8A8A8);
   static const _surface = Color(0xFFFFFFFF);
   static const _border = Color(0xFFE0E0E0);
@@ -779,7 +898,6 @@ class _TicketCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Avatar
               Container(
                 width: 44,
                 height: 44,
@@ -799,13 +917,10 @@ class _TicketCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-
-              // Body
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Subject + status badge
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -846,23 +961,18 @@ class _TicketCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-
-                    // Ticket ID meta tag
                     Row(
                       children: [
-                        _MetaTag(label: '#', value: _id),
+                        _MetaTag(value: _id),
                         if (_ticketType.isNotEmpty) ...[
                           const SizedBox(width: 6),
-                          _MetaTag(label: 'Type', value: _ticketType),
+                          _MetaTag(value: _ticketType),
                         ],
                       ],
                     ),
-
                     const SizedBox(height: 8),
                     Container(height: 1, color: _border),
                     const SizedBox(height: 8),
-
-                    // Footer: requester + date + chevron
                     Row(
                       children: [
                         const Icon(
@@ -916,12 +1026,12 @@ class _TicketCard extends StatelessWidget {
 }
 
 class _MetaTag extends StatelessWidget {
-  final String label, value;
+  final String value;
   static const _inkTertiary = Color(0xFFA8A8A8);
   static const _surfaceSubtle = Color(0xFFF4F4F4);
   static const _border = Color(0xFFE0E0E0);
 
-  const _MetaTag({required this.label, required this.value});
+  const _MetaTag({required this.value});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -932,7 +1042,7 @@ class _MetaTag extends StatelessWidget {
       border: Border.all(color: _border),
     ),
     child: Text(
-      '$label $value',
+      '$value',
       style: const TextStyle(
         fontSize: 9,
         color: _inkTertiary,

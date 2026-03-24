@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../../../../services/api_service.dart';
 import 'admin_subscription_details_page.dart';
 
@@ -23,133 +24,187 @@ class AdminSubscriptionsPage extends StatefulWidget {
 class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  Timer? _searchDebounce;
 
   List<Map<String, dynamic>> _allSubscriptions = [];
-  List<Map<String, dynamic>> _filtered = [];
+
   bool _loading = false;
+  bool _fetchingMore = false;
   String? _error;
+
   int _totalItems = 0;
+  int _totalPages = 1;
+  int _currentPage = 1;
+  static const int _pageSize = 10;
 
   @override
   void initState() {
     super.initState();
-    _loadSubscriptions();
-    _searchController.addListener(_onSearch);
+    _loadFirstPage();
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
-    _searchController.removeListener(_onSearch);
+    _searchDebounce?.cancel();
     _searchController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _onSearch() {
-    final q = _searchController.text.trim().toLowerCase();
-    setState(() {
-      _filtered =
-          q.isEmpty
-              ? _allSubscriptions
-              : _allSubscriptions.where((s) {
-                final nickname = (s['nickname'] ?? '').toString().toLowerCase();
-                final id = (s['id'] ?? '').toString().toLowerCase();
-                final sln =
-                    (s['serviceLineNumber'] ?? '').toString().toLowerCase();
-                final plan =
-                    (s['subscriptionPlan'] ?? '').toString().toLowerCase();
-                final eu =
-                    (s['end_user_name'] ?? s['company_name'] ?? '')
-                        .toString()
-                        .toLowerCase();
-                return nickname.contains(q) ||
-                    id.contains(q) ||
-                    sln.contains(q) ||
-                    plan.contains(q) ||
-                    eu.contains(q);
-              }).toList();
-    });
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_fetchingMore &&
+        _currentPage < _totalPages) {
+      _loadNextPage();
+    }
   }
 
-  Future<void> _loadSubscriptions() async {
+  List<Map<String, dynamic>> get _filteredSubscriptions {
+    final q = _searchController.text.trim().toLowerCase();
+    if (q.isEmpty) return _allSubscriptions;
+    return _allSubscriptions.where((s) {
+      final nickname = (s['nickname'] ?? '').toString().toLowerCase();
+      final id = (s['id'] ?? '').toString().toLowerCase();
+      final sln = (s['serviceLineNumber'] ?? '').toString().toLowerCase();
+      final plan = (s['subscriptionPlan'] ?? '').toString().toLowerCase();
+      final eu =
+          (s['end_user_name'] ?? s['company_name'] ?? '')
+              .toString()
+              .toLowerCase();
+      return nickname.contains(q) ||
+          id.contains(q) ||
+          sln.contains(q) ||
+          plan.contains(q) ||
+          eu.contains(q);
+    }).toList();
+  }
+
+  // ── Parse ──────────────────────────────────────────────────────────────────
+
+  ({int totalPages, int totalItems, List<Map<String, dynamic>> items})
+  _parsePage(Map<String, dynamic> response) {
+    final data = response['data'];
+    final List<Map<String, dynamic>> items =
+        data is List
+            ? data
+                .whereType<Map>()
+                .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+                .toList()
+            : [];
+
+    final pagination = response['pagination'];
+    int totalPages = 1;
+    int totalItems = 0;
+    if (pagination is Map) {
+      totalPages =
+          int.tryParse(
+            (pagination['totalPages'] ?? pagination['total_pages'] ?? 1)
+                .toString(),
+          ) ??
+          1;
+      totalItems =
+          int.tryParse(
+            (pagination['totalItems'] ?? pagination['total_items'] ?? 0)
+                .toString(),
+          ) ??
+          0;
+    }
+
+    return (totalPages: totalPages, totalItems: totalItems, items: items);
+  }
+
+  // ── First page ─────────────────────────────────────────────────────────────
+
+  Future<void> _loadFirstPage() async {
     if (_loading) return;
     setState(() {
       _loading = true;
       _error = null;
       _allSubscriptions = [];
-      _filtered = [];
       _totalItems = 0;
+      _totalPages = 1;
+      _currentPage = 1;
     });
 
     try {
-      const int pageSize = 50;
-      int page = 1;
-      int totalPages = 1;
-      final List<Map<String, dynamic>> all = [];
-
-      do {
-        final response = await ApiService.getSubscriptionsPaginated(
-          page: page,
-          limit: pageSize,
-          search: '',
-        );
-
-        if (!mounted) return;
-
-        if (response['status'] != 'success') {
-          setState(() {
-            _loading = false;
-            _error =
-                response['message']?.toString() ??
-                'Failed to load subscriptions';
-          });
-          return;
-        }
-
-        final data = response['data'];
-        final List<dynamic> items = data is List ? data : [];
-        all.addAll(
-          items.whereType<Map>().map<Map<String, dynamic>>(
-            (e) => Map<String, dynamic>.from(e),
-          ),
-        );
-
-        final pagination = response['pagination'];
-        if (pagination is Map<String, dynamic>) {
-          totalPages =
-              (pagination['totalPages'] ?? pagination['total_pages'] ?? 1)
-                  as int;
-          _totalItems =
-              (pagination['totalItems'] ?? pagination['total_items'] ?? 0)
-                  as int;
-        }
-
-        // Show first page immediately
-        if (page == 1 && mounted) {
-          setState(() {
-            _allSubscriptions = List.from(all);
-            _filtered = List.from(all);
-          });
-        }
-
-        page++;
-      } while (page <= totalPages);
-
+      final response = await ApiService.getSubscriptionsPaginated(
+        page: 1,
+        limit: _pageSize,
+        search: '',
+      );
       if (!mounted) return;
+
+      if (response['status'] != 'success') {
+        setState(() {
+          _error =
+              response['message']?.toString() ?? 'Failed to load subscriptions';
+          _loading = false;
+        });
+        return;
+      }
+
+      final parsed = _parsePage(response);
+
       setState(() {
-        _allSubscriptions = all;
-        _filtered = all;
-        _totalItems = all.length > _totalItems ? all.length : _totalItems;
+        _allSubscriptions = parsed.items;
+        _totalPages = parsed.totalPages;
+        _totalItems = parsed.totalItems;
+        _currentPage = 1;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _error = e.toString().replaceAll('Exception: ', '');
         _loading = false;
-        _error = e.toString();
       });
     }
   }
+
+  // ── Next page ──────────────────────────────────────────────────────────────
+
+  Future<void> _loadNextPage() async {
+    if (_fetchingMore || _currentPage >= _totalPages) return;
+    setState(() => _fetchingMore = true);
+
+    try {
+      final nextPage = _currentPage + 1;
+      final response = await ApiService.getSubscriptionsPaginated(
+        page: nextPage,
+        limit: _pageSize,
+        search: '',
+      );
+      if (!mounted) return;
+
+      if (response['status'] == 'success') {
+        final parsed = _parsePage(response);
+        final existingIds =
+            _allSubscriptions.map((s) => s['id'].toString()).toSet();
+        final newItems =
+            parsed.items
+                .where((s) => !existingIds.contains(s['id'].toString()))
+                .toList();
+
+        setState(() {
+          _allSubscriptions = [..._allSubscriptions, ...newItems];
+          _currentPage = nextPage;
+          if (parsed.totalItems > 0) _totalItems = parsed.totalItems;
+          if (parsed.totalPages > 0) _totalPages = parsed.totalPages;
+        });
+      } else {
+        setState(() => _currentPage++);
+      }
+    } catch (_) {
+      // Silent — scroll again to retry
+    } finally {
+      if (mounted) setState(() => _fetchingMore = false);
+    }
+  }
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
 
   void _openDetails(Map<String, dynamic> sub) {
     final serviceLineNumber = sub['serviceLineNumber']?.toString() ?? '';
@@ -182,91 +237,22 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
     return raw;
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final total = _totalItems > 0 ? _totalItems : _allSubscriptions.length;
+    final filtered = _filteredSubscriptions;
 
-    return ColoredBox(
-      color: _surface,
-      child: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          // ── Pinned header ──────────────────────────────────────────────
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _StickyHeaderDelegate(child: _buildStickyHeader(total)),
-          ),
-
-          // ── Body ──────────────────────────────────────────────────────
-          if (_loading)
-            const SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 26,
-                      height: 26,
-                      child: CircularProgressIndicator(
-                        color: _primary,
-                        strokeWidth: 2.5,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Loading subscriptions…',
-                      style: TextStyle(fontSize: 13, color: _inkSecondary),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else if (_error != null && _allSubscriptions.isEmpty)
-            SliverFillRemaining(child: _buildError())
-          else if (_filtered.isEmpty)
-            SliverFillRemaining(child: _buildEmpty())
-          else ...[
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final sub = _filtered[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: RepaintBoundary(
-                      child: _SubscriptionCard(
-                        sub: sub,
-                        onTap: () => _openDetails(sub),
-                        activeColor: _activeColor(sub['active']?.toString()),
-                        formattedStart: _formatDate(
-                          sub['startDate']?.toString(),
-                        ),
-                        formattedEnd: _formatDate(sub['endDate']?.toString()),
-                      ),
-                    ),
-                  );
-                }, childCount: _filtered.length),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // ── Sticky header ──────────────────────────────────────────────────────────
-
-  Widget _buildStickyHeader(int total) {
     return ColoredBox(
       color: _surface,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
+          // Stats banner
+          if (!_loading) _buildStatsBanner(),
+
           // Search bar
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Container(
               decoration: BoxDecoration(
                 color: _surfaceSubtle,
@@ -275,7 +261,15 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
               ),
               child: TextField(
                 controller: _searchController,
-                onChanged: (_) => _onSearch(),
+                onChanged: (_) {
+                  _searchDebounce?.cancel();
+                  _searchDebounce = Timer(
+                    const Duration(milliseconds: 250),
+                    () {
+                      if (mounted) setState(() {});
+                    },
+                  );
+                },
                 style: const TextStyle(fontSize: 13, color: _ink),
                 decoration: InputDecoration(
                   hintText: 'Search subscriptions…',
@@ -290,7 +284,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                           ? GestureDetector(
                             onTap: () {
                               _searchController.clear();
-                              _onSearch();
+                              setState(() {});
                             },
                             child: const Icon(
                               Icons.close_rounded,
@@ -301,7 +295,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                           : null,
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
-                    vertical: 12,
+                    vertical: 14,
                     horizontal: 16,
                   ),
                 ),
@@ -309,9 +303,9 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
             ),
           ),
 
-          // List title row
+          // List header
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 16, 10),
+            padding: const EdgeInsets.fromLTRB(20, 12, 16, 8),
             child: Row(
               children: [
                 const Text(
@@ -334,7 +328,9 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '$total',
+                    _totalItems > 0
+                        ? '$_totalItems'
+                        : '${_allSubscriptions.length}',
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -343,22 +339,152 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                   ),
                 ),
                 const Spacer(),
-                GestureDetector(
-                  onTap: _loadSubscriptions,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Icon(
-                      Icons.refresh_rounded,
-                      size: 18,
-                      color: _inkTertiary,
-                    ),
-                  ),
-                ),
+                // GestureDetector(
+                //   onTap: _loadFirstPage,
+                //   child: const Padding(
+                //     padding: EdgeInsets.symmetric(horizontal: 8),
+                //     child: Icon(
+                //       Icons.refresh_rounded,
+                //       size: 18,
+                //       color: _inkTertiary,
+                //     ),
+                //   ),
+                // ),
               ],
             ),
           ),
 
           Container(height: 1, color: _border),
+
+          // List
+          Expanded(
+            child:
+                _loading
+                    ? _SkeletonList()
+                    : _error != null && _allSubscriptions.isEmpty
+                    ? _buildError()
+                    : filtered.isEmpty
+                    ? _buildEmpty()
+                    : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      itemCount: filtered.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == filtered.length) {
+                          if (_fetchingMore) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 20),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: _primary,
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          if (_currentPage >= _totalPages &&
+                              _allSubscriptions.isNotEmpty) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: Center(
+                                child: Text(
+                                  'All $_totalItems subscriptions loaded',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: _inkTertiary,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return const SizedBox(height: 80);
+                        }
+                        final sub = filtered[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: RepaintBoundary(
+                            child: _SubscriptionCard(
+                              sub: sub,
+                              onTap: () => _openDetails(sub),
+                              activeColor: _activeColor(
+                                sub['active']?.toString(),
+                              ),
+                              formattedStart: _formatDate(
+                                sub['startDate']?.toString(),
+                              ),
+                              formattedEnd: _formatDate(
+                                sub['endDate']?.toString(),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Stats banner ───────────────────────────────────────────────────────────
+
+  Widget _buildStatsBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.subscriptions_outlined,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Total Subscriptions',
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$_totalItems',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -395,7 +521,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
           ),
           const SizedBox(height: 14),
           TextButton.icon(
-            onPressed: _loadSubscriptions,
+            onPressed: _loadFirstPage,
             icon: const Icon(Icons.refresh_rounded, size: 16),
             label: const Text('Try again'),
             style: TextButton.styleFrom(
@@ -435,30 +561,140 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
   );
 }
 
-// ── Sticky header delegate ─────────────────────────────────────────────────────
+// ── Skeleton shimmer list ──────────────────────────────────────────────────────
 
-class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  // search(16+44+0) + title(12+36+10) + divider(1) = 119
-  static const double _height = 120.0;
+class _SkeletonList extends StatefulWidget {
+  @override
+  State<_SkeletonList> createState() => _SkeletonListState();
+}
 
-  const _StickyHeaderDelegate({required this.child});
+class _SkeletonListState extends State<_SkeletonList>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  static const _border = Color(0xFFE0E0E0);
+  static const _surface = Color(0xFFFFFFFF);
 
   @override
-  double get minExtent => _height;
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
 
   @override
-  double get maxExtent => _height;
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) => SizedBox(height: _height, child: child);
-
-  @override
-  bool shouldRebuild(_StickyHeaderDelegate old) => true;
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) {
+        final opacity = 0.35 + (_anim.value * 0.35);
+        return ListView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+          itemCount: 6,
+          itemBuilder:
+              (_, __) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _border),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _border.withOpacity(opacity),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 12,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: _border.withOpacity(opacity),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              height: 10,
+                              width: 180,
+                              decoration: BoxDecoration(
+                                color: _border.withOpacity(opacity),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Container(
+                                  height: 16,
+                                  width: 70,
+                                  decoration: BoxDecoration(
+                                    color: _border.withOpacity(opacity),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  height: 16,
+                                  width: 60,
+                                  decoration: BoxDecoration(
+                                    color: _border.withOpacity(opacity),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              height: 1,
+                              color: _border.withOpacity(opacity),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              height: 10,
+                              width: 160,
+                              decoration: BoxDecoration(
+                                color: _border.withOpacity(opacity),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        );
+      },
+    );
+  }
 }
 
 // ── Subscription card ──────────────────────────────────────────────────────────
@@ -491,7 +727,6 @@ class _SubscriptionCard extends StatelessWidget {
   String get _serviceLineNumber => (sub['serviceLineNumber'] ?? '—').toString();
   String get _active => (sub['active'] ?? '—').toString();
   String get _subscriptionPlan => (sub['subscriptionPlan'] ?? '—').toString();
-  String get _address => (sub['address'] ?? '').toString();
   String get _dataplan => (sub['dataplan'] ?? '—').toString();
   String get _endUserName =>
       (sub['end_user_name'] ?? sub['company_name'] ?? '').toString();
@@ -518,7 +753,6 @@ class _SubscriptionCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Avatar
                 Container(
                   width: 44,
                   height: 44,
@@ -538,13 +772,10 @@ class _SubscriptionCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-
-                // Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Nickname + status badge
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -584,8 +815,6 @@ class _SubscriptionCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 3),
-
-                      // ID + service line
                       Text(
                         'ID: $_id · $_serviceLineNumber',
                         style: const TextStyle(
@@ -594,8 +823,6 @@ class _SubscriptionCard extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-
-                      // Meta tags row
                       const SizedBox(height: 4),
                       Wrap(
                         spacing: 6,
@@ -607,7 +834,6 @@ class _SubscriptionCard extends StatelessWidget {
                             _MetaTag(label: 'Data', value: '$_dataplan GB'),
                         ],
                       ),
-
                       if (_endUserName.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         Text(
@@ -620,12 +846,9 @@ class _SubscriptionCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
-
                       const SizedBox(height: 8),
                       Container(height: 1, color: _border),
                       const SizedBox(height: 8),
-
-                      // Footer: dates + chevron
                       Row(
                         children: [
                           const Icon(

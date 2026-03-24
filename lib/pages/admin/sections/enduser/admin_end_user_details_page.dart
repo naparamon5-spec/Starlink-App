@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../services/api_service.dart';
+import '../../profile/admin_manage_users_page.dart';
+import '../subscription/admin_subscription_details_page.dart';
+import '../../profile/view-user/admin_view_user_details_page.dart';
 
 class AdminEndUserDetailsPage extends StatefulWidget {
   final String endUserId;
@@ -27,18 +30,17 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
   List<Map<String, dynamic>> _subscriptions = [];
   List<Map<String, dynamic>> _users = [];
 
-  // ── Design tokens ──────────────────────────────────────────────────────────
-  static const _primary = Color(0xFFEB1E23); // Brand red
-  static const _primaryDark = Color(0xFF760F12); // Dark red
+  static const _primary = Color(0xFFEB1E23);
+  static const _primaryDark = Color(0xFF760F12);
   static const _success = Color(0xFF24A148);
   static const _danger = Color(0xFFEB1E23);
-  static const _purple = Color(0xFF7C3AED);
   static const _ink = Color(0xFF000000);
   static const _inkSecondary = Color(0xFF6F6F6F);
   static const _inkTertiary = Color(0xFFA8A8A8);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceSubtle = Color(0xFFF4F4F4);
   static const _border = Color(0xFFE0E0E0);
+  static const _purple = Color(0xFF6929C4);
 
   @override
   void initState() {
@@ -46,72 +48,82 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
     _loadAll();
   }
 
+  List<Map<String, dynamic>> _extractList(Map<String, dynamic> result) {
+    if (result['status'] != 'success') return [];
+    final payload = result['data'];
+    if (payload is List) {
+      return payload
+          .whereType<Map>()
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    if (payload is Map) {
+      final inner = payload['data'];
+      if (inner is List) {
+        return inner
+            .whereType<Map>()
+            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    }
+    final raw = result['raw'];
+    if (raw is Map) {
+      final rawData = raw['data'];
+      if (rawData is List) {
+        return rawData
+            .whereType<Map>()
+            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    }
+    return [];
+  }
+
   Future<void> _loadAll() async {
     setState(() {
       _loading = true;
       _error = null;
     });
-
     try {
-      final euCode = widget.endUserId;
+      final euCode =
+          [
+            widget.endUserCode,
+            widget.endUserId,
+          ].firstWhere((v) => v.trim().isNotEmpty, orElse: () => '').trim();
+      if (euCode.isEmpty) {
+        setState(() {
+          _loading = false;
+          _error = 'No valid end user code provided.';
+        });
+        return;
+      }
       final results = await Future.wait([
         ApiService.getEndUserById(euCode),
         ApiService.getSubscriptionsByEndUserId(euCode),
         ApiService.getUsersByCompanyCode(euCode),
       ]);
-
       if (!mounted) return;
-
       if (results[0]['status'] != 'success') {
         setState(() {
           _loading = false;
-          _error = results[0]['message']?.toString() ?? 'Failed to load';
+          _error =
+              results[0]['message']?.toString() ?? 'Failed to load end user';
         });
         return;
       }
-
       final rawEu = results[0]['data'];
-      final endUser =
-          rawEu is Map ? Map<String, dynamic>.from(rawEu) : <String, dynamic>{};
-
-      List<Map<String, dynamic>> subs = [];
-      if (results[1]['status'] == 'success') {
-        final rawSubs = results[1]['data'];
-        List<dynamic> list = [];
-        if (rawSubs is List) {
-          list = rawSubs;
-        } else if (rawSubs is Map) {
-          final inner = rawSubs['data'];
-          if (inner is List) list = inner;
-        }
-        subs =
-            list
-                .whereType<Map>()
-                .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-                .toList();
-      }
-
-      List<Map<String, dynamic>> users = [];
-      if (results[2]['status'] == 'success') {
-        final rawUsers = results[2]['data'];
-        List<dynamic> list = [];
-        if (rawUsers is List) {
-          list = rawUsers;
-        } else if (rawUsers is Map) {
-          final inner = rawUsers['data'];
-          if (inner is List) list = inner;
-        }
-        users =
-            list
-                .whereType<Map>()
-                .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-                .toList();
-      }
+      Map<String, dynamic> endUser;
+      if (rawEu is Map<String, dynamic>)
+        endUser = rawEu;
+      else if (rawEu is Map)
+        endUser = Map<String, dynamic>.from(rawEu);
+      else
+        endUser = {'eu_code': euCode, 'eu_name': widget.endUserName};
 
       setState(() {
         _endUser = endUser;
-        _subscriptions = subs;
-        _users = users;
+        _subscriptions = _extractList(results[1]);
+        _users = _extractList(results[2]);
         _loading = false;
       });
     } catch (e) {
@@ -136,6 +148,87 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
           ? '—'
           : v.toString().trim();
 
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  // ── Navigate to subscription detail ───────────────────────────────────────
+  void _openSubscription(Map<String, dynamic> sub) {
+    final sln = _str(sub['serviceLineNumber'] ?? sub['service_line_number']);
+    if (sln == '—') return;
+    final nickname = _str(sub['nickname'] ?? sub['site_name'] ?? sln);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => AdminSubscriptionDetailsPage(
+              serviceLineNumber: sln,
+              title: nickname,
+            ),
+      ),
+    );
+  }
+
+  // ── Navigate to user detail ────────────────────────────────────────────────
+  void _openUser(Map<String, dynamic> user) {
+    final userId = user['id']?.toString() ?? '';
+    if (userId.isEmpty || userId == 'null') return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AdminUserDetailPage(userId: userId)),
+    );
+  }
+
+  // ── Add User bottom sheet ──────────────────────────────────────────────────
+  void _showAddUserSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      builder:
+          (_) => CreateUserSheet(
+            currentUserRole: 'admin',
+            onCreated: () {
+              _loadAll();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text(
+                    'User created successfully.',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  backgroundColor: _success,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  margin: const EdgeInsets.all(16),
+                ),
+              );
+            },
+            onError: (msg) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    msg,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  backgroundColor: _primary,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  margin: const EdgeInsets.all(16),
+                ),
+              );
+            },
+          ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,14 +239,27 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
-        title: const Text(
-          'End User Details',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: _ink,
-            letterSpacing: -0.3,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.endUserName.isNotEmpty
+                  ? widget.endUserName
+                  : 'End User Details',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: _ink,
+                letterSpacing: -0.3,
+              ),
+            ),
+            Text(
+              widget.endUserCode,
+              style: const TextStyle(fontSize: 11, color: _inkTertiary),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -185,9 +291,9 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                   children: [
                     _buildEndUserCard(),
                     const SizedBox(height: 12),
-                    _buildSubscriptionsSection(),
+                    _buildSubscriptionsCard(),
                     const SizedBox(height: 12),
-                    _buildUsersSection(),
+                    _buildUsersCard(),
                   ],
                 ),
               ),
@@ -196,455 +302,530 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
 
   Widget _buildEndUserCard() {
     final e = _endUser ?? {};
-    final name = _str(e['eu_name'] ?? e['name']);
-    final code = _str(e['eu_code'] ?? e['code'] ?? e['customer_code']);
+    final code = _str(
+      e['eu_code'] ?? e['code'] ?? e['customer_code'] ?? widget.endUserCode,
+    );
+    final name = _str(e['eu_name'] ?? e['name'] ?? widget.endUserName);
+    final customerCode = _str(e['customer_code']);
     final inactiveRaw = _str(e['inactive'] ?? e['status']);
     final isActive =
         inactiveRaw == 'N' ||
         inactiveRaw == '0' ||
         inactiveRaw.toUpperCase() == 'ACTIVE';
 
-    return _WhiteCard(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _LabelValue(label: 'Name', value: name),
-                  const SizedBox(height: 8),
-                  _LabelValue(label: 'Code', value: code),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Status',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _ink,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Transform.scale(
-                  scale: 0.55,
-                  child: Switch(
-                    value: isActive,
-                    onChanged: _isTogglingStatus ? null : _toggleStatus,
-                    activeThumbColor: _primary,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSubscriptionsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
-          child: Row(
-            children: [
-              const Text(
-                'Subscription',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: _ink,
-                  letterSpacing: -0.2,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _CountPill(count: _subscriptions.length, color: _purple),
-            ],
-          ),
-        ),
-        if (_subscriptions.isEmpty)
-          _WhiteCard(
-            child: const Padding(
-              padding: EdgeInsets.all(20),
-              child: Center(
-                child: Text(
-                  'No subscriptions found.',
-                  style: TextStyle(fontSize: 13, color: _inkTertiary),
-                ),
-              ),
-            ),
-          )
-        else
-          ...List.generate(_subscriptions.length, (i) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: i < _subscriptions.length - 1 ? 10 : 0,
-              ),
-              child: _buildSubscriptionCard(_subscriptions[i]),
-            );
-          }),
-      ],
-    );
-  }
-
-  Widget _buildSubscriptionCard(Map<String, dynamic> s) {
-    final nickname = _str(s['nickname'] ?? s['site_name']);
-    final sln = _str(s['serviceLineNumber'] ?? s['service_line_number']);
-    final totalGB = _str(s['totalPriorityGB']);
-    final kit = _str(s['kit_number'] ?? s['kitNumber']);
-    final activeRaw = _str(s['active'] ?? s['status']);
-    final isActive = activeRaw.toUpperCase() == 'ACTIVE' || activeRaw == '1';
-    final dataGB = double.tryParse(totalGB == '—' ? '0' : totalGB) ?? 0;
-
-    return _WhiteCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    nickname,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _ink,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                _StatusBadge(
-                  label: isActive ? 'ACTIVE' : 'INACTIVE',
-                  color: isActive ? _success : _primaryDark,
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              sln,
-              style: const TextStyle(
-                fontSize: 11,
-                color: _inkTertiary,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Container(height: 1, color: _surfaceSubtle),
-            const SizedBox(height: 12),
-            _LabelValue(
-              label: 'Data Usage',
-              value: '$totalGB GB',
-              valueColor: dataGB > 0 ? _primary : _inkSecondary,
-            ),
-            const SizedBox(height: 8),
-            _LabelValue(label: 'Kit Number', value: kit),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUsersSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
-          child: Row(
-            children: [
-              const Text(
-                'Users',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: _ink,
-                  letterSpacing: -0.2,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _CountPill(count: _users.length, color: _success),
-              const Spacer(),
-              GestureDetector(
-                onTap: () {
-                  // TODO: navigate to add user
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _ink,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add, size: 14, color: Colors.white),
-                      SizedBox(width: 4),
-                      Text(
-                        'Add User',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (_users.isEmpty)
-          _WhiteCard(
-            child: const Padding(
-              padding: EdgeInsets.all(20),
-              child: Center(
-                child: Text(
-                  'No Users found.',
-                  style: TextStyle(fontSize: 13, color: _inkTertiary),
-                ),
-              ),
-            ),
-          )
-        else
-          _WhiteCard(
-            child: ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _users.length,
-              separatorBuilder:
-                  (_, __) => Container(height: 1, color: _surfaceSubtle),
-              itemBuilder: (_, i) => _buildUserRow(_users[i]),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildUserRow(Map<String, dynamic> u) {
-    final firstName = _str(u['first_name']);
-    final lastName = _str(u['last_name']);
-    final rawName = u['name'];
-    final name = _str(
-      rawName ??
-          (firstName != '—' || lastName != '—'
-              ? '$firstName $lastName'.trim()
-              : null),
-    );
-    final email = _str(u['email']);
-    final role = _str(u['role']);
-    final position = _str(u['position']);
-    final inactiveRaw = _str(u['inactive']);
-    final isActive =
-        inactiveRaw == 'N' ||
-        inactiveRaw == '0' ||
-        inactiveRaw.toUpperCase() == 'ACTIVE';
-
-    final parts = name.trim().split(RegExp(r'\s+'));
-    final initials =
-        name == '—'
-            ? 'U'
-            : parts.length == 1
-            ? parts.first[0].toUpperCase()
-            : '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return _SectionCard(
+      icon: Icons.person_outline_rounded,
+      iconColor: _primary,
+      title: 'End User',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: _primary.withOpacity(0.08),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: _primary,
-                ),
-              ),
+          _StatusBadge(
+            label: isActive ? 'Active' : 'Inactive',
+            color: isActive ? _success : _primaryDark,
+          ),
+          const SizedBox(width: 8),
+          Transform.scale(
+            scale: 0.78,
+            alignment: Alignment.centerRight,
+            child: Switch(
+              value: isActive,
+              onChanged: _isTogglingStatus ? null : _toggleStatus,
+              activeColor: _primary,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: _ink,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _StatusBadge(
-                      label: isActive ? 'Active' : 'Inactive',
-                      color: isActive ? _success : _primaryDark,
-                    ),
-                  ],
-                ),
-                if (email != '—') ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    email,
-                    style: const TextStyle(fontSize: 11, color: _inkSecondary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-                if (role != '—' || position != '—') ...[
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      if (role != '—')
-                        _TagChip(
-                          label: role.toUpperCase(),
-                          icon: Icons.shield_outlined,
-                          color: _primary,
-                        ),
-                      if (position != '—')
-                        _TagChip(
-                          label: position,
-                          icon: Icons.work_outline_rounded,
-                          color: _inkSecondary,
-                        ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          _KVRow(label: 'Name', value: name),
+          const SizedBox(height: 10),
+          _KVRow(label: 'EU Code', value: code),
+          if (customerCode != '—') const SizedBox(height: 10),
         ],
       ),
     );
   }
 
-  Widget _buildLoader() {
-    return const Center(
+  Widget _buildSubscriptionsCard() {
+    return _SectionCard(
+      icon: Icons.router_rounded,
+      iconColor: _purple,
+      title: 'Subscriptions',
+      trailing: _CountBadge(count: _subscriptions.length, color: _purple),
+      child:
+          _subscriptions.isEmpty
+              ? const _EmptyRow(message: 'No subscriptions found')
+              : Column(
+                children:
+                    _subscriptions.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final s = entry.value;
+                      final nickname = _str(s['nickname'] ?? s['site_name']);
+                      final sln = _str(
+                        s['serviceLineNumber'] ?? s['service_line_number'],
+                      );
+                      final kit = _str(s['kit_number'] ?? s['kitNumber']);
+                      final address = _str(s['address']);
+                      final startDate = _str(s['startDate'] ?? s['start_date']);
+                      final endDate = _str(s['endDate'] ?? s['end_date']);
+                      final totalGB = _str(s['totalPriorityGB']);
+                      final dataplan = _str(s['dataplan']);
+                      final activeRaw = _str(s['active'] ?? s['status']);
+                      final isActive =
+                          activeRaw.toUpperCase() == 'ACTIVE' ||
+                          activeRaw == '1';
+                      final usedGB = totalGB == '—' ? '0.00' : totalGB;
+                      final planGB =
+                          (dataplan == '—' || dataplan == '0') ? '0' : dataplan;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (i > 0) const _HDivider(),
+                          InkWell(
+                            onTap:
+                                sln == '—' ? null : () => _openSubscription(s),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              nickname,
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: _ink,
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              sln,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: _inkTertiary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          _StatusBadge(
+                                            label:
+                                                isActive
+                                                    ? 'ACTIVE'
+                                                    : 'INACTIVE',
+                                            color:
+                                                isActive
+                                                    ? _success
+                                                    : _primaryDark,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          if (sln != '—')
+                                            Container(
+                                              width: 24,
+                                              height: 24,
+                                              decoration: BoxDecoration(
+                                                color: _purple.withOpacity(
+                                                  0.08,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                              ),
+                                              child: const Icon(
+                                                Icons.chevron_right_rounded,
+                                                size: 16,
+                                                color: _purple,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  _KVRow(
+                                    label: 'Data Usage',
+                                    value: '$usedGB GB / $planGB GB',
+                                  ),
+                                  if (kit != '—') ...[
+                                    const SizedBox(height: 6),
+                                    _KVRow(label: 'Kit Number', value: kit),
+                                  ],
+                                  if (address != '—') ...[
+                                    const SizedBox(height: 6),
+                                    _KVRow(label: 'Address', value: address),
+                                  ],
+                                  if (startDate != '—') ...[
+                                    const SizedBox(height: 6),
+                                    _KVRow(
+                                      label: 'Start Date',
+                                      value: startDate,
+                                    ),
+                                  ],
+                                  if (endDate != '—' &&
+                                      endDate != '0000-00-00') ...[
+                                    const SizedBox(height: 6),
+                                    _KVRow(label: 'End Date', value: endDate),
+                                  ],
+                                  if (sln != '—') ...[
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        const Spacer(),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _purple.withOpacity(0.07),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: _purple.withOpacity(0.2),
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.open_in_new_rounded,
+                                                size: 11,
+                                                color: _purple,
+                                              ),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'View Details',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: _purple,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+              ),
+    );
+  }
+
+  Widget _buildUsersCard() {
+    return _SectionCard(
+      icon: Icons.people_outline_rounded,
+      iconColor: _success,
+      title: 'Users',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _CountBadge(count: _users.length, color: _success),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _showAddUserSheet,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _ink,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, size: 13, color: Colors.white),
+                  SizedBox(width: 4),
+                  Text(
+                    'Add User',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      child:
+          _users.isEmpty
+              ? const _EmptyRow(message: 'No users found')
+              : Column(
+                children:
+                    _users.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final u = entry.value;
+                      final firstName = _str(u['first_name']);
+                      final lastName = _str(u['last_name']);
+                      final name = _str(
+                        u['name'] ??
+                            (firstName != '—' || lastName != '—'
+                                ? '$firstName $lastName'.trim()
+                                : null),
+                      );
+                      final email = _str(u['email']);
+                      final role = _str(u['role']);
+                      final position = _str(u['position']);
+                      final inactiveRaw = _str(u['inactive']);
+                      final isActive =
+                          inactiveRaw == 'N' ||
+                          inactiveRaw == '0' ||
+                          inactiveRaw.toUpperCase() == 'ACTIVE';
+                      final initials = _initials(name == '—' ? 'U' : name);
+                      final userId = u['id']?.toString() ?? '';
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (i > 0) const _HDivider(),
+                          InkWell(
+                            onTap: () => _openUser(u),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: _primary.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        initials,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: _primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                name,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _ink,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            _StatusBadge(
+                                              label:
+                                                  isActive
+                                                      ? 'Active'
+                                                      : 'Inactive',
+                                              color:
+                                                  isActive
+                                                      ? _success
+                                                      : _primaryDark,
+                                            ),
+                                          ],
+                                        ),
+                                        if (email != '—') ...[
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            email,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: _inkSecondary,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                        if (role != '—' || position != '—') ...[
+                                          const SizedBox(height: 6),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            children: [
+                                              if (role != '—')
+                                                _Chip(
+                                                  label: role.toUpperCase(),
+                                                  icon: Icons.shield_outlined,
+                                                ),
+                                              if (position != '—')
+                                                _Chip(
+                                                  label: position,
+                                                  icon:
+                                                      Icons
+                                                          .work_outline_rounded,
+                                                ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Chevron — indicates row is tappable
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: _success.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Icon(
+                                      Icons.chevron_right_rounded,
+                                      size: 16,
+                                      color: _success,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+              ),
+    );
+  }
+
+  Widget _buildLoader() => const Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
+        ),
+        SizedBox(height: 14),
+        Text(
+          'Loading end user details…',
+          style: TextStyle(fontSize: 13, color: _inkSecondary),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildError() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: _danger.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.error_outline_rounded,
+              color: _danger,
+              size: 26,
+            ),
           ),
-          SizedBox(height: 14),
+          const SizedBox(height: 16),
           Text(
-            'Loading end user details…',
-            style: TextStyle(fontSize: 13, color: _inkSecondary),
+            _error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              color: _inkSecondary,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _loadAll,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text(
+              'Try Again',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: _danger.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.error_outline_rounded,
-                color: _danger,
-                size: 26,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: _inkSecondary,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _loadAll,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primary,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-              icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: const Text(
-                'Try Again',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-widgets
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Shared sub-widgets ────────────────────────────────────────────────────────
 
-class _WhiteCard extends StatelessWidget {
+class _SectionCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final Widget? trailing;
   final Widget child;
-  const _WhiteCard({required this.child});
+
+  const _SectionCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.child,
+    this.trailing,
+  });
+
+  static const _ink = Color(0xFF000000);
+  static const _surface = Color(0xFFFFFFFF);
+  static const _border = Color(0xFFE0E0E0);
+  static const _surfaceSubtle = Color(0xFFF4F4F4);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
+        color: _surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -653,138 +834,171 @@ class _WhiteCard extends StatelessWidget {
           ),
         ],
       ),
-      child: child,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 17),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: _ink,
+                    ),
+                  ),
+                ),
+                if (trailing != null) trailing!,
+              ],
+            ),
+          ),
+          Container(height: 1, color: _surfaceSubtle),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: child,
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _LabelValue extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? valueColor;
-  const _LabelValue({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-
+class _HDivider extends StatelessWidget {
+  const _HDivider();
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 90,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFFA8A8A8),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: valueColor ?? const Color(0xFF000000),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) =>
+      Container(height: 1, color: const Color(0xFFF4F4F4));
 }
 
 class _StatusBadge extends StatelessWidget {
   final String label;
   final Color color;
   const _StatusBadge({required this.label, required this.color});
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.3)),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: color.withOpacity(0.25)),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        fontSize: 9,
+        fontWeight: FontWeight.w800,
+        color: color,
+        letterSpacing: 0.4,
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          color: color,
-          letterSpacing: 0.4,
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }
 
-class _CountPill extends StatelessWidget {
+class _CountBadge extends StatelessWidget {
   final int count;
   final Color color;
-  const _CountPill({required this.count, required this.color});
-
+  const _CountBadge({required this.count, required this.color});
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        '$count',
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      '$count',
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color),
+    ),
+  );
 }
 
-class _TagChip extends StatelessWidget {
+class _KVRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _KVRow({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 110,
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xFFA8A8A8),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          value,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xFF000000),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _Chip extends StatelessWidget {
   final String label;
   final IconData icon;
-  final Color color;
-  const _TagChip({
-    required this.label,
-    required this.icon,
-    required this.color,
-  });
-
+  const _Chip({required this.label, required this.icon});
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF4F4F4),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: const Color(0xFFA8A8A8)),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF6F6F6F),
+            fontWeight: FontWeight.w500,
           ),
-        ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _EmptyRow extends StatelessWidget {
+  final String message;
+  const _EmptyRow({required this.message});
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    child: Center(
+      child: Text(
+        message,
+        style: const TextStyle(fontSize: 13, color: Color(0xFFA8A8A8)),
       ),
-    );
-  }
+    ),
+  );
 }

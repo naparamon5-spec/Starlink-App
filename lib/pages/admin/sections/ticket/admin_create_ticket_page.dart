@@ -19,13 +19,6 @@ const _surfaceSubtle = Color(0xFFF4F4F4);
 const _border = Color(0xFFE0E0E0);
 const _errorColor = Color(0xFFEB1E23);
 
-const _dropItemStyle = TextStyle(
-  color: _ink,
-  fontSize: 14,
-  fontWeight: FontWeight.w500,
-);
-
-// ── Allowed file extensions ────────────────────────────────────────────────────
 const _allowedExtensions = [
   'jpg',
   'jpeg',
@@ -50,7 +43,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
   final _formKey = GlobalKey<FormState>();
   late AnimationController _animController;
 
-  // ── Form state ─────────────────────────────────────────────────────────────
   final _subjectController = TextEditingController();
   final _descriptionController = TextEditingController();
 
@@ -58,16 +50,12 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
   Map<String, dynamic>? _selectedContact;
   Map<String, dynamic>? _selectedSubscription;
 
-  // ── Attachment state ────────────────────────────────────────────────────────
-  /// Each entry: { 'name': String, 'path': String, 'size': int, 'mimeType': String }
   final List<Map<String, dynamic>> _pickedFiles = [];
 
-  // ── API data ───────────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _ticketTypes = [];
   List<Map<String, dynamic>> _contacts = [];
   List<Map<String, dynamic>> _subscriptions = [];
 
-  // ── Loading / error states ─────────────────────────────────────────────────
   bool _isLoadingData = true;
   bool _isSubmitting = false;
   String? _loadError;
@@ -77,7 +65,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
   bool _subscriptionError = false;
   bool _descriptionError = false;
 
-  // ── HTTP client ────────────────────────────────────────────────────────────
   http.Client get _client {
     final httpClient =
         HttpClient()
@@ -123,8 +110,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
   }
 
   String _extractSubscriptionId(Map<String, dynamic> sub) {
-    // Backend expects a subscription identifier; in this project it's often the
-    // service line number (varies by endpoint payload shape).
     return _firstNonEmpty([
       sub['service_line_number'],
       sub['serviceLineNumber'],
@@ -135,7 +120,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     ]);
   }
 
-  // ── Load all data in parallel ──────────────────────────────────────────────
   Future<void> _loadAllData() async {
     setState(() {
       _isLoadingData = true;
@@ -188,7 +172,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
         if (results[0].statusCode == 200) {
           dynamic raw = subsBody['data'];
           if (raw is Map) raw = raw['data'] ?? raw;
-          // Sanitize: replace null values with '' so label builders never crash
           _subscriptions =
               _asList(raw).map((item) {
                 return Map<String, dynamic>.fromEntries(
@@ -235,21 +218,422 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     return [];
   }
 
+  // ── Custom bottom sheet picker ─────────────────────────────────────────────
+
+  Future<void> _showPicker<T extends Map<String, dynamic>>({
+    required String title,
+    required List<T> items,
+    required T? selected,
+    required String Function(T) labelBuilder,
+    required String Function(T) subtitleBuilder,
+    required void Function(T) onSelect,
+  }) async {
+    final searchController = TextEditingController();
+    List<T> filtered = List.from(items);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75,
+              decoration: const BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  // Handle
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: _border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Title
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: _ink,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(ctx),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: _surfaceSubtle,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: _inkSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Search
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _surfaceSubtle,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _border),
+                      ),
+                      child: TextField(
+                        controller: searchController,
+                        autofocus: false,
+                        style: const TextStyle(fontSize: 14, color: _ink),
+                        onChanged: (q) {
+                          final lower = q.toLowerCase();
+                          setModalState(() {
+                            filtered =
+                                items
+                                    .where(
+                                      (item) =>
+                                          labelBuilder(
+                                            item,
+                                          ).toLowerCase().contains(lower) ||
+                                          subtitleBuilder(
+                                            item,
+                                          ).toLowerCase().contains(lower),
+                                    )
+                                    .toList();
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          hintText: 'Search…',
+                          hintStyle: TextStyle(
+                            color: _inkTertiary,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                            color: _inkTertiary,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  Container(height: 1, color: _border),
+
+                  // List
+                  Expanded(
+                    child:
+                        filtered.isEmpty
+                            ? const Center(
+                              child: Text(
+                                'No results found',
+                                style: TextStyle(
+                                  color: _inkTertiary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            )
+                            : ListView.builder(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final item = filtered[i];
+                                final label = labelBuilder(item);
+                                final subtitle = subtitleBuilder(item);
+                                final isSelected =
+                                    selected != null &&
+                                    labelBuilder(selected) == label;
+
+                                return InkWell(
+                                  onTap: () {
+                                    onSelect(item);
+                                    Navigator.pop(ctx);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 13,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          isSelected
+                                              ? _primary.withOpacity(0.05)
+                                              : Colors.transparent,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        // Avatar/initial
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color:
+                                                isSelected
+                                                    ? _primary.withOpacity(0.12)
+                                                    : _surfaceSubtle,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              label.isNotEmpty
+                                                  ? label[0].toUpperCase()
+                                                  : '?',
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w800,
+                                                color:
+                                                    isSelected
+                                                        ? _primary
+                                                        : _inkTertiary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                label,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color:
+                                                      isSelected
+                                                          ? _primary
+                                                          : _ink,
+                                                ),
+                                              ),
+                                              if (subtitle.isNotEmpty) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  subtitle,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: _inkTertiary,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          const Icon(
+                                            Icons.check_circle_rounded,
+                                            color: _primary,
+                                            size: 20,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ── Tap-to-open selector tile ──────────────────────────────────────────────
+
+  Widget _selectorTile({
+    required String hint,
+    required IconData icon,
+    required String? selectedLabel,
+    required String? selectedSub,
+    required bool hasError,
+    required String errorText,
+    required VoidCallback onTap,
+  }) {
+    final hasValue = selectedLabel != null && selectedLabel.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            decoration: BoxDecoration(
+              color: _surfaceSubtle,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasError ? _errorColor : _border,
+                width: hasError ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: hasError ? _errorColor : _primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child:
+                      hasValue
+                          ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                selectedLabel,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: _ink,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (selectedSub != null &&
+                                  selectedSub.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  selectedSub,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: _inkTertiary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          )
+                          : Text(
+                            hint,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color:
+                                  hasError
+                                      ? _errorColor.withOpacity(0.7)
+                                      : _inkTertiary,
+                            ),
+                          ),
+                ),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: hasError ? _errorColor : _inkTertiary,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (hasError) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              errorText,
+              style: const TextStyle(
+                color: _errorColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ── Label / subtitle builders ──────────────────────────────────────────────
+
+  String _ticketTypeLabel(Map<String, dynamic> item) =>
+      item['name']?.toString() ??
+      item['category']?.toString() ??
+      item['label']?.toString() ??
+      '—';
+
+  String _ticketTypeSub(Map<String, dynamic> item) =>
+      item['description']?.toString() ?? '';
+
+  String _contactLabel(Map<String, dynamic> item) {
+    final label = item['label']?.toString() ?? '';
+    if (label.isNotEmpty) return label;
+    final name = item['name']?.toString() ?? '';
+    if (name.isNotEmpty) return name;
+    return item['email']?.toString() ?? '—';
+  }
+
+  String _contactSub(Map<String, dynamic> item) =>
+      item['email']?.toString() ?? item['role']?.toString() ?? '';
+
+  String _safeStr(Map<String, dynamic> item, String key) =>
+      (item[key] == null ? '' : item[key].toString()).trim();
+
+  String _subscriptionLabel(Map<String, dynamic> item) {
+    final nickname = _safeStr(item, 'nickname');
+    if (nickname.isNotEmpty) return nickname;
+    final sln = _safeStr(item, 'service_line_number');
+    if (sln.isNotEmpty) return sln;
+    final plan =
+        _safeStr(item, 'plan_name').isNotEmpty
+            ? _safeStr(item, 'plan_name')
+            : _safeStr(item, 'name');
+    if (plan.isNotEmpty) return plan;
+    final id = _safeStr(item, 'id');
+    return id.isNotEmpty ? 'Subscription #$id' : '—';
+  }
+
+  String _subscriptionSub(Map<String, dynamic> item) {
+    final parts = <String>[];
+    final sln = _safeStr(item, 'service_line_number');
+    final plan = _safeStr(item, 'plan_name');
+    final status = _safeStr(item, 'status');
+    if (sln.isNotEmpty) parts.add(sln);
+    if (plan.isNotEmpty) parts.add(plan);
+    if (status.isNotEmpty) parts.add(status.toUpperCase());
+    return parts.join(' · ');
+  }
+
   // ── File picker ────────────────────────────────────────────────────────────
+
   Future<void> _pickFiles() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.custom,
         allowedExtensions: _allowedExtensions,
-        withData: false, // use path, not bytes, to avoid memory pressure
+        withData: false,
       );
-
       if (result == null || result.files.isEmpty) return;
-
       setState(() {
         for (final f in result.files) {
-          // Skip duplicates by name
           if (_pickedFiles.any((p) => p['name'] == f.name)) continue;
           _pickedFiles.add({
             'name': f.name,
@@ -266,9 +650,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     }
   }
 
-  void _removeFile(int index) {
-    setState(() => _pickedFiles.removeAt(index));
-  }
+  void _removeFile(int index) => setState(() => _pickedFiles.removeAt(index));
 
   String _mimeFromExtension(String ext) {
     switch (ext.toLowerCase()) {
@@ -305,7 +687,8 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     return Icons.insert_drive_file_outlined;
   }
 
-  // ── Submit — creates ticket then uploads attachments ───────────────────────
+  // ── Submit ─────────────────────────────────────────────────────────────────
+
   Future<void> _submitTicket() async {
     setState(() {
       _typeError = _selectedTicketType == null;
@@ -314,12 +697,8 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
       _descriptionError = _descriptionController.text.trim().isEmpty;
     });
 
-    if (_typeError ||
-        _contactError ||
-        _subscriptionError ||
-        _descriptionError) {
+    if (_typeError || _contactError || _subscriptionError || _descriptionError)
       return;
-    }
 
     setState(() => _isSubmitting = true);
 
@@ -339,9 +718,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
 
       final subscriptionId = _extractSubscriptionId(_selectedSubscription!);
       if (subscriptionId.isEmpty) {
-        setState(() {
-          _subscriptionError = true;
-        });
+        setState(() => _subscriptionError = true);
         _showError('Selected subscription is invalid. Please re-select.');
         return;
       }
@@ -360,7 +737,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
           'subject': _subjectController.text.trim(),
       });
 
-      // ── Step 1: Create the ticket ──────────────────────────────────────────
       final response = await _client
           .post(
             Uri.parse('$_baseUrl/api/v1/tickets/'),
@@ -386,9 +762,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
         return;
       }
 
-      // ── Step 2: Upload attachments if any ─────────────────────────────────
       if (_pickedFiles.isNotEmpty) {
-        // Extract the new ticket ID from the response
         final ticketId =
             (decoded is Map
                     ? (decoded['data']?['id'] ??
@@ -405,21 +779,14 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
             files: _pickedFiles,
             bearerToken: token,
           );
-
           if (uploadResult['status'] != 'success') {
-            // Ticket was created — warn but don't block success
             _showError(
               'Ticket created, but attachment upload failed: ${uploadResult['message']}',
             );
           }
-        } else {
-          _showError(
-            'Ticket created, but could not determine ticket ID for attachments.',
-          );
         }
       }
 
-      // ── Success ────────────────────────────────────────────────────────────
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -471,7 +838,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     );
   }
 
-  // ── Build helpers ──────────────────────────────────────────────────────────
+  // ── UI helpers ─────────────────────────────────────────────────────────────
 
   Widget _sectionLabel(String t) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
@@ -502,89 +869,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     ),
     child: child,
   );
-
-  Widget _dropdown<T extends Map<String, dynamic>>({
-    required String hint,
-    required IconData icon,
-    required List<T> items,
-    required T? value,
-    required String Function(T) labelBuilder,
-    required void Function(T?) onChanged,
-    required bool hasError,
-    required String errorText,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: _surfaceSubtle,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: hasError ? _errorColor : _border,
-              width: hasError ? 1.5 : 1,
-            ),
-          ),
-          child: DropdownButtonFormField<T>(
-            initialValue: value,
-            isExpanded: true,
-            style: _dropItemStyle,
-            dropdownColor: _surface,
-            icon: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: hasError ? _errorColor : _inkTertiary,
-            ),
-            decoration: InputDecoration(
-              prefixIcon: Icon(
-                icon,
-                size: 18,
-                color: hasError ? _errorColor : _primary,
-              ),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 4,
-              ),
-              hintText: hint,
-              hintStyle: TextStyle(
-                color: hasError ? _errorColor.withOpacity(0.7) : _inkTertiary,
-                fontSize: 14,
-              ),
-            ),
-            items:
-                items.map((item) {
-                  return DropdownMenuItem<T>(
-                    value: item,
-                    child: Text(
-                      labelBuilder(item),
-                      overflow: TextOverflow.ellipsis,
-                      style: _dropItemStyle,
-                    ),
-                  );
-                }).toList(),
-            onChanged: (val) {
-              onChanged(val);
-              setState(() {});
-            },
-          ),
-        ),
-        if (hasError) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Text(
-              errorText,
-              style: const TextStyle(
-                color: _errorColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
 
   Widget _textField(
     TextEditingController c,
@@ -657,52 +941,10 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     );
   }
 
-  // ── Label builders ─────────────────────────────────────────────────────────
-
-  String _ticketTypeLabel(Map<String, dynamic> item) =>
-      item['name']?.toString() ??
-      item['category']?.toString() ??
-      item['label']?.toString() ??
-      '—';
-
-  String _contactLabel(Map<String, dynamic> item) {
-    final label = item['label']?.toString() ?? '';
-    if (label.isNotEmpty) return label;
-    final name = item['name']?.toString() ?? '';
-    final email = item['email']?.toString() ?? '';
-    if (name.isNotEmpty && email.isNotEmpty) return '$name ($email)';
-    return name.isNotEmpty ? name : (email.isNotEmpty ? email : '—');
-  }
-
-  String _safeStr(Map<String, dynamic> item, String key) =>
-      (item[key] == null ? '' : item[key].toString()).trim();
-
-  String _subscriptionLabel(Map<String, dynamic> item) {
-    final nickname = _safeStr(item, 'nickname');
-    if (nickname.isNotEmpty) return nickname;
-    final sln = _safeStr(item, 'service_line_number');
-    if (sln.isNotEmpty) {
-      final plan = _safeStr(item, 'plan_name');
-      return plan.isNotEmpty ? '$sln – $plan' : sln;
-    }
-    final plan =
-        _safeStr(item, 'plan_name').isNotEmpty
-            ? _safeStr(item, 'plan_name')
-            : _safeStr(item, 'name').isNotEmpty
-            ? _safeStr(item, 'name')
-            : _safeStr(item, 'subscription_name');
-    if (plan.isNotEmpty) return plan;
-    final id = _safeStr(item, 'id');
-    return id.isNotEmpty ? 'Subscription #$id' : '—';
-  }
-
-  // ── Attachments section ────────────────────────────────────────────────────
-
   Widget _buildAttachmentsSection() {
     return _card(
       child: Column(
         children: [
-          // Drop zone (visual only on mobile; tap triggers picker)
           GestureDetector(
             onTap: _pickFiles,
             child: Container(
@@ -743,10 +985,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
               ),
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // Choose Files button
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -766,8 +1005,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
               ),
             ),
           ),
-
-          // Selected files list
           if (_pickedFiles.isNotEmpty) ...[
             const SizedBox(height: 14),
             const Divider(color: _border, height: 1),
@@ -838,7 +1075,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     );
   }
 
-  // ── Main build ─────────────────────────────────────────────────────────────
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -848,7 +1085,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
         backgroundColor: _surfaceSubtle,
         body: Column(
           children: [
-            // ── Gradient AppBar ──────────────────────────────────────────
+            // Gradient AppBar
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -1053,37 +1290,65 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
           ),
           const SizedBox(height: 20),
 
-          // Ticket Type + Contact
+          // Ticket Type
           _sectionLabel('TICKET DETAILS'),
           _card(
             child: Column(
               children: [
-                _dropdown<Map<String, dynamic>>(
-                  hint: 'Select Type',
+                _selectorTile(
+                  hint: 'Select Ticket Type',
                   icon: Icons.confirmation_number_outlined,
-                  items: _ticketTypes,
-                  value: _selectedTicketType,
-                  labelBuilder: _ticketTypeLabel,
+                  selectedLabel:
+                      _selectedTicketType != null
+                          ? _ticketTypeLabel(_selectedTicketType!)
+                          : null,
+                  selectedSub:
+                      _selectedTicketType != null
+                          ? _ticketTypeSub(_selectedTicketType!)
+                          : null,
                   hasError: _typeError,
                   errorText: 'Ticket type is required',
-                  onChanged: (v) {
-                    _selectedTicketType = v;
-                    _typeError = false;
-                  },
+                  onTap:
+                      () => _showPicker<Map<String, dynamic>>(
+                        title: 'Select Ticket Type',
+                        items: _ticketTypes,
+                        selected: _selectedTicketType,
+                        labelBuilder: _ticketTypeLabel,
+                        subtitleBuilder: _ticketTypeSub,
+                        onSelect:
+                            (v) => setState(() {
+                              _selectedTicketType = v;
+                              _typeError = false;
+                            }),
+                      ),
                 ),
                 const SizedBox(height: 14),
-                _dropdown<Map<String, dynamic>>(
+                _selectorTile(
                   hint: 'Select Contact',
                   icon: Icons.person_outline,
-                  items: _contacts,
-                  value: _selectedContact,
-                  labelBuilder: _contactLabel,
+                  selectedLabel:
+                      _selectedContact != null
+                          ? _contactLabel(_selectedContact!)
+                          : null,
+                  selectedSub:
+                      _selectedContact != null
+                          ? _contactSub(_selectedContact!)
+                          : null,
                   hasError: _contactError,
                   errorText: 'Contact is required',
-                  onChanged: (v) {
-                    _selectedContact = v;
-                    _contactError = false;
-                  },
+                  onTap:
+                      () => _showPicker<Map<String, dynamic>>(
+                        title: 'Select Contact',
+                        items: _contacts,
+                        selected: _selectedContact,
+                        labelBuilder: _contactLabel,
+                        subtitleBuilder: _contactSub,
+                        onSelect:
+                            (v) => setState(() {
+                              _selectedContact = v;
+                              _contactError = false;
+                            }),
+                      ),
                 ),
               ],
             ),
@@ -1093,18 +1358,32 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
           // Subscription
           _sectionLabel('SUBSCRIPTION'),
           _card(
-            child: _dropdown<Map<String, dynamic>>(
+            child: _selectorTile(
               hint: 'Select Subscription',
               icon: Icons.router_outlined,
-              items: _subscriptions,
-              value: _selectedSubscription,
-              labelBuilder: _subscriptionLabel,
+              selectedLabel:
+                  _selectedSubscription != null
+                      ? _subscriptionLabel(_selectedSubscription!)
+                      : null,
+              selectedSub:
+                  _selectedSubscription != null
+                      ? _subscriptionSub(_selectedSubscription!)
+                      : null,
               hasError: _subscriptionError,
               errorText: 'Subscription is required',
-              onChanged: (v) {
-                _selectedSubscription = v;
-                _subscriptionError = false;
-              },
+              onTap:
+                  () => _showPicker<Map<String, dynamic>>(
+                    title: 'Select Subscription',
+                    items: _subscriptions,
+                    selected: _selectedSubscription,
+                    labelBuilder: _subscriptionLabel,
+                    subtitleBuilder: _subscriptionSub,
+                    onSelect:
+                        (v) => setState(() {
+                          _selectedSubscription = v;
+                          _subscriptionError = false;
+                        }),
+                  ),
             ),
           ),
           const SizedBox(height: 20),
@@ -1146,9 +1425,8 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                     controller: _descriptionController,
                     maxLines: 6,
                     onChanged: (_) {
-                      if (_descriptionError) {
+                      if (_descriptionError)
                         setState(() => _descriptionError = false);
-                      }
                     },
                     style: const TextStyle(color: _ink, fontSize: 14),
                     decoration: InputDecoration(

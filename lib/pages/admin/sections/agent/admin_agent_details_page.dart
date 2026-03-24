@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../services/api_service.dart';
+import '../subscription/admin_subscription_details_page.dart';
+import '../../profile/view-user/admin_view_user_details_page.dart';
 
 class AdminAgentDetailsPage extends StatefulWidget {
   final String agentId;
@@ -121,9 +123,36 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
+  // ── Navigate to subscription detail ───────────────────────────────────────
+  void _openSubscription(Map<String, dynamic> sub) {
+    final sln = _str(sub['serviceLineNumber'] ?? sub['service_line_number']);
+    if (sln == '—') return;
+    final nickname = _str(sub['nickname'] ?? sub['site_name'] ?? sln);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => AdminSubscriptionDetailsPage(
+              serviceLineNumber: sln,
+              title: nickname,
+            ),
+      ),
+    );
+  }
+
+  // ── Navigate to user detail ────────────────────────────────────────────────
+  void _openUser(Map<String, dynamic> user) {
+    final userId = user['id']?.toString() ?? '';
+    if (userId.isEmpty || userId == 'null') return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AdminUserDetailPage(userId: userId)),
+    );
+  }
+
   // ── Design tokens ─────────────────────────────────────────────────────────
-  static const _primary = Color(0xFFEB1E23); // Brand red
-  static const _primaryDark = Color(0xFF760F12); // Dark red
+  static const _primary = Color(0xFFEB1E23);
+  static const _primaryDark = Color(0xFF760F12);
   static const _success = Color(0xFF24A148);
   static const _danger = Color(0xFFEB1E23);
   static const _ink = Color(0xFF000000);
@@ -132,6 +161,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceSubtle = Color(0xFFF4F4F4);
   static const _border = Color(0xFFE0E0E0);
+  static const _purple = Color(0xFF6929C4);
 
   @override
   Widget build(BuildContext context) {
@@ -303,12 +333,9 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
   Widget _buildSubscriptionsCard() {
     return _SectionCard(
       icon: Icons.router_rounded,
-      iconColor: const Color(0xFF6929C4),
+      iconColor: _purple,
       title: 'Subscriptions',
-      trailing: _CountBadge(
-        count: _subscriptions.length,
-        color: const Color(0xFF6929C4),
-      ),
+      trailing: _CountBadge(count: _subscriptions.length, color: _purple),
       child:
           _subscriptions.isEmpty
               ? const _EmptyRow(message: 'No subscriptions found')
@@ -317,7 +344,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                     _subscriptions.asMap().entries.map((entry) {
                       final i = entry.key;
                       final s = entry.value;
-                      final nickname = _str(s['nickname']);
+                      final nickname = _str(s['nickname'] ?? s['site_name']);
                       final sln = _str(
                         s['serviceLineNumber'] ?? s['service_line_number'],
                       );
@@ -329,63 +356,146 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                       final isActive =
                           activeRaw.toUpperCase() == 'ACTIVE' ||
                           activeRaw == '1';
-                      final dataValue = totalGB != '—' ? totalGB : dataplan;
+                      final usedGB = totalGB == '—' ? '0.00' : totalGB;
+                      final planGB =
+                          (dataplan == '—' || dataplan == '0') ? '0' : dataplan;
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (i > 0) const _HDivider(),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                          InkWell(
+                            onTap:
+                                sln == '—' ? null : () => _openSubscription(s),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              nickname,
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: _ink,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 2,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              sln,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: _inkTertiary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Text(
-                                            nickname,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w700,
-                                              color: _ink,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 2,
+                                          _StatusBadge(
+                                            label:
+                                                isActive
+                                                    ? 'ACTIVE'
+                                                    : 'INACTIVE',
+                                            color:
+                                                isActive
+                                                    ? _success
+                                                    : _primaryDark,
                                           ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            sln,
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: _inkTertiary,
+                                          const SizedBox(width: 6),
+                                          if (sln != '—')
+                                            Container(
+                                              width: 24,
+                                              height: 24,
+                                              decoration: BoxDecoration(
+                                                color: _purple.withOpacity(
+                                                  0.08,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                              ),
+                                              child: const Icon(
+                                                Icons.chevron_right_rounded,
+                                                size: 16,
+                                                color: _purple,
+                                              ),
                                             ),
-                                          ),
                                         ],
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _StatusBadge(
-                                      label: isActive ? 'ACTIVE' : 'INACTIVE',
-                                      color: isActive ? _success : _primaryDark,
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  _KVRow(
+                                    label: 'Data Usage',
+                                    value: '$usedGB GB / $planGB GB',
+                                  ),
+                                  if (kit != '—') ...[
+                                    const SizedBox(height: 6),
+                                    _KVRow(label: 'Kit Number', value: kit),
+                                  ],
+                                  if (euName != '—') ...[
+                                    const SizedBox(height: 6),
+                                    _KVRow(label: 'End User', value: euName),
+                                  ],
+                                  if (sln != '—') ...[
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        const Spacer(),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _purple.withOpacity(0.07),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: _purple.withOpacity(0.2),
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.open_in_new_rounded,
+                                                size: 11,
+                                                color: _purple,
+                                              ),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'View Details',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: _purple,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 10),
-                                _KVRow(label: 'Kit Number', value: kit),
-                                const SizedBox(height: 6),
-                                _KVRow(label: 'End User', value: euName),
-                                const SizedBox(height: 6),
-                                _KVRow(
-                                  label: 'Data Usage',
-                                  value: '$dataValue GB',
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -434,95 +544,118 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (i > 0) const _HDivider(),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 38,
-                                  height: 38,
-                                  decoration: BoxDecoration(
-                                    color: _primary.withOpacity(0.08),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      initials,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w800,
-                                        color: _primary,
+                          InkWell(
+                            onTap: () => _openUser(u),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: _primary.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        initials,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: _primary,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              name,
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w700,
-                                                color: _ink,
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                name,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _ink,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
-                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          _StatusBadge(
-                                            label:
-                                                isActive
-                                                    ? 'Active'
-                                                    : 'Inactive',
-                                            color:
-                                                isActive
-                                                    ? _success
-                                                    : _primaryDark,
-                                          ),
-                                        ],
-                                      ),
-                                      if (email != '—') ...[
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          email,
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: _inkSecondary,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
+                                            const SizedBox(width: 8),
+                                            _StatusBadge(
+                                              label:
+                                                  isActive
+                                                      ? 'Active'
+                                                      : 'Inactive',
+                                              color:
+                                                  isActive
+                                                      ? _success
+                                                      : _primaryDark,
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                      const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 4,
-                                        children: [
-                                          if (role != '—')
-                                            _Chip(
-                                              label: role.toUpperCase(),
-                                              icon: Icons.shield_outlined,
+                                        if (email != '—') ...[
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            email,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: _inkSecondary,
                                             ),
-                                          if (position != '—')
-                                            _Chip(
-                                              label: position,
-                                              icon: Icons.work_outline_rounded,
-                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ],
-                                      ),
-                                    ],
+                                        if (role != '—' || position != '—') ...[
+                                          const SizedBox(height: 6),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            children: [
+                                              if (role != '—')
+                                                _Chip(
+                                                  label: role.toUpperCase(),
+                                                  icon: Icons.shield_outlined,
+                                                ),
+                                              if (position != '—')
+                                                _Chip(
+                                                  label: position,
+                                                  icon:
+                                                      Icons
+                                                          .work_outline_rounded,
+                                                ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 8),
+                                  // Chevron — indicates row is tappable
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: _success.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Icon(
+                                      Icons.chevron_right_rounded,
+                                      size: 16,
+                                      color: _success,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
