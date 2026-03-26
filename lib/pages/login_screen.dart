@@ -180,28 +180,32 @@ class _LoginScreenState extends State<LoginScreen>
     final size = MediaQuery.of(context).size;
     final topPad = MediaQuery.of(context).padding.top;
 
+    // ── Reduced from 0.38 → 0.26 so the header is shorter
+    //    and the form card sits higher on screen.
+    const headerFraction = 0.30;
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
-        // KEY FIX: prevent scaffold from resizing when keyboard appears
         resizeToAvoidBottomInset: false,
         backgroundColor: _surface,
         body: Stack(
           children: [
-            // ── Fixed gradient header — never moves ────────────────────────
+            // ── Fixed gradient header ──────────────────────────────────────
             Positioned(
               top: 0,
               left: 0,
               right: 0,
-              child: _TopHeader(height: size.height * 0.38, topPad: topPad),
+              child: _TopHeader(
+                height: size.height * headerFraction,
+                topPad: topPad,
+              ),
             ),
 
-            // ── Scrollable form — sits below header, scrolls up over it ───
+            // ── Scrollable form ────────────────────────────────────────────
             Positioned.fill(
               child: SingleChildScrollView(
-                // padding top = header height so form starts below it
-                padding: EdgeInsets.only(top: size.height * 0.38),
-                // keyboard insets handled here instead of scaffold
+                padding: EdgeInsets.only(top: size.height * headerFraction),
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 child: Container(
@@ -336,7 +340,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                         const SizedBox(height: 4),
 
-                        // Terms checkbox — centered
+                        // Terms checkbox
                         Center(
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -581,7 +585,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
-// ── Top gradient header — fixed, never moves ──────────────────────────────────
+// ── Top gradient header ───────────────────────────────────────────────────────
 
 class _TopHeader extends StatelessWidget {
   final double height;
@@ -600,19 +604,19 @@ class _TopHeader extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(36),
-          bottomRight: Radius.circular(36),
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
         ),
       ),
       child: Stack(
         children: [
           // Decorative circles
           Positioned(
-            top: -30,
-            right: -30,
+            top: -20,
+            right: -20,
             child: Container(
-              width: 160,
-              height: 160,
+              width: 120,
+              height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white.withOpacity(0.06),
@@ -620,18 +624,18 @@ class _TopHeader extends StatelessWidget {
             ),
           ),
           Positioned(
-            bottom: 20,
-            left: -40,
+            bottom: 10,
+            left: -30,
             child: Container(
-              width: 120,
-              height: 120,
+              width: 90,
+              height: 90,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white.withOpacity(0.05),
               ),
             ),
           ),
-          // Logo + tagline
+          // Logo + tagline — tighter vertical padding
           Padding(
             padding: EdgeInsets.only(top: topPad),
             child: Center(
@@ -640,23 +644,23 @@ class _TopHeader extends StatelessWidget {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
+                      horizontal: 20,
+                      vertical: 12,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: SvgPicture.asset(
                       'assets/images/logo_full.svg',
-                      height: 52,
+                      height: 40, // reduced from 52
                       colorFilter: const ColorFilter.mode(
                         Colors.white,
                         BlendMode.srcIn,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 10), // reduced from 18
                   Text(
                     'Welcome Back!',
                     style: TextStyle(

@@ -35,7 +35,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   List<Map<String, dynamic>> _tickets = [];
   List<Map<String, dynamic>> _filteredTickets = [];
 
-  // ── Lazy loading ─────────────────────────────────────────────────────────
+  // ── Lazy loading ──────────────────────────────────────────────────────────
   static const _pageSize = 10;
   int _visibleCount = _pageSize;
   bool _isLoadingMore = false;
@@ -77,15 +77,22 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     super.dispose();
   }
 
+  // ── Fixed scroll listener: triggers when within 300px of the bottom ───────
   void _onScroll() {
+    if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
-    if (pos.pixels >= pos.maxScrollExtent - 250) _loadMore();
+    if (pos.pixels >= pos.maxScrollExtent - 300) {
+      _loadMore();
+    }
   }
 
+  // ── Load 10 more items, with a small artificial delay for UX ─────────────
   void _loadMore() {
     if (_isLoadingMore) return;
     if (_visibleCount >= _filteredTickets.length) return;
+
     setState(() => _isLoadingMore = true);
+
     Future.delayed(const Duration(milliseconds: 400), () {
       if (!mounted) return;
       setState(() {
@@ -249,6 +256,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
 
     setState(() {
       _filteredTickets = filtered;
+      // Reset visible count to first page whenever filter changes
       _visibleCount = _pageSize.clamp(0, filtered.length);
     });
   }
@@ -358,7 +366,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // ── Search Bar ─────────────────────────────────────────────────
+            // ── Search Bar ────────────────────────────────────────────────
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               sliver: SliverToBoxAdapter(
@@ -366,7 +374,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
               ),
             ),
 
-            // ── Filter chips ───────────────────────────────────────────────
+            // ── Filter chips ──────────────────────────────────────────────
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               sliver: SliverToBoxAdapter(
@@ -438,7 +446,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
               ),
             ),
 
-            // ── Section header + count ─────────────────────────────────────
+            // ── Section header + count ────────────────────────────────────
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
               sliver: SliverToBoxAdapter(
@@ -479,15 +487,19 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                       : _filteredTickets.isEmpty
                       ? SliverToBoxAdapter(child: _buildEmptyState())
                       : SliverList(
-                        delegate: SliverChildBuilderDelegate((context, index) {
-                          if (index == _visibleTickets.length) {
-                            return _buildBottomIndicator();
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _buildTicketCard(_visibleTickets[index]),
-                          );
-                        }, childCount: _visibleTickets.length + 1),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            if (index == _visibleTickets.length) {
+                              return _buildBottomIndicator();
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _buildTicketCard(_visibleTickets[index]),
+                            );
+                          },
+                          // +1 for the bottom indicator slot
+                          childCount: _visibleTickets.length + 1,
+                        ),
                       ),
             ),
           ],
@@ -507,19 +519,33 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
 
   Widget _buildBottomIndicator() {
     final bool hasMore = _visibleCount < _filteredTickets.length;
+    if (_filteredTickets.isEmpty) return const SizedBox.shrink();
+
     if (hasMore) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2, color: _primary),
-          ),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          children: [
+            const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: _primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Loading more… (${_visibleCount} of ${_filteredTickets.length})',
+              style: const TextStyle(fontSize: 11, color: _inkTertiary),
+            ),
+          ],
         ),
       );
     }
-    if (_filteredTickets.isEmpty) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Center(
@@ -994,7 +1020,7 @@ class _SearchBar extends StatelessWidget {
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
-            vertical: 12,
+            vertical: 14,
           ),
         ),
       ),

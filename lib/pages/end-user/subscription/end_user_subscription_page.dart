@@ -1,651 +1,957 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+
 import '../../../services/api_service.dart';
+import 'end_user_subscription_details_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _activeGreen = Color(0xFF24A148);
-const _inactiveRed = Color(0xFFFF4757);
-const _ink = Color(0xFF1B1B1B);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF2563EB);
+const _activeGreen = Color(0xFF16A34A);
+const _inactiveRed = Color(0xFFDC2626);
+const _ink = Color(0xFF000000); // matches ticket screen
+const _inkSecondary = Color(0xFF6F6F6F); // matches ticket screen
+const _inkTertiary = Color(0xFFA8A8A8); // matches ticket screen
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
-const _danger = Color(0xFFE57373);
+const _surfaceSubtle = Color(0xFFF4F4F4); // matches ticket screen
+const _border = Color(0xFFE0E0E0); // matches ticket screen
 
-const _kPageSize = 10;
-
+/// Robust active-status resolver.
 bool _isActiveSub(Map<String, dynamic> sub) {
-  for (final field in [
-    'is_active',
-    'isActive',
-    'active',
-    'status',
-    'enabled',
-  ]) {
-    final v = sub[field];
-    if (v == true ||
-        v == 1 ||
-        v == '1' ||
-        v == 'true' ||
-        v == 'active' ||
-        v == 'enabled') {
+  for (final key in ['active', 'is_active', 'isActive', 'status', 'state']) {
+    final raw = sub[key];
+    if (raw == null) continue;
+    if (raw is bool) return raw;
+    if (raw is int) return raw == 1;
+    final s = raw.toString().toLowerCase().trim();
+    if (s == 'true' || s == '1' || s == 'active' || s == 'enabled') {
       return true;
+    }
+    if (s == 'false' ||
+        s == '0' ||
+        s == 'inactive' ||
+        s == 'disabled' ||
+        s == 'expired') {
+      return false;
     }
   }
   return false;
 }
 
-class EndUserSubscriptionPage extends StatefulWidget {
-  const EndUserSubscriptionPage({super.key});
+/// Extract service line number.
+String _sln(Map<String, dynamic> sub) =>
+    (sub['serviceLineNumber'] ?? sub['service_line_number'] ?? '')
+        .toString()
+        .trim();
+
+/// Extract nickname / display name.
+String _nickname(Map<String, dynamic> sub) =>
+    (sub['nickname'] ?? sub['name'] ?? '').toString().trim();
+
+/// Extract end date.
+String _endDate(Map<String, dynamic> sub) =>
+    (sub['endDate'] ??
+            sub['end_date'] ??
+            sub['expires_at'] ??
+            sub['expiry_date'] ??
+            '')
+        .toString()
+        .trim();
+
+class UserSubscriptionPage extends StatefulWidget {
+  final bool showAppBar;
+
+  const UserSubscriptionPage({super.key, this.showAppBar = true});
 
   @override
-  State<EndUserSubscriptionPage> createState() =>
-      _EndUserSubscriptionPageState();
+  State<UserSubscriptionPage> createState() => _UserSubscriptionPageState();
 }
 
-class _EndUserSubscriptionPageState extends State<EndUserSubscriptionPage> {
-  final TextEditingController _searchController = TextEditingController();
-
-  List<Map<String, dynamic>> _subscriptions = [];
+class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
+  // ── State ──────────────────────────────────────────────────────────────────
   bool _loading = false;
+  bool _fetchingMore = false;
   String? _error;
 
-  int _currentPage = 1;
-  int _totalPages = 1;
+  String? _euCode;
+  String? _customerCode;
+  String? _role;
+
+  List<Map<String, dynamic>> _allSubscriptions = [];
   int _totalItems = 0;
-  String _searchQuery = '';
-  DateTime? _lastSearch;
+  int _totalPages = 1;
+  int _currentPage = 1;
+  static const int _pageSize = 10;
+
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
+
+  final ScrollController _scrollController = ScrollController();
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_onSearchChanged);
-    _loadSubscriptions(page: 1);
+    _scrollController.addListener(_onScroll);
+    _searchController.addListener(() {
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) setState(() {});
+      });
+    });
+    _init();
   }
 
   @override
   void dispose() {
-    _searchController.removeListener(_onSearchChanged);
+    _searchDebounce?.cancel();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged() {
-    final query = _searchController.text.trim();
-    if (query == _searchQuery) return;
-    final now = DateTime.now();
-    _lastSearch = now;
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (_lastSearch != now || !mounted) return;
-      setState(() {
-        _searchQuery = query;
-        _currentPage = 1;
-      });
-      _loadSubscriptions(page: 1);
-    });
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_fetchingMore &&
+        _currentPage < _totalPages) {
+      _loadNextPage();
+    }
   }
 
-  Future<void> _loadSubscriptions({int page = 1}) async {
-    if (!mounted) return;
+  // ── Filtering ──────────────────────────────────────────────────────────────
+
+  List<Map<String, dynamic>> get _filtered {
+    final q = _searchController.text.trim().toLowerCase();
+    if (q.isEmpty) return _allSubscriptions;
+    return _allSubscriptions.where((sub) {
+      final n = _nickname(sub).toLowerCase();
+      final s = _sln(sub).toLowerCase();
+      final status = _isActiveSub(sub) ? 'active' : 'inactive';
+      final ed = _endDate(sub).toLowerCase();
+      return n.contains(q) ||
+          s.contains(q) ||
+          status.contains(q) ||
+          ed.contains(q);
+    }).toList();
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+
+  Future<void> _init() async {
+    await _loadCodes();
+    await _loadFirstPage();
+  }
+
+  Future<void> _loadCodes() async {
+    try {
+      final res = await ApiService.getMe();
+      if (res['status'] == 'success' && res['data'] is Map<String, dynamic>) {
+        final d = res['data'] as Map<String, dynamic>;
+        _role =
+            (d['role'] ?? d['user_role'] ?? d['type'] ?? '')
+                .toString()
+                .toLowerCase()
+                .trim();
+        _euCode =
+            d['eu_code']?.toString() ??
+            d['euCode']?.toString() ??
+            d['company']?.toString();
+        _customerCode =
+            d['customer_code']?.toString() ??
+            d['com_eu_code']?.toString() ??
+            d['customerCode']?.toString() ??
+            d['company']?.toString();
+      }
+    } catch (_) {}
+
+    if ((_euCode == null || _euCode!.isEmpty) &&
+        (_customerCode == null || _customerCode!.isEmpty)) {
+      final prefs = await SharedPreferences.getInstance();
+      _euCode = prefs.getString('eu_code');
+      _customerCode = prefs.getString('customer_code');
+    }
+  }
+
+  // ── Parse ──────────────────────────────────────────────────────────────────
+
+  ({int totalPages, int totalItems, List<Map<String, dynamic>> items})
+  _parsePage(Map<String, dynamic> response) {
+    final data = response['data'];
+    List<Map<String, dynamic>> items =
+        data is List
+            ? data
+                .whereType<Map>()
+                .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+                .toList()
+            : [];
+
+    int totalPages = 1;
+    int totalItems = items.length;
+
+    final raw = response['raw'];
+    if (raw is Map) {
+      final wrapper = raw['data'];
+      if (wrapper is Map) {
+        final pagination = wrapper['pagination'];
+        if (pagination is Map) {
+          totalPages =
+              int.tryParse(pagination['totalPages']?.toString() ?? '1') ?? 1;
+          totalItems =
+              int.tryParse(pagination['totalItems']?.toString() ?? '0') ??
+              totalItems;
+        }
+      }
+    }
+
+    if (response['pagination'] is Map) {
+      final p = response['pagination'] as Map;
+      totalPages =
+          int.tryParse(p['totalPages']?.toString() ?? '1') ?? totalPages;
+      totalItems =
+          int.tryParse(p['totalItems']?.toString() ?? '0') ?? totalItems;
+    }
+
+    return (totalPages: totalPages, totalItems: totalItems, items: items);
+  }
+
+  // ── First page ─────────────────────────────────────────────────────────────
+
+  Future<void> _loadFirstPage() async {
+    if (_loading) return;
     setState(() {
       _loading = true;
       _error = null;
+      _allSubscriptions = [];
+      _totalItems = 0;
+      _totalPages = 1;
+      _currentPage = 1;
     });
 
     try {
-      final response = await ApiService.getSubscriptionsPaginated(
-        page: page,
-        limit: _kPageSize,
-        search: _searchQuery,
-      );
-
+      final response = await _fetchPage(1);
       if (!mounted) return;
 
-      if (response['status'] != 'success') {
+      if (response == null) {
         setState(() {
+          _error = 'Failed to load your subscriptions.';
           _loading = false;
-          _error =
-              response['message']?.toString() ?? 'Failed to load subscriptions';
-          _subscriptions = [];
         });
         return;
       }
 
-      final data = response['data'];
-      final List<dynamic> items = data is List ? data : [];
-      final pagination = response['pagination'];
-
-      int currentPage = page;
-      int totalPages = 1;
-      int totalItems = 0;
-
-      if (pagination is Map<String, dynamic>) {
-        currentPage =
-            int.tryParse(
-              (pagination['currentPage'] ?? pagination['current_page'] ?? page)
-                  .toString(),
-            ) ??
-            page;
-        totalPages =
-            int.tryParse(
-              (pagination['totalPages'] ?? pagination['total_pages'] ?? 1)
-                  .toString(),
-            ) ??
-            1;
-        totalItems =
-            int.tryParse(
-              (pagination['totalItems'] ?? pagination['total_items'] ?? 0)
-                  .toString(),
-            ) ??
-            0;
-      }
-
       setState(() {
-        _subscriptions =
-            items
-                .whereType<Map>()
-                .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-                .toList();
-        _currentPage = currentPage;
-        _totalPages = totalPages;
-        _totalItems = totalItems;
+        _allSubscriptions = response.items;
+        _totalPages = response.totalPages;
+        _totalItems = response.totalItems;
+        _currentPage = 1;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
         _error = e.toString().replaceAll('Exception: ', '');
-        _subscriptions = [];
+        _loading = false;
       });
     }
   }
 
-  void _goToPage(int page) {
-    if (page < 1 || page > _totalPages) return;
-    _loadSubscriptions(page: page);
+  // ── Next page ──────────────────────────────────────────────────────────────
+
+  Future<void> _loadNextPage() async {
+    if (_fetchingMore || _currentPage >= _totalPages) return;
+    setState(() => _fetchingMore = true);
+
+    try {
+      final nextPage = _currentPage + 1;
+      final result = await _fetchPage(nextPage);
+      if (!mounted) return;
+
+      if (result != null && result.items.isNotEmpty) {
+        final existing = _allSubscriptions.map((s) => _sln(s)).toSet();
+        final newItems =
+            result.items.where((s) => !existing.contains(_sln(s))).toList();
+
+        setState(() {
+          _allSubscriptions = [..._allSubscriptions, ...newItems];
+          _currentPage = nextPage;
+          if (result.totalItems > 0) _totalItems = result.totalItems;
+          if (result.totalPages > 0) _totalPages = result.totalPages;
+        });
+      } else {
+        setState(() => _currentPage++);
+      }
+    } catch (_) {
+      // Silent — scroll again to retry
+    } finally {
+      if (mounted) setState(() => _fetchingMore = false);
+    }
   }
+
+  Future<_PageResult?> _fetchPage(int page) async {
+    try {
+      Map<String, dynamic>? response;
+
+      final isAdminLike =
+          _role == 'admin' ||
+          _role == 'agent' ||
+          _role == 'biller' ||
+          _role == 'billing';
+
+      if (isAdminLike) {
+        response = await ApiService.getSubscriptionsPaginated(
+          page: page,
+          limit: _pageSize,
+        );
+      } else if (_euCode != null && _euCode!.isNotEmpty) {
+        response = await ApiService.getSubscriptionsByEndUserId(_euCode!);
+      } else if (_customerCode != null && _customerCode!.isNotEmpty) {
+        response = await ApiService.getSubscriptionsByCustomerId(
+          _customerCode!,
+        );
+      } else {
+        response = await ApiService.getSubscriptionsPaginated(
+          page: page,
+          limit: _pageSize,
+        );
+      }
+
+      if (response['status'] != 'success') return null;
+
+      final parsed = _parsePage(response);
+      return _PageResult(
+        items: parsed.items,
+        totalPages: parsed.totalPages,
+        totalItems: parsed.totalItems,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Formatters ─────────────────────────────────────────────────────────────
+
+  String _formatDate(String raw) {
+    if (raw.isEmpty || raw == '—' || raw == '0000-00-00') return '—';
+    try {
+      final clean =
+          raw.contains('T') ? raw.split('T').first : raw.split(' ').first;
+      final dt = DateTime.parse(clean);
+      if (dt.year < 1900) return '—';
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${months[dt.month - 1]} ${dt.day.toString().padLeft(2, '0')}, ${dt.year}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    // NO Scaffold — this widget is embedded inside a parent that owns the Scaffold.
-    // Using a plain Container fills the tab body correctly.
-    return Container(
-      color: _surfaceSubtle,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ── Search bar ───────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Container(
-              height: 42,
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _border),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 10),
-                  const Icon(Icons.search, color: _primary, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      style: const TextStyle(fontSize: 13, color: _ink),
-                      textAlignVertical: TextAlignVertical.center,
-                      decoration: const InputDecoration(
-                        hintText: 'Search subscriptions...',
-                        hintStyle: TextStyle(
-                          color: _inkSecondary,
-                          fontSize: 13,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _searchController,
-                    builder: (_, value, __) {
-                      if (value.text.isEmpty) return const SizedBox.shrink();
-                      return GestureDetector(
-                        onTap: _searchController.clear,
-                        child: const Padding(
-                          padding: EdgeInsets.only(right: 10),
-                          child: Icon(
-                            Icons.close_rounded,
-                            color: _inkTertiary,
-                            size: 16,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+    final filtered = _filtered;
+
+    return Scaffold(
+      backgroundColor: _surfaceSubtle,
+      body: RefreshIndicator(
+        onRefresh: _loadFirstPage,
+        color: _primary,
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // ── Search bar ───────────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: _SearchBar(controller: _searchController),
               ),
             ),
-          ),
 
-          // ── Section header ───────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _searchQuery.isEmpty
-                        ? 'All subscriptions ($_totalItems)'
-                        : 'Results for "$_searchQuery" ($_totalItems)',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _ink,
-                    ),
-                  ),
-                ),
-                if (_loading)
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: _primary,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          // ── List / states ────────────────────────────────────────────────
-          Expanded(
-            child:
-                _error != null
-                    ? _buildError()
-                    : _loading && _subscriptions.isEmpty
-                    ? _buildSkeletons()
-                    : _subscriptions.isEmpty
-                    ? _buildEmpty()
-                    : RefreshIndicator(
-                      onRefresh: () => _loadSubscriptions(page: _currentPage),
-                      color: _primary,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                        itemCount: _subscriptions.length,
-                        itemBuilder: (_, i) => _buildCard(_subscriptions[i]),
+            // ── Section header ───────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    const Text(
+                      'MY SUBSCRIPTIONS',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _inkTertiary,
+                        letterSpacing: 1.1,
                       ),
                     ),
-          ),
-
-          // ── Pagination ───────────────────────────────────────────────────
-          if (_totalPages > 1) _buildPagination(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCard(Map<String, dynamic> sub) {
-    final nickname = _str(sub['nickname'] ?? sub['name'] ?? sub['site_name']);
-    final sln = _str(sub['serviceLineNumber'] ?? sub['service_line_number']);
-    final isActive = _isActiveSub(sub);
-    final statusColor = isActive ? _activeGreen : _inactiveRed;
-    final startDate = _str(
-      sub['start_date'] ?? sub['start_at'] ?? sub['startDate'],
-    );
-    final endDate = _str(
-      sub['end_date'] ??
-          sub['expires_at'] ??
-          sub['expiry_date'] ??
-          sub['endDate'],
-    );
-    final speed = _str(sub['speed'] ?? sub['bandwidth'] ?? sub['data_limit']);
-    final ipAddress = _str(sub['ip_address'] ?? sub['ipAddress']);
-    final hasDetails =
-        speed.isNotEmpty ||
-        startDate.isNotEmpty ||
-        endDate.isNotEmpty ||
-        ipAddress.isNotEmpty;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.08),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isActive ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-                    color: statusColor,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                    const Spacer(),
+                    if (!_loading)
                       Text(
-                        nickname.isNotEmpty ? nickname : 'Unnamed',
+                        '${_totalItems > 0 ? _totalItems : _allSubscriptions.length} result${(_totalItems == 1 || _allSubscriptions.length == 1) ? '' : 's'}',
                         style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: _ink,
+                          fontSize: 10,
+                          color: _inkTertiary,
+                          fontWeight: FontWeight.w500,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      if (sln.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'SLN: $sln',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: _inkTertiary,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                  ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: statusColor.withOpacity(0.25)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        isActive ? 'Active' : 'Inactive',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: statusColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (hasDetails) ...[
-            Container(height: 1, color: _border),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-              child: Wrap(
-                spacing: 24,
-                runSpacing: 8,
-                children: [
-                  if (speed.isNotEmpty) _buildMeta('Speed', speed),
-                  if (startDate.isNotEmpty) _buildMeta('Start', startDate),
-                  if (endDate.isNotEmpty) _buildMeta('Expires', endDate),
-                  if (ipAddress.isNotEmpty) _buildMeta('IP', ipAddress),
-                ],
               ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+            // ── List ─────────────────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              sliver:
+                  _loading
+                      ? SliverList(
+                        delegate: SliverChildListDelegate([
+                          const _SkeletonTile(),
+                          const SizedBox(height: 10),
+                          const _SkeletonTile(),
+                          const SizedBox(height: 10),
+                          const _SkeletonTile(),
+                        ]),
+                      )
+                      : _error != null && _allSubscriptions.isEmpty
+                      ? SliverToBoxAdapter(child: _buildError())
+                      : filtered.isEmpty
+                      ? SliverToBoxAdapter(
+                        child: _EmptyState(
+                          icon: Icons.subscriptions_outlined,
+                          message:
+                              _searchController.text.trim().isNotEmpty
+                                  ? 'No results for "${_searchController.text.trim()}".'
+                                  : 'You have no subscriptions yet.',
+                        ),
+                      )
+                      : SliverList(
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          // Footer
+                          if (index == filtered.length) {
+                            if (_fetchingMore) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 20),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: _primary,
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            if (_currentPage >= _totalPages &&
+                                _allSubscriptions.isNotEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 20,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'All ${_totalItems > 0 ? _totalItems : _allSubscriptions.length} subscriptions loaded',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: _inkTertiary,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox(height: 80);
+                          }
+
+                          final sub = filtered[index];
+                          final isActive = _isActiveSub(sub);
+                          final nick = _nickname(sub);
+                          final sl = _sln(sub);
+                          final rawEnd = _endDate(sub);
+                          final endDateStr =
+                              rawEnd.isEmpty ? '—' : _formatDate(rawEnd);
+                          final searchQuery =
+                              _searchController.text.trim().toLowerCase();
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _SubscriptionTile(
+                              nickname: nick.isNotEmpty ? nick : sl,
+                              serviceLineNumber: sl.isEmpty ? '—' : sl,
+                              endDate: endDateStr,
+                              isActive: isActive,
+                              searchQuery: searchQuery,
+                              onTap:
+                                  () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (_) => UserSubscriptionDetailsPage(
+                                            serviceLineNumber: sl,
+                                            title:
+                                                nick.isNotEmpty
+                                                    ? nick
+                                                    : (sl.isNotEmpty
+                                                        ? sl
+                                                        : 'My Subscription'),
+                                          ),
+                                    ),
+                                  ),
+                            ),
+                          );
+                        }, childCount: filtered.length + 1),
+                      ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildMeta(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildError() => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _surface,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _border),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: _inkTertiary)),
-        const SizedBox(height: 2),
+        const Icon(Icons.wifi_off_rounded, color: _primary, size: 28),
+        const SizedBox(height: 10),
         Text(
-          value,
+          _error!,
+          textAlign: TextAlign.center,
           style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: _ink,
+            fontSize: 13,
+            color: _inkSecondary,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextButton.icon(
+          onPressed: _loadFirstPage,
+          icon: const Icon(Icons.refresh_rounded, size: 16),
+          label: const Text('Try again'),
+          style: TextButton.styleFrom(
+            foregroundColor: _primary,
+            textStyle: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildPagination() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _PagBtn(
-            icon: Icons.chevron_left,
-            enabled: _currentPage > 1,
-            onTap: () => _goToPage(_currentPage - 1),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _border),
-            ),
-            child: Text(
-              '$_currentPage / $_totalPages',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: _ink,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          _PagBtn(
-            icon: Icons.chevron_right,
-            enabled: _currentPage < _totalPages,
-            onTap: () => _goToPage(_currentPage + 1),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmpty() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: _surfaceSubtle,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                _searchQuery.isNotEmpty
-                    ? Icons.search_off_outlined
-                    : Icons.wifi_off_rounded,
-                color: _inkTertiary,
-                size: 36,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              _searchQuery.isNotEmpty
-                  ? 'No subscriptions match "$_searchQuery".'
-                  : 'No subscriptions found.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: _inkSecondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 40, color: _danger),
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: _inkSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () => _loadSubscriptions(page: _currentPage),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: _primary,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Text(
-                  'Retry',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSkeletons() {
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      itemCount: 5,
-      itemBuilder:
-          (_, __) => Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _border),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: const BoxDecoration(
-                    color: _surfaceSubtle,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        height: 13,
-                        width: 140,
-                        decoration: BoxDecoration(
-                          color: _surfaceSubtle,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        height: 10,
-                        width: 90,
-                        decoration: BoxDecoration(
-                          color: _surfaceSubtle,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  height: 26,
-                  width: 64,
-                  decoration: BoxDecoration(
-                    color: _surfaceSubtle,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-              ],
-            ),
-          ),
-    );
-  }
-
-  String _str(dynamic v) =>
-      (v == null || v == 'null' || v.toString().trim().isEmpty)
-          ? ''
-          : v.toString().trim();
+    ),
+  );
 }
 
-class _PagBtn extends StatelessWidget {
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-  const _PagBtn({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
+// ── Page result helper ─────────────────────────────────────────────────────────
+
+class _PageResult {
+  final List<Map<String, dynamic>> items;
+  final int totalPages;
+  final int totalItems;
+  const _PageResult({
+    required this.items,
+    required this.totalPages,
+    required this.totalItems,
+  });
+}
+
+// ── Subscription Tile ──────────────────────────────────────────────────────────
+
+class _SubscriptionTile extends StatelessWidget {
+  final String nickname;
+  final String serviceLineNumber;
+  final String endDate;
+  final bool isActive;
+  final String searchQuery;
+  final VoidCallback? onTap;
+
+  const _SubscriptionTile({
+    required this.nickname,
+    required this.serviceLineNumber,
+    required this.endDate,
+    required this.isActive,
+    this.searchQuery = '',
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _border),
+    final color = isActive ? _activeGreen : _inactiveRed;
+    final statusLabel = isActive ? 'ACTIVE' : 'INACTIVE';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Icon box
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Color.fromRGBO(
+                    color.red,
+                    color.green,
+                    color.blue,
+                    0.08,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  isActive ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                  color: color,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Text column
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _HighlightText(
+                      text: nickname,
+                      query: searchQuery,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    _HighlightText(
+                      text: serviceLineNumber,
+                      query: searchQuery,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: _inkSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.event_rounded,
+                          size: 10,
+                          color: _inkTertiary,
+                        ),
+                        const SizedBox(width: 3),
+                        _HighlightText(
+                          text: 'Expires $endDate',
+                          query: searchQuery,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: _inkTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Status badge + chevron
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Color.fromRGBO(
+                        color.red,
+                        color.green,
+                        color.blue,
+                        0.08,
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: Color.fromRGBO(
+                          color.red,
+                          color.green,
+                          color.blue,
+                          0.2,
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: _inkTertiary,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        child: Icon(icon, size: 20, color: enabled ? _ink : _inkTertiary),
       ),
     );
   }
+}
+
+// ── Supporting Widgets ─────────────────────────────────────────────────────────
+
+class _SearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  const _SearchBar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(
+          fontSize: 13,
+          color: _ink,
+          fontWeight: FontWeight.w500,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Search by name or line number…',
+          hintStyle: const TextStyle(
+            fontSize: 13,
+            color: _inkTertiary,
+            fontWeight: FontWeight.w400,
+          ),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            color: _inkTertiary,
+            size: 18,
+          ),
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder:
+                (_, value, __) =>
+                    value.text.isNotEmpty
+                        ? GestureDetector(
+                          onTap: controller.clear,
+                          child: const Icon(
+                            Icons.close_rounded,
+                            color: _inkTertiary,
+                            size: 16,
+                          ),
+                        )
+                        : const SizedBox.shrink(),
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  const _EmptyState({required this.icon, required this.message});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _surface,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _border),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, color: _inkTertiary, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(
+              color: _inkSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _HighlightText extends StatelessWidget {
+  final String text;
+  final String query;
+  final TextStyle style;
+  final int? maxLines;
+  final TextOverflow? overflow;
+
+  const _HighlightText({
+    required this.text,
+    required this.query,
+    required this.style,
+    this.maxLines,
+    this.overflow,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (query.isEmpty) {
+      return Text(text, style: style, maxLines: maxLines, overflow: overflow);
+    }
+    final lower = text.toLowerCase();
+    final spans = <TextSpan>[];
+    int start = 0;
+    while (true) {
+      final idx = lower.indexOf(query, start);
+      if (idx == -1) {
+        spans.add(TextSpan(text: text.substring(start)));
+        break;
+      }
+      if (idx > start) {
+        spans.add(TextSpan(text: text.substring(start, idx)));
+      }
+      spans.add(
+        TextSpan(
+          text: text.substring(idx, idx + query.length),
+          style: style.copyWith(
+            color: _primary,
+            backgroundColor: const Color.fromRGBO(37, 99, 235, 0.08),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
+      start = idx + query.length;
+    }
+    return RichText(
+      text: TextSpan(style: style, children: spans),
+      maxLines: maxLines,
+      overflow: overflow ?? TextOverflow.clip,
+    );
+  }
+}
+
+class _SkeletonTile extends StatelessWidget {
+  const _SkeletonTile();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 74,
+    decoration: BoxDecoration(
+      color: _surface,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _border),
+    ),
+    child: Row(
+      children: [
+        const SizedBox(width: 16),
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: _surfaceSubtle,
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 11,
+                width: 150,
+                decoration: BoxDecoration(
+                  color: _surfaceSubtle,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              const SizedBox(height: 7),
+              Container(
+                height: 9,
+                width: 100,
+                decoration: BoxDecoration(
+                  color: _surfaceSubtle,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                height: 8,
+                width: 75,
+                decoration: BoxDecoration(
+                  color: _surfaceSubtle,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+      ],
+    ),
+  );
 }

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-// Import the SplashScreen
-import 'pages/login_screen.dart'; // Import the LoginScreen
+import 'pages/splash_screen.dart'; // ← changed: import SplashScreen
+import 'pages/login_screen.dart';
 import 'package:provider/provider.dart';
 import 'providers/notification_provider.dart';
 
-// Only import and use SSL config on non-web platforms
 import 'config/ssl_config.dart'
     if (dart.library.html) 'config/ssl_config_stub.dart'
     as ssl_config;
@@ -19,7 +18,6 @@ void main() async {
       statusBarIconBrightness: Brightness.dark,
     ),
   );
-  // Set up SSL configuration based on environment (only on non-web platforms)
   if (!kIsWeb) {
     ssl_config.setupSSLConfig();
   }
@@ -54,7 +52,7 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const LoginScreen(), // Set LoginScreen as the initial screen
+      home: const SplashScreen(), // ← changed: SplashScreen loads first
     );
   }
 }

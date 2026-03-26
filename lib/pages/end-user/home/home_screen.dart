@@ -10,8 +10,8 @@ import '../profile/notifications.dart';
 import '../../../services/api_service.dart';
 import '../../../components/notification_badge.dart';
 import '../../../providers/notification_provider.dart';
-import 'subscription_header.dart';
-import 'billing_cycle_chart.dart';
+// import 'subscription_header.dart';
+// import 'billing_cycle_chart.dart';
 import '../subscription/end_user_subscription_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -894,7 +894,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case _QuickActionType.tickets:
         return const TicketScreen();
       case _QuickActionType.subscriptions:
-        return const EndUserSubscriptionPage();
+        return const UserSubscriptionPage();
       default:
         return Center(
           child: Column(

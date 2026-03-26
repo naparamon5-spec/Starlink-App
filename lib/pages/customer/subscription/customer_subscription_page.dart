@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
 import '../../../services/api_service.dart';
 import 'customer_subscription_detail_page.dart';
@@ -16,8 +17,6 @@ const _surfaceSubtle = Color(0xFFF4F4F4);
 const _border = Color(0xFFE0E0E0);
 
 /// Robust active-status resolver.
-/// Handles: bool, int, "ACTIVE"/"active"/"true"/"1"/"enabled",
-/// and the string "INACTIVE"/"false"/"0"/"disabled".
 bool _isActiveSub(Map<String, dynamic> sub) {
   for (final key in ['active', 'is_active', 'isActive', 'status', 'state']) {
     final raw = sub[key];
@@ -71,7 +70,7 @@ class CustomerSubscriptionPage extends StatefulWidget {
 
 class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
   // ── State ──────────────────────────────────────────────────────────────────
-  bool _loading = true;
+  bool _loading = false;
   bool _fetchingMore = false;
   String? _error;
 
@@ -79,13 +78,14 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
   String? _customerCode;
   String? _role;
 
-  // Master list — all pages merged
   List<Map<String, dynamic>> _allSubscriptions = [];
   int _totalItems = 0;
   int _totalPages = 1;
+  int _currentPage = 1;
+  static const int _pageSize = 10;
 
   final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
+  Timer? _searchDebounce;
 
   final ScrollController _scrollController = ScrollController();
 
@@ -96,27 +96,37 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _searchController.addListener(() {
-      final q = _searchController.text.trim().toLowerCase();
-      if (q != _searchQuery) setState(() => _searchQuery = q);
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) setState(() {});
+      });
     });
     _init();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   void _onScroll() {
-    // no-op — we load everything in background
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_fetchingMore &&
+        _currentPage < _totalPages) {
+      _loadNextPage();
+    }
   }
 
   // ── Filtering ──────────────────────────────────────────────────────────────
 
   List<Map<String, dynamic>> get _filtered {
-    if (_searchQuery.isEmpty) return _allSubscriptions;
+    final q = _searchController.text.trim().toLowerCase();
+    if (q.isEmpty) return _allSubscriptions;
     return _allSubscriptions.where((sub) {
       final n = _nickname(sub).toLowerCase();
       final s = _sln(sub).toLowerCase();
@@ -124,25 +134,20 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
       final ed = _endDate(sub).toLowerCase();
       final company = (sub['company_name'] ?? '').toString().toLowerCase();
       final endUser = (sub['end_user_name'] ?? '').toString().toLowerCase();
-      return n.contains(_searchQuery) ||
-          s.contains(_searchQuery) ||
-          status.contains(_searchQuery) ||
-          ed.contains(_searchQuery) ||
-          company.contains(_searchQuery) ||
-          endUser.contains(_searchQuery);
+      return n.contains(q) ||
+          s.contains(q) ||
+          status.contains(q) ||
+          ed.contains(q) ||
+          company.contains(q) ||
+          endUser.contains(q);
     }).toList();
   }
-
-  int get _activeCount => _allSubscriptions.where(_isActiveSub).length;
-
-  int get _inactiveCount =>
-      _allSubscriptions.where((s) => !_isActiveSub(s)).length;
 
   // ── Init: resolve user codes & role ───────────────────────────────────────
 
   Future<void> _init() async {
     await _loadCodes();
-    await _loadSubscriptions();
+    await _loadFirstPage();
   }
 
   Future<void> _loadCodes() async {
@@ -175,22 +180,68 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
     }
   }
 
-  // ── Main loader — page 1 then background fetch ─────────────────────────────
+  // ── Parse ──────────────────────────────────────────────────────────────────
 
-  Future<void> _loadSubscriptions() async {
+  ({int totalPages, int totalItems, List<Map<String, dynamic>> items})
+  _parsePage(Map<String, dynamic> response) {
+    final data = response['data'];
+    List<Map<String, dynamic>> items =
+        data is List
+            ? data
+                .whereType<Map>()
+                .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+                .toList()
+            : [];
+
+    int totalPages = 1;
+    int totalItems = items.length;
+
+    // Check raw.data.pagination
+    final raw = response['raw'];
+    if (raw is Map) {
+      final wrapper = raw['data'];
+      if (wrapper is Map) {
+        final pagination = wrapper['pagination'];
+        if (pagination is Map) {
+          totalPages =
+              int.tryParse(pagination['totalPages']?.toString() ?? '1') ?? 1;
+          totalItems =
+              int.tryParse(pagination['totalItems']?.toString() ?? '0') ??
+              totalItems;
+        }
+      }
+    }
+
+    // Also check top-level pagination key
+    if (response['pagination'] is Map) {
+      final p = response['pagination'] as Map;
+      totalPages =
+          int.tryParse(p['totalPages']?.toString() ?? '1') ?? totalPages;
+      totalItems =
+          int.tryParse(p['totalItems']?.toString() ?? '0') ?? totalItems;
+    }
+
+    return (totalPages: totalPages, totalItems: totalItems, items: items);
+  }
+
+  // ── First page ─────────────────────────────────────────────────────────────
+
+  Future<void> _loadFirstPage() async {
+    if (_loading) return;
     setState(() {
       _loading = true;
       _error = null;
       _allSubscriptions = [];
       _totalItems = 0;
       _totalPages = 1;
+      _currentPage = 1;
     });
 
     try {
-      final page1 = await _fetchPage(1);
+      final response = await _fetchPage(1);
       if (!mounted) return;
 
-      if (page1 == null) {
+      if (response == null) {
         setState(() {
           _error = 'Failed to load subscriptions.';
           _loading = false;
@@ -199,16 +250,12 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
       }
 
       setState(() {
-        _allSubscriptions = page1.items;
-        _totalItems = page1.totalItems;
-        _totalPages = page1.totalPages;
+        _allSubscriptions = response.items;
+        _totalPages = response.totalPages;
+        _totalItems = response.totalItems;
+        _currentPage = 1;
         _loading = false;
       });
-
-      // Fetch remaining pages in background
-      if (page1.totalPages > 1) {
-        _fetchRemainingPages(page1.totalPages);
-      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -218,27 +265,33 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
     }
   }
 
-  Future<void> _fetchRemainingPages(int totalPages) async {
-    if (!mounted) return;
+  // ── Next page (lazy load) ──────────────────────────────────────────────────
+
+  Future<void> _loadNextPage() async {
+    if (_fetchingMore || _currentPage >= _totalPages) return;
     setState(() => _fetchingMore = true);
 
     try {
-      for (int page = 2; page <= totalPages; page++) {
-        if (!mounted) break;
-        final result = await _fetchPage(page);
-        if (!mounted) break;
-        if (result != null && result.items.isNotEmpty) {
-          setState(() {
-            // Deduplicate by serviceLineNumber
-            final existing = _allSubscriptions.map((s) => _sln(s)).toSet();
-            final newItems =
-                result.items.where((s) => !existing.contains(_sln(s))).toList();
-            _allSubscriptions = [..._allSubscriptions, ...newItems];
-          });
-        }
+      final nextPage = _currentPage + 1;
+      final result = await _fetchPage(nextPage);
+      if (!mounted) return;
+
+      if (result != null && result.items.isNotEmpty) {
+        final existing = _allSubscriptions.map((s) => _sln(s)).toSet();
+        final newItems =
+            result.items.where((s) => !existing.contains(_sln(s))).toList();
+
+        setState(() {
+          _allSubscriptions = [..._allSubscriptions, ...newItems];
+          _currentPage = nextPage;
+          if (result.totalItems > 0) _totalItems = result.totalItems;
+          if (result.totalPages > 0) _totalPages = result.totalPages;
+        });
+      } else {
+        setState(() => _currentPage++);
       }
     } catch (_) {
-      // Silently ignore — page 1 already displayed
+      // Silent — scroll again to retry
     } finally {
       if (mounted) setState(() => _fetchingMore = false);
     }
@@ -249,7 +302,6 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
     try {
       Map<String, dynamic>? response;
 
-      // Admin / agent / biller — use paginated endpoint directly
       final isAdminLike =
           _role == 'admin' ||
           _role == 'agent' ||
@@ -259,7 +311,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
       if (isAdminLike) {
         response = await ApiService.getSubscriptionsPaginated(
           page: page,
-          limit: 50,
+          limit: _pageSize,
         );
       } else if (_euCode != null && _euCode!.isNotEmpty) {
         response = await ApiService.getSubscriptionsByEndUserId(_euCode!);
@@ -268,58 +320,19 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
           _customerCode!,
         );
       } else {
-        // Fallback — paginated for all
         response = await ApiService.getSubscriptionsPaginated(
           page: page,
-          limit: 50,
+          limit: _pageSize,
         );
       }
 
-      if (response['status'] != 'success') {
-        return null;
-      }
+      if (response['status'] != 'success') return null;
 
-      // Parse items
-      final data = response['data'];
-      List<Map<String, dynamic>> items = [];
-      if (data is List) {
-        items =
-            data
-                .whereType<Map>()
-                .map((e) => Map<String, dynamic>.from(e))
-                .toList();
-      }
-
-      // Parse pagination from raw
-      int totalPages = 1;
-      int totalItems = items.length;
-      final raw = response['raw'];
-      if (raw is Map) {
-        final wrapper = raw['data'];
-        if (wrapper is Map) {
-          final pagination = wrapper['pagination'];
-          if (pagination is Map) {
-            totalPages =
-                int.tryParse(pagination['totalPages']?.toString() ?? '1') ?? 1;
-            totalItems =
-                int.tryParse(pagination['totalItems']?.toString() ?? '0') ??
-                items.length;
-          }
-        }
-      }
-      // Also check top-level pagination key
-      if (response['pagination'] is Map) {
-        final p = response['pagination'] as Map;
-        totalPages =
-            int.tryParse(p['totalPages']?.toString() ?? '1') ?? totalPages;
-        totalItems =
-            int.tryParse(p['totalItems']?.toString() ?? '0') ?? totalItems;
-      }
-
+      final parsed = _parsePage(response);
       return _PageResult(
-        items: items,
-        totalPages: totalPages,
-        totalItems: totalItems,
+        items: parsed.items,
+        totalPages: parsed.totalPages,
+        totalItems: parsed.totalItems,
       );
     } catch (_) {
       return null;
@@ -386,15 +399,12 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
               )
               : null,
       body: RefreshIndicator(
-        onRefresh: _loadSubscriptions,
+        onRefresh: _loadFirstPage,
         color: _primary,
         child: CustomScrollView(
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // ── Stats banner (shown once loaded) ─────────────────────
-            if (!_loading) SliverToBoxAdapter(child: _buildStatsBanner()),
-
             // ── Search bar ───────────────────────────────────────────
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -409,34 +419,24 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
               sliver: SliverToBoxAdapter(
                 child: Row(
                   children: [
-                    const _SectionLabel(label: 'SUBSCRIPTIONS'),
+                    const Text(
+                      'SUBSCRIPTIONS',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _inkTertiary,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
                     const Spacer(),
-                    if (_fetchingMore) ...[
-                      const SizedBox(
-                        width: 11,
-                        height: 11,
-                        child: CircularProgressIndicator(
-                          color: _primary,
-                          strokeWidth: 1.5,
-                        ),
+                    Text(
+                      '${_totalItems > 0 ? _totalItems : _allSubscriptions.length} results',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: _inkTertiary,
+                        fontWeight: FontWeight.w500,
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${_allSubscriptions.length} / $_totalItems',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: _inkTertiary,
-                        ),
-                      ),
-                    ] else if (!_loading)
-                      Text(
-                        '${filtered.length} result${filtered.length == 1 ? '' : 's'}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: _inkTertiary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                    ),
                   ],
                 ),
               ),
@@ -446,7 +446,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
 
             // ── List ─────────────────────────────────────────────────
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               sliver:
                   _loading
                       ? SliverList(
@@ -465,13 +465,50 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
                         child: _EmptyState(
                           icon: Icons.subscriptions_outlined,
                           message:
-                              _searchQuery.isNotEmpty
-                                  ? 'No results for "$_searchQuery".'
+                              _searchController.text.trim().isNotEmpty
+                                  ? 'No results for "${_searchController.text.trim()}".'
                                   : 'No subscriptions found.',
                         ),
                       )
                       : SliverList(
                         delegate: SliverChildBuilderDelegate((context, index) {
+                          // Footer: loading spinner or end message
+                          if (index == filtered.length) {
+                            if (_fetchingMore) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 20),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: _primary,
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            if (_currentPage >= _totalPages &&
+                                _allSubscriptions.isNotEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 20,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'All $_totalItems subscriptions loaded',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: _inkTertiary,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox(height: 80);
+                          }
+
                           final sub = filtered[index];
                           final isActive = _isActiveSub(sub);
                           final nick = _nickname(sub);
@@ -483,6 +520,8 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
                               (sub['company_name'] ?? '').toString().trim();
                           final endUserName =
                               (sub['end_user_name'] ?? '').toString().trim();
+                          final searchQuery =
+                              _searchController.text.trim().toLowerCase();
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
@@ -493,7 +532,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
                               isActive: isActive,
                               companyName: companyName,
                               endUserName: endUserName,
-                              searchQuery: _searchQuery,
+                              searchQuery: searchQuery,
                               onTap:
                                   () => Navigator.push(
                                     context,
@@ -513,7 +552,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
                                   ),
                             ),
                           );
-                        }, childCount: filtered.length),
+                        }, childCount: filtered.length + 1),
                       ),
             ),
           ],
@@ -526,8 +565,6 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
 
   Widget _buildStatsBanner() {
     final total = _totalItems > 0 ? _totalItems : _allSubscriptions.length;
-    final active = _activeCount;
-    final inactive = _inactiveCount;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -556,78 +593,31 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
             ),
           ),
           const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Total Subscriptions',
-                  style: TextStyle(
-                    color: Colors.white60,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '$total',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -1,
-                        height: 1,
-                      ),
-                    ),
-                    if (_fetchingMore && _allSubscriptions.length < total) ...[
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 3),
-                        child: Text(
-                          '(${_allSubscriptions.length} loaded)',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
           Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _BannerChip(
-                label: 'Active',
-                value: '$active',
-                color: _activeGreen,
+              const Text(
+                'Total Subscriptions',
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.4,
+                ),
               ),
-              const SizedBox(height: 6),
-              _BannerChip(
-                label: 'Inactive',
-                value: '$inactive',
-                color: const Color(0xFFFFB3B8),
+              const SizedBox(height: 2),
+              Text(
+                '$total',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1,
+                  height: 1,
+                ),
               ),
             ],
           ),
-          if (_fetchingMore) ...[
-            const SizedBox(width: 10),
-            const SizedBox(
-              width: 13,
-              height: 13,
-              child: CircularProgressIndicator(
-                color: Colors.white54,
-                strokeWidth: 1.5,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -656,7 +646,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
         ),
         const SizedBox(height: 12),
         TextButton.icon(
-          onPressed: _loadSubscriptions,
+          onPressed: _loadFirstPage,
           icon: const Icon(Icons.refresh_rounded, size: 16),
           label: const Text('Try again'),
           style: TextButton.styleFrom(
@@ -680,39 +670,6 @@ class _PageResult {
     required this.totalPages,
     required this.totalItems,
   });
-}
-
-// ── Banner chip ────────────────────────────────────────────────────────────────
-
-class _BannerChip extends StatelessWidget {
-  final String label, value;
-  final Color color;
-  const _BannerChip({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 6,
-        height: 6,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
-      const SizedBox(width: 5),
-      Text(
-        '$value $label',
-        style: TextStyle(
-          fontSize: 11,
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    ],
-  );
 }
 
 // ── Subscription Tile ──────────────────────────────────────────────────────────
@@ -806,7 +763,6 @@ class _SubscriptionTile extends StatelessWidget {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    // Company / end user (shown for biller/admin views)
                     if (endUserName.isNotEmpty || companyName.isNotEmpty) ...[
                       const SizedBox(height: 1),
                       _HighlightText(
@@ -949,7 +905,7 @@ class _SearchBar extends StatelessWidget {
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
-            vertical: 12,
+            vertical: 14,
           ),
         ),
       ),

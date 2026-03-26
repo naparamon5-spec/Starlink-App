@@ -19,12 +19,6 @@ const _surfaceSubtle = Color(0xFFF4F4F4);
 const _border = Color(0xFFE0E0E0);
 const _errorColor = Color(0xFFEB1E23);
 
-const _dropItemStyle = TextStyle(
-  color: _ink,
-  fontSize: 14,
-  fontWeight: FontWeight.w500,
-);
-
 const _allowedExtensions = [
   'jpg',
   'jpeg',
@@ -153,7 +147,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       'Authorization': 'Bearer $token',
     };
 
-    // Strategy 1: by eu_code
     if (_euCode != null && _euCode!.isNotEmpty) {
       try {
         final r = await _client
@@ -167,7 +160,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       } catch (_) {}
     }
 
-    // Strategy 2: by customer_code
     if (_customerCode != null && _customerCode!.isNotEmpty) {
       try {
         final r = await _client
@@ -183,7 +175,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       } catch (_) {}
     }
 
-    // Strategy 3: paginated endpoint (biller / admin / no specific code)
     try {
       final r = await _client
           .get(
@@ -197,7 +188,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       if (list.isNotEmpty) return list;
     } catch (_) {}
 
-    // Strategy 4: bare list endpoint
     try {
       final r = await _client
           .get(Uri.parse('$_baseUrl/api/v1/subscriptions/'), headers: headers)
@@ -220,7 +210,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
   }
 
   List<Map<String, dynamic>> _extractListFromDecoded(dynamic decoded) {
-    // Bare list
     if (decoded is List) {
       return decoded.whereType<Map<String, dynamic>>().map((item) {
         return Map<String, dynamic>.fromEntries(
@@ -230,7 +219,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
     }
 
     if (decoded is Map<String, dynamic>) {
-      // { data: [...] }
       final data = decoded['data'];
       if (data is List) {
         return data.whereType<Map<String, dynamic>>().map((item) {
@@ -239,8 +227,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
           );
         }).toList();
       }
-
-      // { data: { data: [...] } }  — paginated wrapper
       if (data is Map<String, dynamic>) {
         final inner = data['data'];
         if (inner is List) {
@@ -281,7 +267,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
         'Authorization': 'Bearer $token',
       };
 
-      // Load ticket types + contacts in parallel; subscriptions separately
       final parallelResults = await Future.wait([
         _client
             .get(
@@ -300,17 +285,14 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       final typesBody = json.decode(parallelResults[0].body);
       final contactBody = json.decode(parallelResults[1].body);
 
-      // Fetch subscriptions with fallback strategies
       final subscriptions = await _fetchSubscriptions(token);
 
       setState(() {
-        // Ticket types
         if (parallelResults[0].statusCode == 200) {
           final raw = typesBody['data'] ?? typesBody['results'] ?? typesBody;
           _ticketTypes = _asList(raw);
         }
 
-        // Contacts
         if (parallelResults[1].statusCode == 200) {
           final raw =
               contactBody['data'] ?? contactBody['results'] ?? contactBody;
@@ -347,7 +329,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
           prefs.getString('customer_code') ?? prefs.getString('com_eu_code');
       _userRole = prefs.getString('user_role') ?? prefs.getString('role');
 
-      // Always fetch from profile to get the most accurate codes + role
       final profile = await ApiService.getMe();
       if (profile['status'] == 'success' && profile['data'] != null) {
         final data = profile['data'] as Map<String, dynamic>;
@@ -377,6 +358,354 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
     } catch (e) {
       debugPrint('Error loading customer codes: $e');
     }
+  }
+
+  // ── Bottom-sheet picker (matches admin design) ────────────────────────────
+
+  Future<void> _showPicker<T extends Map<String, dynamic>>({
+    required String title,
+    required List<T> items,
+    required T? selected,
+    required String Function(T) labelBuilder,
+    required String Function(T) subtitleBuilder,
+    required void Function(T) onSelect,
+  }) async {
+    final searchController = TextEditingController();
+    List<T> filtered = List.from(items);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75,
+              decoration: const BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  // Handle
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: _border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Title + close
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: _ink,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(ctx),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: const BoxDecoration(
+                              color: _surfaceSubtle,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: _inkSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Search
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _surfaceSubtle,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _border),
+                      ),
+                      child: TextField(
+                        controller: searchController,
+                        style: const TextStyle(fontSize: 14, color: _ink),
+                        onChanged: (q) {
+                          final lower = q.toLowerCase();
+                          setModalState(() {
+                            filtered =
+                                items
+                                    .where(
+                                      (item) =>
+                                          labelBuilder(
+                                            item,
+                                          ).toLowerCase().contains(lower) ||
+                                          subtitleBuilder(
+                                            item,
+                                          ).toLowerCase().contains(lower),
+                                    )
+                                    .toList();
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          hintText: 'Search…',
+                          hintStyle: TextStyle(
+                            color: _inkTertiary,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                            color: _inkTertiary,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(height: 1, color: _border),
+
+                  // List
+                  Expanded(
+                    child:
+                        filtered.isEmpty
+                            ? const Center(
+                              child: Text(
+                                'No results found',
+                                style: TextStyle(
+                                  color: _inkTertiary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            )
+                            : ListView.builder(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final item = filtered[i];
+                                final label = labelBuilder(item);
+                                final subtitle = subtitleBuilder(item);
+                                final isSelected =
+                                    selected != null &&
+                                    labelBuilder(selected) == label;
+
+                                return InkWell(
+                                  onTap: () {
+                                    onSelect(item);
+                                    Navigator.pop(ctx);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 13,
+                                    ),
+                                    color:
+                                        isSelected
+                                            ? _primary.withOpacity(0.05)
+                                            : Colors.transparent,
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color:
+                                                isSelected
+                                                    ? _primary.withOpacity(0.12)
+                                                    : _surfaceSubtle,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              label.isNotEmpty
+                                                  ? label[0].toUpperCase()
+                                                  : '?',
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w800,
+                                                color:
+                                                    isSelected
+                                                        ? _primary
+                                                        : _inkTertiary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                label,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color:
+                                                      isSelected
+                                                          ? _primary
+                                                          : _ink,
+                                                ),
+                                              ),
+                                              if (subtitle.isNotEmpty) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  subtitle,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: _inkTertiary,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          const Icon(
+                                            Icons.check_circle_rounded,
+                                            color: _primary,
+                                            size: 20,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ── Tap-to-open selector tile (matches admin _selectorTile) ──────────────
+
+  Widget _selectorTile({
+    required String hint,
+    required IconData icon,
+    required String? selectedLabel,
+    required String? selectedSub,
+    required bool hasError,
+    required String errorText,
+    required VoidCallback onTap,
+  }) {
+    final hasValue = selectedLabel != null && selectedLabel.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            decoration: BoxDecoration(
+              color: _surfaceSubtle,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasError ? _errorColor : _border,
+                width: hasError ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: hasError ? _errorColor : _primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child:
+                      hasValue
+                          ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                selectedLabel,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: _ink,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (selectedSub != null &&
+                                  selectedSub.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  selectedSub,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: _inkTertiary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          )
+                          : Text(
+                            hint,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color:
+                                  hasError
+                                      ? _errorColor.withOpacity(0.7)
+                                      : _inkTertiary,
+                            ),
+                          ),
+                ),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: hasError ? _errorColor : _inkTertiary,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (hasError) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              errorText,
+              style: const TextStyle(
+                color: _errorColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -432,7 +761,13 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
         'contact': contactValue,
       });
 
-      final response = await _client
+      final httpClient =
+          HttpClient()
+            ..connectionTimeout = const Duration(seconds: 20)
+            ..badCertificateCallback = (cert, host, port) => true;
+      final client = IOClient(httpClient);
+
+      final response = await client
           .post(
             Uri.parse('$_baseUrl/api/v1/tickets/'),
             headers: {
@@ -656,6 +991,9 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       item['label']?.toString() ??
       '—';
 
+  String _ticketTypeSub(Map<String, dynamic> item) =>
+      item['description']?.toString() ?? '';
+
   String _contactLabel(Map<String, dynamic> item) {
     final label = item['label']?.toString() ?? '';
     if (label.isNotEmpty) return label;
@@ -664,6 +1002,9 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
     if (name.isNotEmpty && email.isNotEmpty) return '$name ($email)';
     return name.isNotEmpty ? name : (email.isNotEmpty ? email : '—');
   }
+
+  String _contactSub(Map<String, dynamic> item) =>
+      item['email']?.toString() ?? item['role']?.toString() ?? '';
 
   String _safeStr(Map<String, dynamic> item, String key) =>
       (item[key] == null ? '' : item[key].toString()).trim();
@@ -690,7 +1031,18 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
     return id.isNotEmpty ? 'Subscription #$id' : '—';
   }
 
-  // ── Build helpers ─────────────────────────────────────────────────────────
+  String _subscriptionSub(Map<String, dynamic> item) {
+    final parts = <String>[];
+    final sln = _safeStr(item, 'service_line_number');
+    final plan = _safeStr(item, 'plan_name');
+    final status = _safeStr(item, 'status');
+    if (sln.isNotEmpty) parts.add(sln);
+    if (plan.isNotEmpty) parts.add(plan);
+    if (status.isNotEmpty) parts.add(status.toUpperCase());
+    return parts.join(' · ');
+  }
+
+  // ── UI helpers ────────────────────────────────────────────────────────────
 
   Widget _sectionLabel(String t) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
@@ -721,91 +1073,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
     ),
     child: child,
   );
-
-  Widget _dropdown<T extends Map<String, dynamic>>({
-    required String hint,
-    required IconData icon,
-    required List<T> items,
-    required T? value,
-    required String Function(T) labelBuilder,
-    required void Function(T?) onChanged,
-    required bool hasError,
-    required String errorText,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: _surfaceSubtle,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: hasError ? _errorColor : _border,
-              width: hasError ? 1.5 : 1,
-            ),
-          ),
-          child: DropdownButtonFormField<T>(
-            initialValue: value,
-            isExpanded: true,
-            style: _dropItemStyle,
-            dropdownColor: _surface,
-            icon: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: hasError ? _errorColor : _inkTertiary,
-            ),
-            decoration: InputDecoration(
-              prefixIcon: Icon(
-                icon,
-                size: 18,
-                color: hasError ? _errorColor : _primary,
-              ),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 4,
-              ),
-              hintText: items.isEmpty ? '$hint (loading…)' : hint,
-              hintStyle: TextStyle(
-                color: hasError ? _errorColor.withOpacity(0.7) : _inkTertiary,
-                fontSize: 14,
-              ),
-            ),
-            items:
-                items
-                    .map(
-                      (item) => DropdownMenuItem<T>(
-                        value: item,
-                        child: Text(
-                          labelBuilder(item),
-                          overflow: TextOverflow.ellipsis,
-                          style: _dropItemStyle,
-                        ),
-                      ),
-                    )
-                    .toList(),
-            onChanged: (val) {
-              onChanged(val);
-              setState(() {});
-            },
-          ),
-        ),
-        if (hasError) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Text(
-              errorText,
-              style: const TextStyle(
-                color: _errorColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
 
   Widget _buildAttachmentsSection() => _card(
     child: Column(
@@ -1139,7 +1406,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
   );
 
   Widget _buildForm() {
-    // Show a warning banner if subscriptions are empty after loading
     final showSubWarning = _subscriptions.isEmpty;
 
     return AnimatedBuilder(
@@ -1157,44 +1423,74 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Ticket Type + Contact
+            // ── Ticket Details ─────────────────────────────────────────────
             _sectionLabel('TICKET DETAILS'),
             _card(
               child: Column(
                 children: [
-                  _dropdown<Map<String, dynamic>>(
+                  // Ticket Type picker
+                  _selectorTile(
                     hint: 'Select Ticket Type',
                     icon: Icons.confirmation_number_outlined,
-                    items: _ticketTypes,
-                    value: _selectedTicketType,
-                    labelBuilder: _ticketTypeLabel,
+                    selectedLabel:
+                        _selectedTicketType != null
+                            ? _ticketTypeLabel(_selectedTicketType!)
+                            : null,
+                    selectedSub:
+                        _selectedTicketType != null
+                            ? _ticketTypeSub(_selectedTicketType!)
+                            : null,
                     hasError: _typeError,
                     errorText: 'Ticket type is required',
-                    onChanged: (v) {
-                      _selectedTicketType = v;
-                      _typeError = false;
-                    },
+                    onTap:
+                        () => _showPicker<Map<String, dynamic>>(
+                          title: 'Select Ticket Type',
+                          items: _ticketTypes,
+                          selected: _selectedTicketType,
+                          labelBuilder: _ticketTypeLabel,
+                          subtitleBuilder: _ticketTypeSub,
+                          onSelect:
+                              (v) => setState(() {
+                                _selectedTicketType = v;
+                                _typeError = false;
+                              }),
+                        ),
                   ),
                   const SizedBox(height: 14),
-                  _dropdown<Map<String, dynamic>>(
+                  // Contact picker
+                  _selectorTile(
                     hint: 'Select Contact',
                     icon: Icons.person_outline,
-                    items: _contacts,
-                    value: _selectedContact,
-                    labelBuilder: _contactLabel,
+                    selectedLabel:
+                        _selectedContact != null
+                            ? _contactLabel(_selectedContact!)
+                            : null,
+                    selectedSub:
+                        _selectedContact != null
+                            ? _contactSub(_selectedContact!)
+                            : null,
                     hasError: _contactError,
                     errorText: 'Contact is required',
-                    onChanged: (v) {
-                      _selectedContact = v;
-                      _contactError = false;
-                    },
+                    onTap:
+                        () => _showPicker<Map<String, dynamic>>(
+                          title: 'Select Contact',
+                          items: _contacts,
+                          selected: _selectedContact,
+                          labelBuilder: _contactLabel,
+                          subtitleBuilder: _contactSub,
+                          onSelect:
+                              (v) => setState(() {
+                                _selectedContact = v;
+                                _contactError = false;
+                              }),
+                        ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
 
-            // Subscription
+            // ── Subscription ───────────────────────────────────────────────
             _sectionLabel('SUBSCRIPTION'),
             if (showSubWarning)
               Padding(
@@ -1242,23 +1538,37 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                 ),
               ),
             _card(
-              child: _dropdown<Map<String, dynamic>>(
+              child: _selectorTile(
                 hint: 'Select Subscription',
                 icon: Icons.router_outlined,
-                items: _subscriptions,
-                value: _selectedSubscription,
-                labelBuilder: _subscriptionLabel,
+                selectedLabel:
+                    _selectedSubscription != null
+                        ? _subscriptionLabel(_selectedSubscription!)
+                        : null,
+                selectedSub:
+                    _selectedSubscription != null
+                        ? _subscriptionSub(_selectedSubscription!)
+                        : null,
                 hasError: _subscriptionError,
                 errorText: 'Subscription is required',
-                onChanged: (v) {
-                  _selectedSubscription = v;
-                  _subscriptionError = false;
-                },
+                onTap:
+                    () => _showPicker<Map<String, dynamic>>(
+                      title: 'Select Subscription',
+                      items: _subscriptions,
+                      selected: _selectedSubscription,
+                      labelBuilder: _subscriptionLabel,
+                      subtitleBuilder: _subscriptionSub,
+                      onSelect:
+                          (v) => setState(() {
+                            _selectedSubscription = v;
+                            _subscriptionError = false;
+                          }),
+                    ),
               ),
             ),
             const SizedBox(height: 20),
 
-            // Description
+            // ── Description ────────────────────────────────────────────────
             _sectionLabel('DESCRIPTION'),
             _card(
               child: Column(
@@ -1323,12 +1633,12 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
             ),
             const SizedBox(height: 20),
 
-            // Attachments
+            // ── Attachments ────────────────────────────────────────────────
             _sectionLabel('ATTACHMENTS'),
             _buildAttachmentsSection(),
             const SizedBox(height: 28),
 
-            // Buttons
+            // ── Action buttons ─────────────────────────────────────────────
             Row(
               children: [
                 Expanded(

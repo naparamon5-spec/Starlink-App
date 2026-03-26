@@ -19,12 +19,6 @@ const _surfaceSubtle = Color(0xFFF4F4F4);
 const _border = Color(0xFFE0E0E0);
 const _errorColor = Color(0xFFEB1E23);
 
-const _dropItemStyle = TextStyle(
-  color: _ink,
-  fontSize: 14,
-  fontWeight: FontWeight.w500,
-);
-
 const _allowedExtensions = [
   'jpg',
   'jpeg',
@@ -58,7 +52,6 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
     with SingleTickerProviderStateMixin {
   // ── Form ──────────────────────────────────────────────────────────────────
   final _descriptionController = TextEditingController();
-  final _subscriptionSearchController = TextEditingController();
 
   Map<String, dynamic>? _selectedTicketType;
   Map<String, dynamic>? _selectedContact;
@@ -68,7 +61,6 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
   List<Map<String, dynamic>> _ticketTypes = [];
   List<Map<String, dynamic>> _contacts = [];
   List<Map<String, dynamic>> _subscriptions = [];
-  List<Map<String, dynamic>> _filteredSubscriptions = [];
 
   // ── Attachments ───────────────────────────────────────────────────────────
   final List<Map<String, dynamic>> _pickedFiles = [];
@@ -109,36 +101,14 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _subscriptionSearchController.addListener(_filterSubscriptions);
     _loadAllData();
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
-    _subscriptionSearchController.removeListener(_filterSubscriptions);
-    _subscriptionSearchController.dispose();
     _animController.dispose();
     super.dispose();
-  }
-
-  void _filterSubscriptions() {
-    final q = _subscriptionSearchController.text.toLowerCase().trim();
-    setState(() {
-      if (q.isEmpty) {
-        _filteredSubscriptions = List.from(_subscriptions);
-      } else {
-        _filteredSubscriptions =
-            _subscriptions.where((sub) {
-              final label = _subscriptionLabel(sub).toLowerCase();
-              final sln =
-                  (_safeStr(sub, 'service_line_number') +
-                          _safeStr(sub, 'serviceLineNumber'))
-                      .toLowerCase();
-              return label.contains(q) || sln.contains(q);
-            }).toList();
-      }
-    });
   }
 
   // ── Token helper ──────────────────────────────────────────────────────────
@@ -218,16 +188,12 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
       final contactBody = json.decode(results[1].body);
       final subsBody = json.decode(results[2].body);
 
-      List<Map<String, dynamic>> loadedSubs = [];
-
       setState(() {
-        // Ticket types
         if (results[0].statusCode == 200) {
           final raw = typesBody['data'] ?? typesBody['results'] ?? typesBody;
           _ticketTypes = _asList(raw);
         }
 
-        // Contacts
         if (results[1].statusCode == 200) {
           final raw =
               contactBody['data'] ?? contactBody['results'] ?? contactBody;
@@ -241,18 +207,15 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
               }).toList();
         }
 
-        // Subscriptions
         if (results[2].statusCode == 200) {
           dynamic raw = subsBody['data'];
           if (raw is Map) raw = raw['data'] ?? raw;
-          loadedSubs =
+          _subscriptions =
               _asList(raw).map((item) {
                 return Map<String, dynamic>.fromEntries(
                   item.entries.map((e) => MapEntry(e.key, e.value ?? '')),
                 );
               }).toList();
-          _subscriptions = loadedSubs;
-          _filteredSubscriptions = List.from(loadedSubs);
         }
 
         _isLoadingData = false;
@@ -304,6 +267,347 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
     } catch (e) {
       debugPrint('Error loading end-user codes: $e');
     }
+  }
+
+  // ── Bottom-sheet picker ────────────────────────────────────────────────────
+
+  Future<void> _showPicker<T extends Map<String, dynamic>>({
+    required String title,
+    required List<T> items,
+    required T? selected,
+    required String Function(T) labelBuilder,
+    required String Function(T) subtitleBuilder,
+    required void Function(T) onSelect,
+  }) async {
+    final searchController = TextEditingController();
+    List<T> filtered = List.from(items);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75,
+              decoration: const BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: _border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: _ink,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(ctx),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: const BoxDecoration(
+                              color: _surfaceSubtle,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: _inkSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _surfaceSubtle,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _border),
+                      ),
+                      child: TextField(
+                        controller: searchController,
+                        style: const TextStyle(fontSize: 14, color: _ink),
+                        onChanged: (q) {
+                          final lower = q.toLowerCase();
+                          setModalState(() {
+                            filtered =
+                                items
+                                    .where(
+                                      (item) =>
+                                          labelBuilder(
+                                            item,
+                                          ).toLowerCase().contains(lower) ||
+                                          subtitleBuilder(
+                                            item,
+                                          ).toLowerCase().contains(lower),
+                                    )
+                                    .toList();
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          hintText: 'Search…',
+                          hintStyle: TextStyle(
+                            color: _inkTertiary,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                            color: _inkTertiary,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(height: 1, color: _border),
+                  Expanded(
+                    child:
+                        filtered.isEmpty
+                            ? const Center(
+                              child: Text(
+                                'No results found',
+                                style: TextStyle(
+                                  color: _inkTertiary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            )
+                            : ListView.builder(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final item = filtered[i];
+                                final label = labelBuilder(item);
+                                final subtitle = subtitleBuilder(item);
+                                final isSelected =
+                                    selected != null &&
+                                    labelBuilder(selected) == label;
+
+                                return InkWell(
+                                  onTap: () {
+                                    onSelect(item);
+                                    Navigator.pop(ctx);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 13,
+                                    ),
+                                    color:
+                                        isSelected
+                                            ? _primary.withOpacity(0.05)
+                                            : Colors.transparent,
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color:
+                                                isSelected
+                                                    ? _primary.withOpacity(0.12)
+                                                    : _surfaceSubtle,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              label.isNotEmpty
+                                                  ? label[0].toUpperCase()
+                                                  : '?',
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w800,
+                                                color:
+                                                    isSelected
+                                                        ? _primary
+                                                        : _inkTertiary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                label,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color:
+                                                      isSelected
+                                                          ? _primary
+                                                          : _ink,
+                                                ),
+                                              ),
+                                              if (subtitle.isNotEmpty) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  subtitle,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: _inkTertiary,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          const Icon(
+                                            Icons.check_circle_rounded,
+                                            color: _primary,
+                                            size: 20,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ── Selector tile ──────────────────────────────────────────────────────────
+
+  Widget _selectorTile({
+    required String hint,
+    required IconData icon,
+    required String? selectedLabel,
+    required String? selectedSub,
+    required bool hasError,
+    required String errorText,
+    required VoidCallback onTap,
+  }) {
+    final hasValue = selectedLabel != null && selectedLabel.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            decoration: BoxDecoration(
+              color: _surfaceSubtle,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasError ? _errorColor : _border,
+                width: hasError ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: hasError ? _errorColor : _primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child:
+                      hasValue
+                          ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                selectedLabel,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: _ink,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (selectedSub != null &&
+                                  selectedSub.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  selectedSub,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: _inkTertiary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          )
+                          : Text(
+                            hint,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color:
+                                  hasError
+                                      ? _errorColor.withOpacity(0.7)
+                                      : _inkTertiary,
+                            ),
+                          ),
+                ),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: hasError ? _errorColor : _inkTertiary,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (hasError) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              errorText,
+              style: const TextStyle(
+                color: _errorColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -583,6 +887,9 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
       item['label']?.toString() ??
       '—';
 
+  String _ticketTypeSub(Map<String, dynamic> item) =>
+      item['description']?.toString() ?? '';
+
   String _contactLabel(Map<String, dynamic> item) {
     final label = item['label']?.toString() ?? '';
     if (label.isNotEmpty) return label;
@@ -592,13 +899,19 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
     return name.isNotEmpty ? name : (email.isNotEmpty ? email : '—');
   }
 
+  String _contactSub(Map<String, dynamic> item) =>
+      item['email']?.toString() ?? item['role']?.toString() ?? '';
+
   String _safeStr(Map<String, dynamic> item, String key) =>
       (item[key] == null ? '' : item[key].toString()).trim();
 
   String _subscriptionLabel(Map<String, dynamic> item) {
     final nickname = _safeStr(item, 'nickname');
     if (nickname.isNotEmpty) return nickname;
-    final sln = _safeStr(item, 'service_line_number');
+    final sln =
+        _safeStr(item, 'service_line_number').isNotEmpty
+            ? _safeStr(item, 'service_line_number')
+            : _safeStr(item, 'serviceLineNumber');
     if (sln.isNotEmpty) {
       final plan = _safeStr(item, 'plan_name');
       return plan.isNotEmpty ? '$sln – $plan' : sln;
@@ -614,16 +927,18 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
     return id.isNotEmpty ? 'Subscription #$id' : '—';
   }
 
-  String _subscriptionSublabel(Map<String, dynamic> item) {
+  String _subscriptionSub(Map<String, dynamic> item) {
+    final parts = <String>[];
     final sln =
         _safeStr(item, 'service_line_number').isNotEmpty
             ? _safeStr(item, 'service_line_number')
             : _safeStr(item, 'serviceLineNumber');
     final plan = _safeStr(item, 'plan_name');
-    if (sln.isNotEmpty && plan.isNotEmpty) return '$sln · $plan';
-    if (sln.isNotEmpty) return sln;
-    if (plan.isNotEmpty) return plan;
-    return '';
+    final status = _safeStr(item, 'status');
+    if (sln.isNotEmpty) parts.add(sln);
+    if (plan.isNotEmpty) parts.add(plan);
+    if (status.isNotEmpty) parts.add(status.toUpperCase());
+    return parts.join(' · ');
   }
 
   // ── Build helpers ─────────────────────────────────────────────────────────
@@ -657,467 +972,6 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
     ),
     child: child,
   );
-
-  // ── Generic dropdown with "no options" state ─────────────────────────────
-
-  Widget _dropdown<T extends Map<String, dynamic>>({
-    required String hint,
-    required IconData icon,
-    required List<T> items,
-    required T? value,
-    required String Function(T) labelBuilder,
-    required void Function(T?) onChanged,
-    required bool hasError,
-    required String errorText,
-  }) {
-    final bool isEmpty = items.isEmpty;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: isEmpty ? const Color(0xFFFAFAFA) : _surfaceSubtle,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: hasError ? _errorColor : _border,
-              width: hasError ? 1.5 : 1,
-            ),
-          ),
-          child:
-              isEmpty
-                  // ── No options available ─────────────────────────────────
-                  ? Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 14,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(icon, size: 18, color: _inkTertiary),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text(
-                            'No options available',
-                            style: TextStyle(
-                              color: _inkTertiary,
-                              fontSize: 14,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                        const Icon(
-                          Icons.block_outlined,
-                          size: 16,
-                          color: _inkTertiary,
-                        ),
-                      ],
-                    ),
-                  )
-                  // ── Normal dropdown ──────────────────────────────────────
-                  : DropdownButtonFormField<T>(
-                    initialValue: value,
-                    isExpanded: true,
-                    style: _dropItemStyle,
-                    dropdownColor: _surface,
-                    icon: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: hasError ? _errorColor : _inkTertiary,
-                    ),
-                    decoration: InputDecoration(
-                      prefixIcon: Icon(
-                        icon,
-                        size: 18,
-                        color: hasError ? _errorColor : _primary,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      hintText: hint,
-                      hintStyle: TextStyle(
-                        color:
-                            hasError
-                                ? _errorColor.withOpacity(0.7)
-                                : _inkTertiary,
-                        fontSize: 14,
-                      ),
-                    ),
-                    items:
-                        items
-                            .map(
-                              (item) => DropdownMenuItem<T>(
-                                value: item,
-                                child: Text(
-                                  labelBuilder(item),
-                                  overflow: TextOverflow.ellipsis,
-                                  style: _dropItemStyle,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                    onChanged: (val) {
-                      onChanged(val);
-                      setState(() {});
-                    },
-                  ),
-        ),
-        if (hasError && !isEmpty) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Text(
-              errorText,
-              style: const TextStyle(
-                color: _errorColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  // ── Searchable subscription picker ────────────────────────────────────────
-
-  Widget _buildSubscriptionPicker() {
-    final bool hasSelected = _selectedSubscription != null;
-    final bool isEmpty = _subscriptions.isEmpty;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Selected pill or placeholder ─────────────────────────────────
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color:
-                hasSelected
-                    ? _primary.withOpacity(0.06)
-                    : isEmpty
-                    ? const Color(0xFFFAFAFA)
-                    : _surfaceSubtle,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color:
-                  _subscriptionError
-                      ? _errorColor
-                      : hasSelected
-                      ? _primary.withOpacity(0.4)
-                      : _border,
-              width: (_subscriptionError || hasSelected) ? 1.5 : 1,
-            ),
-          ),
-          child:
-              isEmpty
-                  ? Row(
-                    children: [
-                      const Icon(
-                        Icons.router_outlined,
-                        size: 18,
-                        color: _inkTertiary,
-                      ),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'No subscriptions available',
-                          style: TextStyle(
-                            color: _inkTertiary,
-                            fontSize: 14,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                      const Icon(
-                        Icons.block_outlined,
-                        size: 16,
-                        color: _inkTertiary,
-                      ),
-                    ],
-                  )
-                  : hasSelected
-                  ? Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: _primary.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.check_rounded,
-                          color: _primary,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _subscriptionLabel(_selectedSubscription!),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: _ink,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (_subscriptionSublabel(
-                              _selectedSubscription!,
-                            ).isNotEmpty)
-                              Text(
-                                _subscriptionSublabel(_selectedSubscription!),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: _inkSecondary,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                          ],
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap:
-                            () => setState(() {
-                              _selectedSubscription = null;
-                              _subscriptionError = false;
-                              _subscriptionSearchController.clear();
-                            }),
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: _primary.withOpacity(0.08),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.close_rounded,
-                            color: _primary,
-                            size: 14,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                  : Row(
-                    children: [
-                      Icon(
-                        Icons.router_outlined,
-                        size: 18,
-                        color: _subscriptionError ? _errorColor : _inkTertiary,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Select a subscription below',
-                          style: TextStyle(
-                            color:
-                                _subscriptionError
-                                    ? _errorColor.withOpacity(0.7)
-                                    : _inkTertiary,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-        ),
-
-        // ── Error text ───────────────────────────────────────────────────
-        if (_subscriptionError && !isEmpty) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Text(
-              'Subscription is required',
-              style: const TextStyle(
-                color: _errorColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-
-        // ── Search + list (hidden when no data or already selected) ──────
-        if (!isEmpty && !hasSelected) ...[
-          const SizedBox(height: 12),
-          // Search bar
-          Container(
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _border),
-            ),
-            child: TextField(
-              controller: _subscriptionSearchController,
-              style: const TextStyle(fontSize: 13, color: _ink),
-              decoration: InputDecoration(
-                hintText: 'Search subscriptions…',
-                hintStyle: const TextStyle(color: _inkTertiary, fontSize: 13),
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  color: _inkTertiary,
-                  size: 18,
-                ),
-                suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _subscriptionSearchController,
-                  builder:
-                      (_, value, __) =>
-                          value.text.isNotEmpty
-                              ? GestureDetector(
-                                onTap: _subscriptionSearchController.clear,
-                                child: const Icon(
-                                  Icons.close_rounded,
-                                  color: _inkTertiary,
-                                  size: 16,
-                                ),
-                              )
-                              : const SizedBox.shrink(),
-                ),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Results list
-          if (_filteredSubscriptions.isEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.search_off_rounded,
-                      color: _inkTertiary,
-                      size: 32,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No results for "${_subscriptionSearchController.text}"',
-                      style: const TextStyle(
-                        color: _inkSecondary,
-                        fontSize: 13,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            Container(
-              // max height so it scrolls inside the form
-              constraints: const BoxConstraints(maxHeight: 240),
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _border),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const ClampingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: _filteredSubscriptions.length,
-                  separatorBuilder:
-                      (_, __) =>
-                          const Divider(height: 1, color: _border, indent: 56),
-                  itemBuilder: (context, i) {
-                    final sub = _filteredSubscriptions[i];
-                    final label = _subscriptionLabel(sub);
-                    final sublabel = _subscriptionSublabel(sub);
-                    return InkWell(
-                      onTap: () {
-                        setState(() {
-                          _selectedSubscription = sub;
-                          _subscriptionError = false;
-                          _subscriptionSearchController.clear();
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 11,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: _primary.withOpacity(0.07),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.router_outlined,
-                                color: _primary,
-                                size: 17,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    label,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: _ink,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  if (sublabel.isNotEmpty)
-                                    Text(
-                                      sublabel,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: _inkSecondary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.chevron_right_rounded,
-                              color: _inkTertiary,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-        ],
-      ],
-    );
-  }
-
-  // ── Attachments section ───────────────────────────────────────────────────
 
   Widget _buildAttachmentsSection() => _card(
     child: Column(
@@ -1450,193 +1304,305 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
     ),
   );
 
-  Widget _buildForm() => AnimatedBuilder(
-    animation: _animController,
-    builder:
-        (_, child) => Opacity(
-          opacity: _animController.value,
-          child: Transform.translate(
-            offset: Offset(0, 20 * (1 - _animController.value)),
-            child: child,
-          ),
-        ),
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Ticket Type + Contact ────────────────────────────────────
-          _sectionLabel('TICKET DETAILS'),
-          _card(
-            child: Column(
-              children: [
-                _dropdown<Map<String, dynamic>>(
-                  hint: 'Select Ticket Type',
-                  icon: Icons.confirmation_number_outlined,
-                  items: _ticketTypes,
-                  value: _selectedTicketType,
-                  labelBuilder: _ticketTypeLabel,
-                  hasError: _typeError,
-                  errorText: 'Ticket type is required',
-                  onChanged: (v) {
-                    _selectedTicketType = v;
-                    _typeError = false;
-                  },
-                ),
-                const SizedBox(height: 14),
-                _dropdown<Map<String, dynamic>>(
-                  hint: 'Select Contact',
-                  icon: Icons.person_outline,
-                  items: _contacts,
-                  value: _selectedContact,
-                  labelBuilder: _contactLabel,
-                  hasError: _contactError,
-                  errorText: 'Contact is required',
-                  onChanged: (v) {
-                    _selectedContact = v;
-                    _contactError = false;
-                  },
-                ),
-              ],
+  Widget _buildForm() {
+    final showSubWarning = _subscriptions.isEmpty;
+
+    return AnimatedBuilder(
+      animation: _animController,
+      builder:
+          (_, child) => Opacity(
+            opacity: _animController.value,
+            child: Transform.translate(
+              offset: Offset(0, 20 * (1 - _animController.value)),
+              child: child,
             ),
           ),
-          const SizedBox(height: 20),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Ticket Details ─────────────────────────────────────────────
+            _sectionLabel('TICKET DETAILS'),
+            _card(
+              child: Column(
+                children: [
+                  _selectorTile(
+                    hint: 'Select Ticket Type',
+                    icon: Icons.confirmation_number_outlined,
+                    selectedLabel:
+                        _selectedTicketType != null
+                            ? _ticketTypeLabel(_selectedTicketType!)
+                            : null,
+                    selectedSub:
+                        _selectedTicketType != null
+                            ? _ticketTypeSub(_selectedTicketType!)
+                            : null,
+                    hasError: _typeError,
+                    errorText: 'Ticket type is required',
+                    onTap:
+                        () => _showPicker<Map<String, dynamic>>(
+                          title: 'Select Ticket Type',
+                          items: _ticketTypes,
+                          selected: _selectedTicketType,
+                          labelBuilder: _ticketTypeLabel,
+                          subtitleBuilder: _ticketTypeSub,
+                          onSelect:
+                              (v) => setState(() {
+                                _selectedTicketType = v;
+                                _typeError = false;
+                              }),
+                        ),
+                  ),
+                  const SizedBox(height: 14),
+                  _selectorTile(
+                    hint: 'Select Contact',
+                    icon: Icons.person_outline,
+                    selectedLabel:
+                        _selectedContact != null
+                            ? _contactLabel(_selectedContact!)
+                            : null,
+                    selectedSub:
+                        _selectedContact != null
+                            ? _contactSub(_selectedContact!)
+                            : null,
+                    hasError: _contactError,
+                    errorText: 'Contact is required',
+                    onTap:
+                        () => _showPicker<Map<String, dynamic>>(
+                          title: 'Select Contact',
+                          items: _contacts,
+                          selected: _selectedContact,
+                          labelBuilder: _contactLabel,
+                          subtitleBuilder: _contactSub,
+                          onSelect:
+                              (v) => setState(() {
+                                _selectedContact = v;
+                                _contactError = false;
+                              }),
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
 
-          // ── Subscription (searchable) ────────────────────────────────
-          _sectionLabel('SUBSCRIPTION'),
-          _card(child: _buildSubscriptionPicker()),
-          const SizedBox(height: 20),
-
-          // ── Description ──────────────────────────────────────────────
-          _sectionLabel('DESCRIPTION'),
-          _card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_descriptionError)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.error_outline, size: 14, color: _errorColor),
-                        SizedBox(width: 4),
-                        Text(
-                          'Description is required',
+            // ── Subscription ───────────────────────────────────────────────
+            _sectionLabel('SUBSCRIPTION'),
+            if (showSubWarning)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: Colors.orange.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'No subscriptions found. Please contact your administrator.',
                           style: TextStyle(
-                            color: _errorColor,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            color: Colors.orange.shade800,
                           ),
                         ),
-                      ],
+                      ),
+                      TextButton(
+                        onPressed: _loadAllData,
+                        child: Text(
+                          'Retry',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade800,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            _card(
+              child: _selectorTile(
+                hint: 'Select Subscription',
+                icon: Icons.router_outlined,
+                selectedLabel:
+                    _selectedSubscription != null
+                        ? _subscriptionLabel(_selectedSubscription!)
+                        : null,
+                selectedSub:
+                    _selectedSubscription != null
+                        ? _subscriptionSub(_selectedSubscription!)
+                        : null,
+                hasError: _subscriptionError,
+                errorText: 'Subscription is required',
+                onTap:
+                    () => _showPicker<Map<String, dynamic>>(
+                      title: 'Select Subscription',
+                      items: _subscriptions,
+                      selected: _selectedSubscription,
+                      labelBuilder: _subscriptionLabel,
+                      subtitleBuilder: _subscriptionSub,
+                      onSelect:
+                          (v) => setState(() {
+                            _selectedSubscription = v;
+                            _subscriptionError = false;
+                          }),
+                    ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Description ────────────────────────────────────────────────
+            _sectionLabel('DESCRIPTION'),
+            _card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_descriptionError)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: const [
+                          Icon(
+                            Icons.error_outline,
+                            size: 14,
+                            color: _errorColor,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Description is required',
+                            style: TextStyle(
+                              color: _errorColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _surfaceSubtle,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _descriptionError ? _errorColor : _border,
+                        width: _descriptionError ? 1.5 : 1,
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _descriptionController,
+                      maxLines: 6,
+                      onChanged: (_) {
+                        if (_descriptionError) {
+                          setState(() => _descriptionError = false);
+                        }
+                      },
+                      style: const TextStyle(color: _ink, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Describe the issue in detail...',
+                        hintStyle: TextStyle(
+                          color:
+                              _descriptionError
+                                  ? _errorColor.withOpacity(0.6)
+                                  : _inkTertiary,
+                          fontSize: 14,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.all(14),
+                      ),
                     ),
                   ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: _surfaceSubtle,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _descriptionError ? _errorColor : _border,
-                      width: _descriptionError ? 1.5 : 1,
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Attachments ────────────────────────────────────────────────
+            _sectionLabel('ATTACHMENTS'),
+            _buildAttachmentsSection(),
+            const SizedBox(height: 28),
+
+            // ── Action buttons ─────────────────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        _isSubmitting
+                            ? null
+                            : (widget.onCancel ??
+                                () => Navigator.of(context).pop()),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _inkSecondary,
+                      side: const BorderSide(color: _border),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
-                  ),
-                  child: TextField(
-                    controller: _descriptionController,
-                    maxLines: 6,
-                    onChanged: (_) {
-                      if (_descriptionError) {
-                        setState(() => _descriptionError = false);
-                      }
-                    },
-                    style: const TextStyle(color: _ink, fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: 'Describe the issue in detail...',
-                      hintStyle: TextStyle(
-                        color:
-                            _descriptionError
-                                ? _errorColor.withOpacity(0.6)
-                                : _inkTertiary,
+                    icon: const Icon(Icons.close, size: 16),
+                    label: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.all(14),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSubmitting ? null : _submitTicket,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primary,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: _primary.withOpacity(0.5),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon:
+                        _isSubmitting
+                            ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                            : const Icon(Icons.check_circle_outline, size: 18),
+                    label: Text(
+                      _isSubmitting ? 'Submitting...' : 'Create Ticket',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 20),
-
-          // ── Attachments ──────────────────────────────────────────────
-          _sectionLabel('ATTACHMENTS'),
-          _buildAttachmentsSection(),
-          const SizedBox(height: 28),
-
-          // ── Action buttons ───────────────────────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed:
-                      _isSubmitting
-                          ? null
-                          : (widget.onCancel ??
-                              () => Navigator.of(context).pop()),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _inkSecondary,
-                    side: const BorderSide(color: _border),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  icon: const Icon(Icons.close, size: 16),
-                  label: const Text(
-                    'Cancel',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  onPressed: _isSubmitting ? null : _submitTicket,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: _primary.withOpacity(0.5),
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  icon:
-                      _isSubmitting
-                          ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                          : const Icon(Icons.check_circle_outline, size: 18),
-                  label: Text(
-                    _isSubmitting ? 'Submitting...' : 'Create Ticket',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
