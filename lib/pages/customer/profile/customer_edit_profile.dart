@@ -3,9 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import '../../../services/api_service.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
@@ -43,10 +46,14 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   String? _position;
   bool? _isActive; // true = active, false = inactive, null = unknown
 
+  // The user ID resolved from the API (not from prefs)
+  int? _resolvedUserId;
+
   File? _selectedImageFile;
   String? _savedImagePath;
   bool _isImageLoading = false;
   bool _isLoading = true;
+  bool _isSaving = false;
 
   String get _initials {
     final f = _firstNameController.text.trim();
@@ -56,6 +63,15 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         '${l.isNotEmpty ? l[0].toUpperCase() : ''}';
   }
 
+  /// SSL-bypassing HTTP client (mirrors admin screen behaviour).
+  http.Client get _httpClient {
+    final httpClient =
+        HttpClient()
+          ..connectionTimeout = const Duration(seconds: 15)
+          ..badCertificateCallback = (cert, host, port) => true;
+    return IOClient(httpClient);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -63,7 +79,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _loadSavedData();
+    _loadProfileData();
   }
 
   @override
@@ -78,55 +94,110 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   // ── Data loading ───────────────────────────────────────────────────────────
 
-  Future<void> _loadSavedData() async {
+  Future<void> _loadProfileData() async {
     setState(() => _isLoading = true);
     _prefs = await SharedPreferences.getInstance();
 
-    String? firstName, lastName, middleName, email;
-
+    // ── Step 1: Call /v1/auth/me for id, names, email ──────────────────────
+    Map<String, dynamic>? meData;
     try {
-      // getCurrentUser routes to /v1/auth/me via ApiService.
-      // _authorizedGet unwraps the outer envelope so response['data']
-      // is the object: { id, name, email, role, position, inactive, ... }
       final response = await ApiService.getMe();
-
-      if (response['status'] == 'success' && response['data'] != null) {
-        final d = response['data'] as Map<String, dynamic>;
-
-        firstName = _first(d, ['first_name']) ?? _prefs.getString('firstName');
-        lastName = _first(d, ['last_name']) ?? _prefs.getString('lastName');
-        middleName =
-            _first(d, ['middle_name']) ?? _prefs.getString('middleName') ?? '';
-        email = _first(d, ['email']) ?? _prefs.getString('email') ?? '';
-
-        // ── Position ────────────────────────────────────────────────────────
-        // API returns: "position": "Programmer"
-        _position = _first(d, [
-          'position',
-          'job_title',
-          'jobTitle',
-          'title',
-          'designation',
-        ]);
-
-        // ── Active status ────────────────────────────────────────────────────
-        // API returns: "inactive": "N"  →  active = true
-        //              "inactive": "Y"  →  active = false
-        _isActive = _resolveActive(d);
+      if (response['status'] == 'success') {
+        meData = _unwrapUser(response['data']);
+        if (meData != null) {
+          final rawId = meData['id'];
+          if (rawId != null) {
+            _resolvedUserId = int.tryParse(rawId.toString());
+            if (_resolvedUserId != null) {
+              await _prefs.setInt('user_id', _resolvedUserId!);
+            }
+          }
+        }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[EditProfile] getMe error: $e');
+    }
 
-    // Fallback to cached prefs if API failed
-    firstName ??= _prefs.getString('firstName') ?? '';
-    lastName ??= _prefs.getString('lastName') ?? '';
-    middleName ??= _prefs.getString('middleName') ?? '';
-    email ??= _prefs.getString('email') ?? '';
+    // ── Step 2: Call /api/v1/users/my/profile/ for position & inactive ─────
+    Map<String, dynamic>? profileData;
+    try {
+      final token = await ApiService.getValidAccessToken();
+      if (token != null && token.isNotEmpty) {
+        final uri = Uri.parse(
+          'https://starlink-api.ardentnetworks.com.ph/api/v1/users/my/profile/',
+        );
+        final res = await _httpClient
+            .get(
+              uri,
+              headers: {
+                'Accept': 'application/json',
+                'Authorization': 'Bearer $token',
+              },
+            )
+            .timeout(const Duration(seconds: 15));
 
+        if (res.statusCode == 200) {
+          final decoded = json.decode(res.body);
+          if (decoded is Map<String, dynamic>) {
+            profileData = (decoded['data'] as Map<String, dynamic>?) ?? decoded;
+          }
+        } else {
+          debugPrint('[EditProfile] profile endpoint ${res.statusCode}');
+        }
+      }
+    } catch (e) {
+      debugPrint('[EditProfile] profile fetch error: $e');
+    }
+
+    // ── Step 3: Merge — profileData wins on conflict ────────────────────────
+    // meData      → id, first_name, last_name, middle_name, email
+    // profileData → position, inactive (may also carry name/email)
+    final merged = <String, dynamic>{...?meData, ...?profileData};
+
+    if (merged.isNotEmpty) {
+      final firstName = _str(merged, 'first_name');
+      final lastName = _str(merged, 'last_name');
+      final middleName = _str(merged, 'middle_name') ?? '';
+      final email = _str(merged, 'email') ?? '';
+
+      if (firstName != null) await _prefs.setString('firstName', firstName);
+      if (lastName != null) await _prefs.setString('lastName', lastName);
+      await _prefs.setString('middleName', middleName);
+      await _prefs.setString('email', email);
+
+      // Position: check common field names from both endpoints
+      _position =
+          _str(merged, 'position') ??
+          _str(merged, 'job_title') ??
+          _str(merged, 'designation');
+
+      // Inactive flag from the profile endpoint
+      _isActive = _resolveActive(merged);
+
+      setState(() {
+        _firstNameController.text =
+            firstName ?? _prefs.getString('firstName') ?? '';
+        _lastNameController.text =
+            lastName ?? _prefs.getString('lastName') ?? '';
+        _middleNameController.text = middleName;
+        _emailController.text = email;
+        _savedImagePath = _prefs.getString('profileImagePath');
+        _isLoading = false;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _animController.forward(),
+      );
+      return;
+    }
+
+    // ── Fallback: cached SharedPreferences ──────────────────────────────────
+    _resolvedUserId ??= _prefs.getInt('user_id');
     setState(() {
-      _firstNameController.text = firstName!;
-      _lastNameController.text = lastName!;
-      _middleNameController.text = middleName!;
-      _emailController.text = email!;
+      _firstNameController.text = _prefs.getString('firstName') ?? '';
+      _lastNameController.text = _prefs.getString('lastName') ?? '';
+      _middleNameController.text = _prefs.getString('middleName') ?? '';
+      _emailController.text = _prefs.getString('email') ?? '';
       _savedImagePath = _prefs.getString('profileImagePath');
       _isLoading = false;
     });
@@ -136,35 +207,39 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     );
   }
 
-  /// Returns the first non-empty string value found under any of [keys].
-  String? _first(Map<String, dynamic> data, List<String> keys) {
-    for (final k in keys) {
-      final v = data[k]?.toString().trim();
-      if (v != null && v.isNotEmpty && v != 'null' && v != 'undefined') {
-        return v;
-      }
+  /// Defensively unwraps the user object from whatever shape arrives.
+  Map<String, dynamic>? _unwrapUser(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is Map<String, dynamic>) {
+      if (_looksLikeUser(raw)) return raw;
+      final inner = raw['data'];
+      if (inner is Map<String, dynamic> && _looksLikeUser(inner)) return inner;
+      return raw;
     }
     return null;
   }
 
+  bool _looksLikeUser(Map<String, dynamic> m) =>
+      m.containsKey('id') ||
+      m.containsKey('first_name') ||
+      m.containsKey('email');
+
+  /// Returns a non-blank trimmed string for [key], or null.
+  String? _str(Map<String, dynamic> data, String key) {
+    final v = data[key]?.toString().trim();
+    if (v == null || v.isEmpty || v == 'null' || v == 'undefined') return null;
+    return v;
+  }
+
   /// Resolves active status.
-  ///
-  /// Handles:
-  ///   inactive: "N"  → active  (true)
-  ///   inactive: "Y"  → inactive (false)
-  ///   active:   true/false/1/0/"active"/"inactive" etc.
+  /// Profile API: "inactive": "N" → active (true), "inactive": "Y" → inactive (false)
   bool? _resolveActive(Map<String, dynamic> data) {
-    // ── "inactive" field (API returns "N" = active, "Y" = inactive) ─────────
     final inactiveRaw = data['inactive'];
     if (inactiveRaw != null) {
       final s = inactiveRaw.toString().toUpperCase().trim();
-      if (s == 'N' || s == 'FALSE' || s == '0') {
-        return true; // not inactive → active
-      }
-      if (s == 'Y' || s == 'TRUE' || s == '1') return false; // inactive
+      if (s == 'N' || s == 'FALSE' || s == '0') return true;
+      if (s == 'Y' || s == 'TRUE' || s == '1') return false;
     }
-
-    // ── "active" / "is_active" / "status" fallback ───────────────────────────
     for (final k in ['active', 'is_active', 'isActive', 'status', 'state']) {
       final raw = data[k];
       if (raw == null) continue;
@@ -178,8 +253,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         return false;
       }
     }
-
-    return null; // unknown
+    return null;
   }
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -187,21 +261,28 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
-    int? userId = _prefs.getInt('user_id');
+    final userId = _resolvedUserId ?? _prefs.getInt('user_id');
     if (userId == null) {
-      _showSnack('User ID not found.', isError: true);
+      _showSnack(
+        'User ID not found. Please try logging out and back in.',
+        isError: true,
+      );
       return;
     }
+
+    setState(() => _isSaving = true);
     try {
       final response = await ApiService.updateUser(userId.toString(), {
         'first_name': _firstNameController.text.trim(),
         'last_name': _lastNameController.text.trim(),
         'middle_name': _middleNameController.text.trim(),
       });
+
       if (response['status'] == 'success') {
         await _prefs.setString('firstName', _firstNameController.text.trim());
         await _prefs.setString('lastName', _lastNameController.text.trim());
         await _prefs.setString('middleName', _middleNameController.text.trim());
+
         if (mounted) {
           Navigator.pop(context, {
             'firstName': _firstNameController.text.trim(),
@@ -218,6 +299,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       }
     } catch (e) {
       _showSnack(e.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -466,7 +549,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     ),
   );
 
-  /// Styled read-only info row for position and status.
   Widget _infoRow({
     required IconData icon,
     required String label,
@@ -597,7 +679,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    // ── Status display values ──────────────────────────────────────────────
     final positionDisplay =
         (_position != null && _position!.isNotEmpty) ? _position! : '—';
 
@@ -627,7 +708,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
           top: false,
           child: Column(
             children: [
-              // ── Gradient header ──────────────────────────────────────
+              // ── Gradient header ──────────────────────────────────────────
               Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -664,7 +745,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                         ),
                         if (!_isLoading)
                           TextButton(
-                            onPressed: _isImageLoading ? null : _saveProfile,
+                            onPressed:
+                                (_isImageLoading || _isSaving)
+                                    ? null
+                                    : _saveProfile,
                             style: TextButton.styleFrom(
                               backgroundColor: Colors.white.withOpacity(0.15),
                               shape: RoundedRectangleBorder(
@@ -675,14 +759,26 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                 vertical: 8,
                               ),
                             ),
-                            child: const Text(
-                              'Save',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
+                            child:
+                                _isSaving
+                                    ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation(
+                                          Colors.white,
+                                        ),
+                                      ),
+                                    )
+                                    : const Text(
+                                      'Save',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
                           ),
                       ],
                     ),
@@ -690,7 +786,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                 ),
               ),
 
-              // ── Scrollable body ──────────────────────────────────────
+              // ── Scrollable body ──────────────────────────────────────────
               Expanded(
                 child:
                     _isLoading
@@ -737,7 +833,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                   ),
                                   const SizedBox(height: 28),
 
-                                  // ── Personal Information ──────────────
+                                  // ── Personal Information ──────────────────
                                   _sectionTitle('PERSONAL INFORMATION'),
                                   _card(
                                     child: Column(
@@ -748,7 +844,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                           Icons.person_outline,
                                           validator:
                                               (v) =>
-                                                  v?.isEmpty ?? true
+                                                  (v?.trim().isEmpty ?? true)
                                                       ? 'Required'
                                                       : null,
                                         ),
@@ -759,7 +855,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                           Icons.person_outline,
                                           validator:
                                               (v) =>
-                                                  v?.isEmpty ?? true
+                                                  (v?.trim().isEmpty ?? true)
                                                       ? 'Required'
                                                       : null,
                                         ),
@@ -783,19 +879,17 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                   ),
                                   const SizedBox(height: 24),
 
-                                  // ── Account Details (read-only) ───────
+                                  // ── Account Details (read-only) ───────────
                                   _sectionTitle('ACCOUNT DETAILS'),
                                   _card(
                                     child: Column(
                                       children: [
-                                        // Position
                                         _infoRow(
                                           icon: Icons.work_outline_rounded,
                                           label: 'Position',
                                           value: positionDisplay,
                                         ),
                                         const SizedBox(height: 12),
-                                        // Account Status
                                         _infoRow(
                                           icon: Icons.verified_user_outlined,
                                           label: 'Account Status',
@@ -837,12 +931,14 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                   ),
                                   const SizedBox(height: 28),
 
-                                  // ── Save button ───────────────────────
+                                  // ── Save button ───────────────────────────
                                   SizedBox(
                                     width: double.infinity,
                                     child: ElevatedButton(
                                       onPressed:
-                                          _isImageLoading ? null : _saveProfile,
+                                          (_isImageLoading || _isSaving)
+                                              ? null
+                                              : _saveProfile,
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: _primary,
                                         foregroundColor: Colors.white,
@@ -857,7 +953,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                         ),
                                       ),
                                       child:
-                                          _isImageLoading
+                                          _isSaving
                                               ? const SizedBox(
                                                 width: 22,
                                                 height: 22,
