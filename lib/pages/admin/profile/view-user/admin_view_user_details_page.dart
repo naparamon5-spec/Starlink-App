@@ -515,11 +515,11 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
                         'Email',
                         u['email']?.toString() ?? '—',
                       ),
-                      _infoRow(
-                        Icons.badge_outlined,
-                        'Username',
-                        u['username']?.toString() ?? '—',
-                      ),
+                      // _infoRow(
+                      //   Icons.badge_outlined,
+                      //   'Username',
+                      //   u['username']?.toString() ?? '—',
+                      // ),
                       _infoRow(
                         Icons.work_outline,
                         'Position',
@@ -556,23 +556,23 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
                       ),
                     ]),
                     const SizedBox(height: 16),
-                    _buildSection('System Details', [
-                      _infoRow(
-                        Icons.tag,
-                        'User ID',
-                        u['id']?.toString() ?? '—',
-                      ),
-                      _infoRow(
-                        Icons.calendar_today_outlined,
-                        'Created At',
-                        _formatDate(u['created_at']?.toString()),
-                      ),
-                      _infoRow(
-                        Icons.update_outlined,
-                        'Updated At',
-                        _formatDate(u['updated_at']?.toString()),
-                      ),
-                    ]),
+                    // _buildSection('System Details', [
+                    //   _infoRow(
+                    //     Icons.tag,
+                    //     'User ID',
+                    //     u['id']?.toString() ?? '—',
+                    //   ),
+                    //   _infoRow(
+                    //     Icons.calendar_today_outlined,
+                    //     'Created At',
+                    //     _formatDate(u['created_at']?.toString()),
+                    //   ),
+                    //   _infoRow(
+                    //     Icons.update_outlined,
+                    //     'Updated At',
+                    //     _formatDate(u['updated_at']?.toString()),
+                    //   ),
+                    // ]),
                   ],
 
                   const SizedBox(height: 24),

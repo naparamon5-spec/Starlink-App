@@ -1109,8 +1109,6 @@ class _StatPill extends StatelessWidget {
 }
 
 // ── Create User Bottom Sheet ───────────────────────────────────────────────────
-// NOTE: renamed from _CreateUserSheet → CreateUserSheet (public)
-// so it can be imported and reused from other pages.
 
 class CreateUserSheet extends StatefulWidget {
   final VoidCallback onCreated;
@@ -1136,19 +1134,16 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
   final _emailCtrl = TextEditingController();
   final _companyEmailCtrl = TextEditingController();
 
-  // Role state
   List<Map<String, dynamic>> _roles = [];
   bool _loadingRoles = true;
   String? _selectedRoleValue;
   String? _selectedRoleLabel;
 
-  // Company/EndUser state
   List<Map<String, dynamic>> _companies = [];
   bool _loadingCompanies = false;
   String? _selectedCompanyValue;
   String? _selectedCompanyLabel;
 
-  // Form errors
   String? _roleError;
   String? _firstNameError;
   String? _lastNameError;
@@ -1158,7 +1153,6 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
 
   bool get _companyEnabled => _selectedRoleValue != null;
 
-  // Whether selected role should use end-user API
   bool get _isEndUserRole =>
       _selectedRoleValue?.toLowerCase() == 'end_user' ||
       _selectedRoleLabel?.toLowerCase() == 'end user';
@@ -1180,13 +1174,10 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
     super.dispose();
   }
 
-  /// Roles the current user is allowed to assign.
-  /// - agent → can only create Customer or End User accounts
-  /// - admin (or anything else) → all roles allowed
   List<String> get _allowedRoleValues {
     final role = widget.currentUserRole.toLowerCase().trim();
     if (role == 'agent') return ['customer', 'end_user'];
-    return []; // empty = no restriction
+    return [];
   }
 
   Future<void> _loadRoles() async {
@@ -1202,7 +1193,6 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
                 .map((e) => Map<String, dynamic>.from(e))
                 .toList();
 
-        // Filter roles based on current user's permission
         final allowed = _allowedRoleValues;
         if (allowed.isNotEmpty) {
           roles =
@@ -1728,6 +1718,7 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
     ],
   );
 
+  // ── FIXED: vertically centred input field ──────────────────────────────────
   Widget _inputField({
     required TextEditingController controller,
     bool enabled = true,
@@ -1735,31 +1726,42 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
     bool hasError = false,
     TextInputType keyboardType = TextInputType.text,
     void Function(String)? onChanged,
-  }) => Container(
-    height: 42,
-    decoration: BoxDecoration(
-      color: (!enabled || disabled) ? const Color(0xFFF0F2F5) : _surface,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(
-        color: hasError ? _primary : _border,
-        width: hasError ? 1.5 : 1,
+  }) {
+    final isDisabled = !enabled || disabled;
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: isDisabled ? const Color(0xFFF0F2F5) : _surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: hasError ? _primary : _border,
+          width: hasError ? 1.5 : 1,
+        ),
       ),
-    ),
-    child: TextField(
-      controller: controller,
-      enabled: enabled && !disabled,
-      keyboardType: keyboardType,
-      onChanged: onChanged,
-      style: TextStyle(
-        fontSize: 13,
-        color: (!enabled || disabled) ? _inkTertiary : _ink,
+      // Center the TextField vertically inside the fixed-height container
+      child: Center(
+        child: TextField(
+          controller: controller,
+          enabled: !isDisabled,
+          keyboardType: keyboardType,
+          onChanged: onChanged,
+          style: TextStyle(
+            fontSize: 13,
+            color: isDisabled ? _inkTertiary : _ink,
+            // Prevent font metrics from shifting the baseline
+            height: 1.0,
+          ),
+          // isDense collapses Flutter's default vertical padding so our
+          // Center widget can take full control of the alignment.
+          decoration: const InputDecoration(
+            isDense: true,
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          ),
+        ),
       ),
-      decoration: const InputDecoration(
-        border: InputBorder.none,
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      ),
-    ),
-  );
+    );
+  }
 
   Widget _dropdownTile({
     required String label,
