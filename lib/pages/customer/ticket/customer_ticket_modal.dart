@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import '../../../services/api_service.dart';
+import '../../../services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -138,6 +139,131 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
     sub['subscriptionId'],
     sub['id'],
   ]);
+
+  int? _extractContactUserId(Map<String, dynamic> contact) {
+    final candidates = [
+      contact['user_id'],
+      contact['userId'],
+      contact['value'],
+      contact['id'],
+      contact['contact_id'],
+      contact['contactId'],
+    ];
+
+    for (final candidate in candidates) {
+      if (candidate is int) return candidate;
+      final parsed = int.tryParse(candidate?.toString() ?? '');
+      if (parsed != null) return parsed;
+    }
+
+    return null;
+  }
+
+  Future<void> _createAssignedContactNotification({
+    required String ticketId,
+    required String ticketType,
+    required String contactName,
+    required String description,
+  }) async {
+    final selectedContact = _selectedContact;
+    if (selectedContact == null) return;
+
+    final contactUserId = _extractContactUserId(selectedContact);
+    if (contactUserId == null) return;
+
+    final trimmedDescription = description.trim();
+    final shortDescription =
+        trimmedDescription.length > 120
+            ? '${trimmedDescription.substring(0, 120)}...'
+            : trimmedDescription;
+
+    try {
+      await NotificationService.createCustomerNotification({
+        'user_id': contactUserId,
+        'title': 'New Ticket Assigned',
+        'message':
+            'You have been selected as contact for Ticket #$ticketId ($ticketType). ${shortDescription.isEmpty ? '' : shortDescription}',
+        'type': 'ticket_assigned',
+        'icon': 'confirmation_number',
+        'color': '#EB1E23',
+        'reference_id': ticketId,
+        'is_read': 0,
+        'data': {
+          'ticket_id': ticketId,
+          'ticket_type': ticketType,
+          'contact_name': contactName,
+          'description': trimmedDescription,
+        },
+      });
+    } catch (e) {
+      debugPrint('Failed to create assigned contact notification: $e');
+    }
+  }
+
+  int? _extractNotificationUserId(Map<String, dynamic> item) {
+    final candidates = [
+      item['user_id'],
+      item['userId'],
+      item['id'],
+      item['value'],
+      item['contact_id'],
+      item['contactId'],
+    ];
+    for (final candidate in candidates) {
+      if (candidate is int) return candidate;
+      final parsed = int.tryParse(candidate?.toString() ?? '');
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  String _ticketSubjectForNotification() {
+    final ticketType =
+        _selectedTicketType == null
+            ? ''
+            : _ticketTypeLabel(_selectedTicketType!);
+    if (ticketType.isNotEmpty && ticketType != '—') return ticketType;
+    return 'New Ticket';
+  }
+
+  Future<void> _notifySelectedContact({
+    required String ticketId,
+    required String contactValue,
+    required String subscriptionId,
+  }) async {
+    if (_selectedContact == null) return;
+
+    final selectedUserId = _extractNotificationUserId(_selectedContact!);
+    if (selectedUserId == null) return;
+
+    final selectedLabel = _contactLabel(_selectedContact!);
+    final createdByName = _firstNonEmpty([
+      (await ApiService.getMe())['data']?['name'],
+      (await ApiService.getMe())['data']?['full_name'],
+      (await ApiService.getMe())['data']?['username'],
+      'A customer',
+    ]);
+
+    await NotificationService.createCustomerNotification({
+      'user_id': selectedUserId,
+      'title': 'New Ticket Assigned',
+      'message':
+          '$createdByName created ticket #$ticketId and selected you as contact for ${_ticketSubjectForNotification()}.',
+      'type': 'ticket_created',
+      'icon': 'confirmation_number',
+      'color': '#EB1E23',
+      'is_read': 0,
+      'data': {
+        'ticket_id': ticketId,
+        'ticket_type': _ticketSubjectForNotification(),
+        'subscription_id': subscriptionId,
+        'contact': contactValue,
+        'contact_name': selectedLabel,
+        'created_by': createdByName,
+        'description': _descriptionController.text.trim(),
+      },
+    });
+  }
 
   // ── Load subscriptions with multiple fallback strategies ──────────────────
 
@@ -802,6 +928,18 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
               ?.toString() ??
           '';
 
+      if (ticketId.isNotEmpty) {
+        try {
+          await _notifySelectedContact(
+            ticketId: ticketId,
+            contactValue: contactValue,
+            subscriptionId: subscriptionId,
+          );
+        } catch (e) {
+          debugPrint('Failed to notify selected contact: $e');
+        }
+      }
+
       List<Map<String, dynamic>> uploadedAttachmentMeta = [];
 
       if (_pickedFiles.isNotEmpty && ticketId.isNotEmpty) {
@@ -848,6 +986,13 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       }
 
       if (!mounted) return;
+
+      await _createAssignedContactNotification(
+        ticketId: ticketId.isEmpty ? 'new' : ticketId,
+        ticketType: ticketTypeValue,
+        contactName: _contactLabel(_selectedContact!),
+        description: _descriptionController.text.trim(),
+      );
 
       final formattedTicket = <String, dynamic>{
         'id': ticketId,

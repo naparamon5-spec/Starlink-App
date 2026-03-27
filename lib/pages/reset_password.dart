@@ -56,10 +56,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     try {
       final requestBody = {
-        'email': widget.email,
-        'verification_code': widget.verificationCode,
-        'new_password': _passwordController.text,
-        'confirm_password': _confirmPasswordController.text,
+        'token': widget.token, // 👈 only send token
       };
 
       final response = await http.post(

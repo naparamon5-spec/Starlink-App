@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "931478140862", 
+    "project_id": "starlink-app-2ed98",
+    "storage_bucket": "starlink-app-2ed98.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:931478140862:android:ca3651622e77036a78ebef",
+        "android_client_info": {
+          "package_name": "com.example.starlink_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCt3zMILSE8zsAngFo58RdtEzAyF4gZ1wo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -9,6 +9,7 @@ import 'sections/billing/admin_billing_page.dart';
 import 'sections/subscription/admin_subscriptions_page.dart';
 import 'sections/subscription/admin_subscription_details_page.dart';
 import 'sections/enduser/admin_end_users_page.dart';
+import 'profile/admin_notification_screen.dart';
 import 'profile/admin_edit_profile_page.dart';
 import 'profile/admin_manage_users_page.dart';
 import 'profile/admin_user_guide_page.dart';
@@ -413,6 +414,43 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         quickMenuOpen: _quickMenuOpen,
         quickAction: _quickAction,
       ),
+      appBar:
+          _selectedIndex == 0
+              ? AppBar(
+                backgroundColor: _surface,
+                elevation: 0,
+                centerTitle: true,
+                title: const Text(
+                  'Dashboard',
+                  style: TextStyle(
+                    color: _ink,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(1),
+                  child: Container(height: 1, color: _border),
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.notifications_outlined,
+                      color: _ink,
+                      size: 22,
+                    ),
+                    onPressed:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AdminNotificationScreen(),
+                          ),
+                        ),
+                  ),
+                ],
+              )
+              : null,
       body: SafeArea(
         top: true,
         bottom: false,
