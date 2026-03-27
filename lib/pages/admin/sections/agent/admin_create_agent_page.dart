@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../../../../services/api_service.dart';
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
+// ── Design tokens (identical to create-ticket page) ──────────────────────────
 const _primary = Color(0xFFEB1E23);
 const _primaryDark = Color(0xFF760F12);
 const _success = Color(0xFF24A148);
@@ -21,7 +23,8 @@ class AdminCreateAgentPage extends StatefulWidget {
   State<AdminCreateAgentPage> createState() => _AdminCreateAgentPageState();
 }
 
-class _AdminCreateAgentPageState extends State<AdminCreateAgentPage> {
+class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
+    with TickerProviderStateMixin {
   // ── Pagination state ───────────────────────────────────────────────────────
   static const int _pageSize = 20;
 
@@ -31,33 +34,50 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage> {
 
   int _currentPage = 1;
   int _totalPages = 1;
-  bool _loadingFirst = true; // skeleton on initial load
-  bool _loadingMore = false; // spinner at bottom when paginating
+  bool _loadingFirst = true;
+  bool _loadingMore = false;
   bool _submitting = false;
   String? _loadError;
   String _lastQuery = '';
 
-  // Debounce timer for search
-  Future<void>? _searchDebounce;
-
   // Multi-select
   final Map<String, Map<String, dynamic>> _selected = {};
+
+  // Debounce
+  Timer? _debounce;
+
+  // Search focus
+  final FocusNode _searchFocus = FocusNode();
+  bool _searchFocused = false;
+
+  // Animation
+  late AnimationController _animController;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
     _fetchPage(page: 1, query: '', reset: true);
     _scrollCtrl.addListener(_onScroll);
     _searchCtrl.addListener(_onSearchChanged);
+    _searchFocus.addListener(() {
+      setState(() => _searchFocused = _searchFocus.hasFocus);
+    });
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _animController.dispose();
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     _searchCtrl.removeListener(_onSearchChanged);
     _searchCtrl.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -73,11 +93,10 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage> {
 
   // ── Debounced search ───────────────────────────────────────────────────────
   void _onSearchChanged() {
-    final q = _searchCtrl.text.trim();
-    // Simple debounce: wait 350ms after last keystroke
-    Future.delayed(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      if (_searchCtrl.text.trim() == q && q != _lastQuery) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      final q = _searchCtrl.text.trim();
+      if (q != _lastQuery) {
         _fetchPage(page: 1, query: q, reset: true);
       }
     });
@@ -154,6 +173,12 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage> {
           _loadingMore = false;
           _loadError = null;
         });
+
+        if (reset) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _animController.forward(from: 0),
+          );
+        }
       } else {
         setState(() {
           _loadError = 'Server error: ${res.statusCode}';
@@ -235,241 +260,554 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage> {
     );
   }
 
+  // ── UI helpers ─────────────────────────────────────────────────────────────
+  Widget _sectionLabel(String t) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      t,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: _inkTertiary,
+        letterSpacing: 1.1,
+      ),
+    ),
+  );
+
+  Widget _card({required Widget child}) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _surface,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: _border),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.03),
+          blurRadius: 8,
+          offset: const Offset(0, 3),
+        ),
+      ],
+    ),
+    child: child,
+  );
+
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _surface,
-      appBar: AppBar(
-        title: const Text(
-          'Create Agent',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: _surfaceSubtle,
+        body: Column(
+          children: [
+            // ── Gradient AppBar ────────────────────────────────────────────
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Create Agent',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            Text(
+                              'Select companies to assign',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!_loadingFirst &&
+                          _loadError == null &&
+                          _selected.isNotEmpty)
+                        GestureDetector(
+                          onTap: _submitting ? null : _save,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(
+                                _submitting ? 0.08 : 0.18,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child:
+                                _submitting
+                                    ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : Text(
+                                      'Create (${_selected.length})',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Body ──────────────────────────────────────────────────────
+            Expanded(
+              child:
+                  _loadingFirst
+                      ? _buildLoading()
+                      : _loadError != null && _items.isEmpty
+                      ? _buildErrorState()
+                      : _buildContent(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Loading state ──────────────────────────────────────────────────────────
+  Widget _buildLoading() => Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: _primary.withOpacity(0.08),
+            shape: BoxShape.circle,
+          ),
+          child: const Center(
+            child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
           ),
         ),
-        backgroundColor: _primary,
-        iconTheme: const IconThemeData(color: Colors.white),
-        elevation: 0,
+        const SizedBox(height: 16),
+        const Text(
+          'Loading companies...',
+          style: TextStyle(
+            color: _inkSecondary,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Fetching available companies',
+          style: TextStyle(color: _inkTertiary, fontSize: 12),
+        ),
+      ],
+    ),
+  );
+
+  // ── Error state ────────────────────────────────────────────────────────────
+  Widget _buildErrorState() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: _primary.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.cloud_off_outlined,
+              color: _primary,
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Could not load companies',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              color: _ink,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _loadError ?? '',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: _inkSecondary),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed:
+                () => _fetchPage(page: 1, query: _lastQuery, reset: true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text(
+              'Retry',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
       ),
-      body: Column(
+    ),
+  );
+
+  // ── Main content ───────────────────────────────────────────────────────────
+  Widget _buildContent() {
+    return AnimatedBuilder(
+      animation: _animController,
+      builder:
+          (_, child) => Opacity(
+            opacity: _animController.value,
+            child: Transform.translate(
+              offset: Offset(0, 20 * (1 - _animController.value)),
+              child: child,
+            ),
+          ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Top controls ────────────────────────────────────────────────
+          // ── Search bar + selected chips ──────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Section header
-                const _SectionHeader(
-                  icon: Icons.support_agent_outlined,
-                  title: 'Select Companies',
-                ),
-                const SizedBox(height: 14),
+                _sectionLabel('SELECT COMPANIES'),
 
-                // Selected chips
+                // ── Search bar ─────────────────────────────────────────────
+                Container(
+                  height: 48,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _border),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.search_rounded,
+                        size: 20,
+                        color: _inkTertiary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchCtrl,
+                          focusNode: _searchFocus,
+                          textAlignVertical: TextAlignVertical.center,
+                          style: const TextStyle(fontSize: 14, color: _ink),
+                          decoration: InputDecoration(
+                            hintText: 'Search companies…',
+                            hintStyle: const TextStyle(
+                              fontSize: 14,
+                              color: _inkTertiary,
+                            ),
+                            border: InputBorder.none,
+                            isCollapsed: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                            ),
+                            suffixIcon:
+                                _searchCtrl.text.isNotEmpty
+                                    ? GestureDetector(
+                                      onTap: () {
+                                        _searchCtrl.clear();
+                                        _fetchPage(
+                                          page: 1,
+                                          query: '',
+                                          reset: true,
+                                        );
+                                      },
+                                      child: const Icon(
+                                        Icons.close_rounded,
+                                        size: 16,
+                                        color: _inkTertiary,
+                                      ),
+                                    )
+                                    : null,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Selected chips — single horizontal scrollable row ───────
                 if (_selected.isNotEmpty) ...[
+                  const SizedBox(height: 6),
                   SizedBox(
-                    height: 32,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _selected.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (_, i) {
-                        final c = _selected.values.elementAt(i);
-                        final lbl = (c['label'] as String? ?? '').trim();
-                        return Container(
+                    height: 26,
+                    child: Row(
+                      children: [
+                        // "N selected" badge
+                        Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
+                            horizontal: 6,
+                            vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: _primary.withOpacity(0.07),
+                            color: _primary.withOpacity(0.08),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: _primary.withOpacity(0.25),
+                          ),
+                          child: Text(
+                            '${_selected.length}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: _primary,
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                lbl,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: _primary,
-                                ),
-                              ),
-                              const SizedBox(width: 5),
-                              GestureDetector(
-                                onTap: () => _toggle(c),
-                                child: const Icon(
-                                  Icons.close_rounded,
-                                  size: 13,
-                                  color: _primary,
-                                ),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(width: 6),
+
+                        // Scrollable chips
+                        Expanded(
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            children:
+                                _selected.values.map((c) {
+                                  final lbl =
+                                      (c['label'] as String? ?? '').trim();
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 5),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _primary.withOpacity(0.07),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: _primary.withOpacity(0.25),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            lbl,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: _primary,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          GestureDetector(
+                                            onTap: () => _toggle(c),
+                                            child: const Icon(
+                                              Icons.close_rounded,
+                                              size: 11,
+                                              color: _primary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
                           ),
-                        );
-                      },
+                        ),
+
+                        // Clear all
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => setState(() => _selected.clear()),
+                          child: const Text(
+                            'Clear',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: _inkTertiary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 10),
                 ],
-
-                // Search bar
-                Container(
-                  decoration: BoxDecoration(
-                    color: _surfaceSubtle,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _border),
-                  ),
-                  child: TextField(
-                    controller: _searchCtrl,
-                    style: const TextStyle(fontSize: 13, color: _ink),
-                    decoration: InputDecoration(
-                      hintText: 'Search by company name or code…',
-                      hintStyle: const TextStyle(
-                        fontSize: 13,
-                        color: _inkTertiary,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.search_rounded,
-                        size: 18,
-                        color: _inkTertiary,
-                      ),
-                      suffixIcon:
-                          _searchCtrl.text.isNotEmpty
-                              ? GestureDetector(
-                                onTap: () {
-                                  _searchCtrl.clear();
-                                  _fetchPage(page: 1, query: '', reset: true);
-                                },
-                                child: const Icon(
-                                  Icons.close_rounded,
-                                  size: 16,
-                                  color: _inkTertiary,
-                                ),
-                              )
-                              : null,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 14,
-                        horizontal: 16,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // Count row
-                // if (!_loadingFirst && _loadError == null)
-                //   Row(
-                //     children: [
-                //       Text(
-                //         '${_items.length} compan${_items.length == 1 ? 'y' : 'ies'}',
-                //         style: const TextStyle(
-                //           fontSize: 11,
-                //           color: _inkTertiary,
-                //           fontWeight: FontWeight.w500,
-                //         ),
-                //       ),
-                //       if (_selected.isNotEmpty) ...[
-                //         const SizedBox(width: 8),
-                //         Container(
-                //           padding: const EdgeInsets.symmetric(
-                //             horizontal: 8,
-                //             vertical: 2,
-                //           ),
-                //           decoration: BoxDecoration(
-                //             color: _primary.withOpacity(0.08),
-                //             borderRadius: BorderRadius.circular(20),
-                //           ),
-                //           child: Text(
-                //             '${_selected.length} selected',
-                //             style: const TextStyle(
-                //               fontSize: 11,
-                //               fontWeight: FontWeight.w700,
-                //               color: _primary,
-                //             ),
-                //           ),
-                //         ),
-                //       ],
-                //     ],
-                //   ),
-
-                // const SizedBox(height: 10),
               ],
             ),
           ),
 
-          Container(height: 1, color: _border),
+          const SizedBox(height: 16),
 
-          // ── List body ────────────────────────────────────────────────────
-          Expanded(child: _buildBody()),
+          // ── Section label for results ────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                _sectionLabel('COMPANIES'),
+                const SizedBox(width: 8),
+                if (!_loadingFirst && _loadError == null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_items.length}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _primary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
 
-          // ── Pinned save button ────────────────────────────────────────────
+          // ── Company list ─────────────────────────────────────────────────
+          Expanded(
+            child: Padding(
+              // FIX: bottom padding creates visual gap between list card
+              // and the Cancel / Create button bar
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: _buildList(),
+            ),
+          ),
+
+          // ── Pinned action buttons ─────────────────────────────────────────
           Container(
             padding: EdgeInsets.fromLTRB(
-              20,
-              12,
-              20,
-              12 + MediaQuery.of(context).padding.bottom,
+              16,
+              8,
+              16,
+              8 + MediaQuery.of(context).padding.bottom,
             ),
             decoration: const BoxDecoration(
               color: _surface,
               border: Border(top: BorderSide(color: _border)),
             ),
-            child: GestureDetector(
-              onTap: _submitting ? null : _save,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: double.infinity,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: _submitting ? _primary.withOpacity(0.6) : _primary,
-                  borderRadius: BorderRadius.circular(14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        _submitting ? null : () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _inkSecondary,
+                      side: const BorderSide(color: _border),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(Icons.close, size: 14),
+                    label: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
                 ),
-                child: Center(
-                  child:
-                      _submitting
-                          ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                          : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.support_agent_outlined,
-                                size: 18,
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: _submitting ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primary,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: _primary.withOpacity(0.5),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon:
+                        _submitting
+                            ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
                                 color: Colors.white,
+                                strokeWidth: 2,
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _selected.isEmpty
-                                    ? 'Create Agent'
-                                    : 'Create ${_selected.length} Agent${_selected.length > 1 ? 's' : ''}',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ],
-                          ),
+                            )
+                            : const Icon(
+                              Icons.support_agent_outlined,
+                              size: 15,
+                            ),
+                    label: Text(
+                      _submitting
+                          ? 'Creating...'
+                          : _selected.isEmpty
+                          ? 'Create Agent'
+                          : 'Create ${_selected.length} Agent${_selected.length > 1 ? 's' : ''}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
@@ -477,334 +815,184 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage> {
     );
   }
 
-  // ── List body switch ───────────────────────────────────────────────────────
-  Widget _buildBody() {
-    // First load — show skeletons immediately
-    if (_loadingFirst) return _SkeletonList();
-
-    // Error on first load
-    if (_loadError != null && _items.isEmpty) {
+  // ── Company list ───────────────────────────────────────────────────────────
+  Widget _buildList() {
+    if (_items.isEmpty && !_loadingMore) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: _primary.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.error_outline_rounded,
-                  color: _primary,
-                  size: 22,
-                ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: _primary.withOpacity(0.08),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 12),
-              Text(
-                _loadError!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: _inkSecondary),
+              child: const Icon(
+                Icons.business_outlined,
+                color: _primary,
+                size: 26,
               ),
-              const SizedBox(height: 14),
-              TextButton.icon(
-                onPressed:
-                    () => _fetchPage(page: 1, query: _lastQuery, reset: true),
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Try again'),
-                style: TextButton.styleFrom(
-                  foregroundColor: _primary,
-                  textStyle: const TextStyle(fontWeight: FontWeight.w600),
-                ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'No companies found',
+              style: TextStyle(
+                color: _inkSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Try a different search term',
+              style: TextStyle(color: _inkTertiary, fontSize: 12),
+            ),
+          ],
         ),
       );
     }
 
-    if (_items.isEmpty) {
-      return const Center(
-        child: Text(
-          'No companies found.',
-          style: TextStyle(fontSize: 13, color: _inkSecondary),
-        ),
-      );
-    }
-
-    return ListView.separated(
-      controller: _scrollCtrl,
-      padding: const EdgeInsets.only(bottom: 12),
-      itemCount: _items.length + (_loadingMore ? 1 : 0),
-      separatorBuilder: (_, __) => const Divider(height: 1, color: _border),
-      itemBuilder: (context, i) {
-        // Load-more spinner at the very bottom
-        if (i == _items.length) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: _primary,
-                  strokeWidth: 2,
+    return _card(
+      child: ListView.separated(
+        controller: _scrollCtrl,
+        padding: EdgeInsets.zero,
+        itemCount: _items.length + (_loadingMore ? 1 : 0),
+        separatorBuilder:
+            (_, __) => const Divider(height: 1, color: _border, indent: 36),
+        itemBuilder: (context, i) {
+          if (i == _items.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    color: _primary,
+                    strokeWidth: 2,
+                  ),
                 ),
               ),
-            ),
-          );
-        }
+            );
+          }
 
-        final c = _items[i];
-        final lbl = (c['label'] as String? ?? '').trim();
-        final val = c['value']?.toString().trim() ?? '';
-        final selected = _isSelected(c);
+          final c = _items[i];
+          final lbl = (c['label'] as String? ?? '').trim();
+          final val = c['value']?.toString().trim() ?? '';
+          final selected = _isSelected(c);
 
-        final parts =
-            lbl.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-        final ini =
-            parts.length >= 2
-                ? '${parts.first[0]}${parts.last[0]}'.toUpperCase()
-                : lbl.isNotEmpty
-                ? lbl[0].toUpperCase()
-                : '?';
+          final parts =
+              lbl.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+          final ini =
+              parts.length >= 2
+                  ? '${parts.first[0]}${parts.last[0]}'.toUpperCase()
+                  : lbl.isNotEmpty
+                  ? lbl[0].toUpperCase()
+                  : '?';
 
-        return RepaintBoundary(
-          child: InkWell(
-            onTap: () => _toggle(c),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              color: selected ? _primary.withOpacity(0.04) : Colors.transparent,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  // Checkbox
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      color: selected ? _primary : Colors.transparent,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: selected ? _primary : _inkTertiary,
-                        width: 1.5,
-                      ),
-                    ),
-                    child:
-                        selected
-                            ? const Icon(
-                              Icons.check_rounded,
-                              color: Colors.white,
-                              size: 14,
-                            )
-                            : null,
-                  ),
-                  const SizedBox(width: 14),
-
-                  // Avatar
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color:
-                          selected
-                              ? _primary.withOpacity(0.1)
-                              : _primary.withOpacity(0.06),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        ini,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: selected ? _primary : _inkSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-
-                  // Label + code
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          lbl,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight:
-                                selected ? FontWeight.w700 : FontWeight.w500,
-                            color: _ink,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          val,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: _inkTertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  if (selected)
-                    const Icon(
-                      Icons.check_circle_rounded,
-                      color: _primary,
-                      size: 18,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ── Skeleton shimmer list ─────────────────────────────────────────────────────
-
-class _SkeletonList extends StatefulWidget {
-  @override
-  State<_SkeletonList> createState() => _SkeletonListState();
-}
-
-class _SkeletonListState extends State<_SkeletonList>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true);
-    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _anim,
-      builder: (_, __) {
-        final opacity = 0.4 + (_anim.value * 0.4);
-        return ListView.separated(
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(top: 4),
-          itemCount: 10,
-          separatorBuilder: (_, __) => const Divider(height: 1, color: _border),
-          itemBuilder:
-              (_, __) => Padding(
+          return RepaintBoundary(
+            child: InkWell(
+              onTap: () => _toggle(c),
+              borderRadius: BorderRadius.circular(8),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color:
+                      selected
+                          ? _primary.withOpacity(0.04)
+                          : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    // Checkbox placeholder
-                    Container(
-                      width: 22,
-                      height: 22,
+                    // Checkbox
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      width: 18,
+                      height: 18,
                       decoration: BoxDecoration(
-                        color: _border.withOpacity(opacity),
-                        borderRadius: BorderRadius.circular(6),
+                        color: selected ? _primary : Colors.transparent,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: selected ? _primary : _inkTertiary,
+                          width: 1.5,
+                        ),
+                      ),
+                      child:
+                          selected
+                              ? const Icon(
+                                Icons.check_rounded,
+                                color: Colors.white,
+                                size: 12,
+                              )
+                              : null,
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Avatar
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color:
+                            selected
+                                ? _primary.withOpacity(0.12)
+                                : _surfaceSubtle,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Text(
+                          ini,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: selected ? _primary : _inkSecondary,
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 14),
-                    // Avatar placeholder
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: _border.withOpacity(opacity),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Text placeholders
+                    const SizedBox(width: 8),
+
+                    // Label + code
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            height: 12,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: _border.withOpacity(opacity),
-                              borderRadius: BorderRadius.circular(6),
+                          Text(
+                            lbl,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                              color: selected ? _primary : _ink,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 6),
-                          Container(
-                            height: 10,
-                            width: 80,
-                            decoration: BoxDecoration(
-                              color: _border.withOpacity(opacity),
-                              borderRadius: BorderRadius.circular(6),
+                          if (val.isNotEmpty)
+                            Text(
+                              val,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: _inkTertiary,
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-        );
-      },
+            ),
+          );
+        },
+      ),
     );
   }
-}
-
-// ── Section header ─────────────────────────────────────────────────────────────
-
-class _SectionHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  const _SectionHeader({required this.icon, required this.title});
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: _primary.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, size: 16, color: _primary),
-      ),
-      const SizedBox(width: 10),
-      Text(
-        title,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-          color: _ink,
-          letterSpacing: -0.2,
-        ),
-      ),
-      const SizedBox(width: 12),
-      const Expanded(child: Divider(color: _border, height: 1)),
-    ],
-  );
 }
