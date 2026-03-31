@@ -239,7 +239,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
         return;
       }
 
-      final filename =
+      final rawFilename =
           result['filename']?.toString().trim().isNotEmpty == true
               ? result['filename'].toString().trim()
               : _attFilename(att);
@@ -253,7 +253,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
 
       Uint8List bytes;
       try {
-        bytes = base64Decode(base64Str);
+        bytes = _decodeBase64Data(base64Str);
       } catch (e) {
         _showSnack('Download failed: invalid file data.', isError: true);
         return;
@@ -261,7 +261,13 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
 
       final mimeType = _resolveMimeType(
         apiMime: result['mimeType']?.toString(),
-        filename: filename,
+        filename: rawFilename,
+        bytes: bytes,
+      );
+
+      final filename = _ensureFilenameHasExtension(
+        rawFilename,
+        mimeType: mimeType,
         bytes: bytes,
       );
 
@@ -293,6 +299,97 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
       if (f is String && f.trim().isNotEmpty) return f.trim();
     }
     return 'attachment';
+  }
+
+  Uint8List _decodeBase64Data(String raw) {
+    var normalized = raw.trim();
+
+    final dataUriIndex = normalized.indexOf(',');
+    if (normalized.toLowerCase().contains('base64,') && dataUriIndex != -1) {
+      normalized = normalized.substring(dataUriIndex + 1);
+    }
+
+    normalized = normalized.replaceAll(RegExp(r'\s+'), '');
+    normalized = normalized.replaceAll('-', '+').replaceAll('_', '/');
+
+    final remainder = normalized.length % 4;
+    if (remainder != 0) {
+      normalized = normalized.padRight(
+        normalized.length + (4 - remainder),
+        '=',
+      );
+    }
+
+    return base64Decode(normalized);
+  }
+
+  String _ensureFilenameHasExtension(
+    String filename, {
+    required String mimeType,
+    required Uint8List bytes,
+  }) {
+    final clean = filename.trim().isEmpty ? 'attachment' : filename.trim();
+    final hasExtension = clean.contains('.') && !clean.endsWith('.');
+
+    if (hasExtension) return clean;
+
+    final ext = _extensionFromMimeOrBytes(mimeType, bytes);
+    if (ext == null || ext.isEmpty) return clean;
+
+    return '$clean.$ext';
+  }
+
+  String? _extensionFromMimeOrBytes(String mimeType, Uint8List bytes) {
+    final normalized = mimeType.toLowerCase().trim();
+
+    switch (normalized) {
+      case 'image/jpeg':
+        return 'jpg';
+      case 'image/png':
+        return 'png';
+      case 'image/gif':
+        return 'gif';
+      case 'image/webp':
+        return 'webp';
+      case 'application/pdf':
+        return 'pdf';
+      case 'application/msword':
+        return 'doc';
+      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        return 'docx';
+      case 'application/vnd.ms-excel':
+        return 'xls';
+      case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        return 'xlsx';
+      case 'application/vnd.ms-powerpoint':
+        return 'ppt';
+      case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+        return 'pptx';
+      case 'text/plain':
+        return 'txt';
+      case 'text/csv':
+        return 'csv';
+      case 'application/json':
+        return 'json';
+      case 'application/xml':
+      case 'text/xml':
+        return 'xml';
+      case 'application/zip':
+        return 'zip';
+      case 'application/x-rar-compressed':
+        return 'rar';
+      case 'video/mp4':
+        return 'mp4';
+      case 'audio/mpeg':
+        return 'mp3';
+    }
+
+    final magicMime = _mimeFromMagic(bytes);
+    if (magicMime != null && magicMime != mimeType) {
+      return _extensionFromMimeOrBytes(magicMime, bytes);
+    }
+
+    return null;
   }
 
   String _resolveMimeType({
@@ -376,6 +473,44 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
         bytes[1] == 0x4B &&
         bytes[2] == 0x03 &&
         bytes[3] == 0x04) {
+      if (bytes.length >= 4 + 26) {
+        final compressedSize =
+            bytes[18] |
+            (bytes[19] << 8) |
+            (bytes[20] << 16) |
+            (bytes[21] << 24);
+        final uncompressedSize =
+            bytes[22] |
+            (bytes[23] << 8) |
+            (bytes[24] << 16) |
+            (bytes[25] << 24);
+        final fileNameLength = bytes[26] | (bytes[27] << 8);
+
+        if (bytes.length >= 30 + fileNameLength) {
+          try {
+            final entryNameBytes = bytes.sublist(30, 30 + fileNameLength);
+            final entryName =
+                utf8.decode(entryNameBytes, allowMalformed: true).toLowerCase();
+
+            if (entryName == '[content_types].xml') {
+              return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            }
+            if (entryName.contains('word/')) {
+              return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            }
+            if (entryName.contains('xl/')) {
+              return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+            }
+            if (entryName.contains('ppt/')) {
+              return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+            }
+          } catch (_) {}
+        }
+
+        if (compressedSize == 0 && uncompressedSize == 0) {
+          return 'application/zip';
+        }
+      }
       return 'application/zip';
     }
     return null;
