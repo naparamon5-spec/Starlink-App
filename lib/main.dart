@@ -6,6 +6,7 @@ import 'package:app_links/app_links.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart'; // 👈 add this
 
 import 'pages/splash_screen.dart';
+import 'pages/login_screen.dart';
 import 'pages/reset_password.dart';
 import 'providers/notification_provider.dart';
 import 'config/ssl_config.dart'
@@ -58,7 +59,9 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _handleIncomingLinks();
+    if (!kIsWeb) {
+      _handleIncomingLinks();
+    }
   }
 
   void _handleIncomingLinks() {
@@ -83,9 +86,8 @@ class _MyAppState extends State<MyApp> {
             builder:
                 (_) => ResetPasswordScreen(
                   token: token,
-                  email: '', // 👈 pass empty, backend only needs token
-                  verificationCode:
-                      '', // 👈 pass empty, backend only needs token
+                  email: '',
+                  verificationCode: '',
                 ),
           ),
         );
@@ -93,10 +95,30 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
+  Widget _buildHome() {
+    if (kIsWeb) {
+      final uri = Uri.base;
+      if (uri.host == 'sandbox.ardentnetworks.com.ph' &&
+          uri.path == '/reset-password') {
+        final token = uri.queryParameters['token'];
+        if (token != null && token.isNotEmpty) {
+          return ResetPasswordScreen(
+            token: token,
+            email: '',
+            verificationCode: '',
+          );
+        }
+      }
+    }
+
+    // return const SplashScreen();
+    return const LoginScreen();
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: navigatorKey, // 👈 attach global key
+      navigatorKey: navigatorKey,
       title: 'Starlink App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -112,7 +134,7 @@ class _MyAppState extends State<MyApp> {
         ),
         useMaterial3: true,
       ),
-      home: const SplashScreen(),
+      home: _buildHome(),
     );
   }
 }
