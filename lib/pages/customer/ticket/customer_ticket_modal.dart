@@ -1417,41 +1417,41 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                           ],
                         ),
                       ),
-                      if (!_isLoadingData && _loadError == null)
-                        GestureDetector(
-                          onTap: _isSubmitting ? null : _submitTicket,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(
-                                _isSubmitting ? 0.08 : 0.18,
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child:
-                                _isSubmitting
-                                    ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                    : const Text(
-                                      'Submit',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                          ),
-                        ),
+                      // if (!_isLoadingData && _loadError == null)
+                      //   GestureDetector(
+                      //     onTap: _isSubmitting ? null : _submitTicket,
+                      //     child: AnimatedContainer(
+                      //       duration: const Duration(milliseconds: 200),
+                      //       padding: const EdgeInsets.symmetric(
+                      //         horizontal: 16,
+                      //         vertical: 8,
+                      //       ),
+                      //       decoration: BoxDecoration(
+                      //         color: Colors.white.withOpacity(
+                      //           _isSubmitting ? 0.08 : 0.18,
+                      //         ),
+                      //         borderRadius: BorderRadius.circular(10),
+                      //       ),
+                      //       child:
+                      //           _isSubmitting
+                      //               ? const SizedBox(
+                      //                 width: 16,
+                      //                 height: 16,
+                      //                 child: CircularProgressIndicator(
+                      //                   color: Colors.white,
+                      //                   strokeWidth: 2,
+                      //                 ),
+                      //               )
+                      //               : const Text(
+                      //                 'Submit',
+                      //                 style: TextStyle(
+                      //                   color: Colors.white,
+                      //                   fontWeight: FontWeight.w700,
+                      //                   fontSize: 13,
+                      //                 ),
+                      //               ),
+                      //     ),
+                      //   ),
                     ],
                   ),
                 ),
