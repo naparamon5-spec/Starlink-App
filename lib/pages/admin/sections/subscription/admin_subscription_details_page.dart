@@ -264,12 +264,12 @@ class _AdminSubscriptionDetailsPageState
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh_rounded, color: _brandRed),
-            onPressed: _loading ? null : _load,
-          ),
-        ],
+        // actions: [
+        //   IconButton(
+        //     icon: Icon(Icons.refresh_rounded, color: _brandRed),
+        //     onPressed: _loading ? null : _load,
+        //   ),
+        // ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: const Color(0xFFE8ECF0)),

@@ -211,12 +211,12 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
         ),
       ],
     ),
-    actions: [
-      IconButton(
-        icon: Icon(Icons.refresh_rounded, color: _brandRed),
-        onPressed: _loading ? null : _reload,
-      ),
-    ],
+    // actions: [
+    //   IconButton(
+    //     icon: Icon(Icons.refresh_rounded, color: _brandRed),
+    //     onPressed: _loading ? null : _reload,
+    //   ),
+    // ],
     bottom: PreferredSize(
       preferredSize: const Size.fromHeight(1),
       child: Container(height: 1, color: const Color(0xFFE8ECF0)),

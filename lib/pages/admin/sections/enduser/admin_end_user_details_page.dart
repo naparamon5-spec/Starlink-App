@@ -261,17 +261,17 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.refresh_rounded,
-              color: _loading ? _inkTertiary : _primary,
-              size: 20,
-            ),
-            onPressed: _loading ? null : _loadAll,
-          ),
-          const SizedBox(width: 4),
-        ],
+        // actions: [
+        //   IconButton(
+        //     icon: Icon(
+        //       Icons.refresh_rounded,
+        //       color: _loading ? _inkTertiary : _primary,
+        //       size: 20,
+        //     ),
+        //     onPressed: _loading ? null : _loadAll,
+        //   ),
+        //   const SizedBox(width: 4),
+        // ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: _border),
@@ -489,40 +489,40 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                                     Row(
                                       children: [
                                         const Spacer(),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 5,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: _purple.withOpacity(0.07),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            border: Border.all(
-                                              color: _purple.withOpacity(0.2),
-                                            ),
-                                          ),
-                                          child: const Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.open_in_new_rounded,
-                                                size: 11,
-                                                color: _purple,
-                                              ),
-                                              SizedBox(width: 4),
-                                              Text(
-                                                'View Details',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: _purple,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                        // Container(
+                                        //   padding: const EdgeInsets.symmetric(
+                                        //     horizontal: 10,
+                                        //     vertical: 5,
+                                        //   ),
+                                        //   decoration: BoxDecoration(
+                                        //     color: _purple.withOpacity(0.07),
+                                        //     borderRadius: BorderRadius.circular(
+                                        //       8,
+                                        //     ),
+                                        //     border: Border.all(
+                                        //       color: _purple.withOpacity(0.2),
+                                        //     ),
+                                        //   ),
+                                        //   child: const Row(
+                                        //     mainAxisSize: MainAxisSize.min,
+                                        //     children: [
+                                        //       Icon(
+                                        //         Icons.open_in_new_rounded,
+                                        //         size: 11,
+                                        //         color: _purple,
+                                        //       ),
+                                        //       SizedBox(width: 4),
+                                        //       Text(
+                                        //         'View Details',
+                                        //         style: TextStyle(
+                                        //           fontSize: 11,
+                                        //           fontWeight: FontWeight.w600,
+                                        //           color: _purple,
+                                        //         ),
+                                        //       ),
+                                        //     ],
+                                        //   ),
+                                        // ),
                                       ],
                                     ),
                                   ],

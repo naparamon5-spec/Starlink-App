@@ -363,28 +363,28 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
                             ),
                           ),
                         ),
-                        if (!_isLoading && _errorMessage == null)
-                          TextButton(
-                            onPressed: _saveProfile,
-                            style: TextButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.15),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                            ),
-                            child: const Text(
-                              'Save',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
+                        // if (!_isLoading && _errorMessage == null)
+                        //   TextButton(
+                        //     onPressed: _saveProfile,
+                        //     style: TextButton.styleFrom(
+                        //       backgroundColor: Colors.white.withOpacity(0.15),
+                        //       shape: RoundedRectangleBorder(
+                        //         borderRadius: BorderRadius.circular(10),
+                        //       ),
+                        //       padding: const EdgeInsets.symmetric(
+                        //         horizontal: 14,
+                        //         vertical: 8,
+                        //       ),
+                        //     ),
+                        //     child: const Text(
+                        //       'Save',
+                        //       style: TextStyle(
+                        //         color: Colors.white,
+                        //         fontWeight: FontWeight.w700,
+                        //         fontSize: 13,
+                        //       ),
+                        //     ),
+                        //   ),
                       ],
                     ),
                   ),
@@ -554,24 +554,24 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
             _card(
               child: Column(
                 children: [
-                  SwitchListTile(
-                    value: _twoFactorEnabled,
-                    activeThumbColor: _primary,
-                    title: const Text(
-                      'Two-Factor Authentication',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: _ink,
-                      ),
-                    ),
-                    subtitle: const Text(
-                      'Add extra security to your account',
-                      style: TextStyle(fontSize: 12, color: _inkSecondary),
-                    ),
-                    onChanged: (v) => setState(() => _twoFactorEnabled = v),
-                  ),
-                  Divider(color: _border, height: 1),
+                  // SwitchListTile(
+                  //   value: _twoFactorEnabled,
+                  //   activeThumbColor: _primary,
+                  //   title: const Text(
+                  //     'Two-Factor Authentication',
+                  //     style: TextStyle(
+                  //       fontSize: 14,
+                  //       fontWeight: FontWeight.w600,
+                  //       color: _ink,
+                  //     ),
+                  //   ),
+                  //   subtitle: const Text(
+                  //     'Add extra security to your account',
+                  //     style: TextStyle(fontSize: 12, color: _inkSecondary),
+                  //   ),
+                  //   onChanged: (v) => setState(() => _twoFactorEnabled = v),
+                  // ),
+                  // Divider(color: _border, height: 1),
                   ListTile(
                     leading: Container(
                       width: 36,
@@ -606,27 +606,26 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
 
             const SizedBox(height: 22),
 
-            _sectionTitle('PREFERENCES'),
-            _card(
-              child: SwitchListTile(
-                value: _notificationsEnabled,
-                activeThumbColor: _primary,
-                title: const Text(
-                  'Email Notifications',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: _ink,
-                  ),
-                ),
-                subtitle: const Text(
-                  'Receive updates via email',
-                  style: TextStyle(fontSize: 12, color: _inkSecondary),
-                ),
-                onChanged: (v) => setState(() => _notificationsEnabled = v),
-              ),
-            ),
-
+            // _sectionTitle('PREFERENCES'),
+            // _card(
+            //   child: SwitchListTile(
+            //     value: _notificationsEnabled,
+            //     activeThumbColor: _primary,
+            //     title: const Text(
+            //       'Email Notifications',
+            //       style: TextStyle(
+            //         fontSize: 14,
+            //         fontWeight: FontWeight.w600,
+            //         color: _ink,
+            //       ),
+            //     ),
+            //     subtitle: const Text(
+            //       'Receive updates via email',
+            //       style: TextStyle(fontSize: 12, color: _inkSecondary),
+            //     ),
+            //     onChanged: (v) => setState(() => _notificationsEnabled = v),
+            //   ),
+            // ),
             const SizedBox(height: 28),
 
             SizedBox(
