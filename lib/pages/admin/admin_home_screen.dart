@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../services/api_service.dart';
 import 'sections/ticket/admin_tickets_page.dart';
 import 'sections/ticket/admin_ticket_details_page.dart';
@@ -279,7 +280,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       return;
     }
     _closeQuickMenu();
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      _quickAction = null;
+    });
   }
 
   List<Widget> _buildBodySlivers() {
@@ -1943,8 +1947,7 @@ class _BottomNavBar extends StatelessWidget {
     required this.quickAction,
   });
 
-  IconData _quickIcon() {
-    if (quickMenuOpen) return Icons.close;
+  IconData _quickActionIcon() {
     switch (quickAction) {
       case QuickActionType.tickets:
         return Icons.confirmation_number_outlined;
@@ -2023,11 +2026,27 @@ class _BottomNavBar extends StatelessWidget {
                   turns: quickMenuOpen ? 0.125 : 0,
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeInOut,
-                  child: Icon(
-                    _quickIcon(),
-                    color: quickMenuOpen ? _primary : Colors.white,
-                    size: 24,
-                  ),
+                  child:
+                      quickMenuOpen
+                          ? Icon(Icons.close, color: _primary, size: 24)
+                          : (quickAction != null
+                              ? Icon(
+                                _quickActionIcon(),
+                                color: Colors.white,
+                                size: 24,
+                              )
+                              : Center(
+                                child: SvgPicture.asset(
+                                  'assets/images/logo.svg',
+                                  width: 18,
+                                  height: 18,
+                                  fit: BoxFit.contain,
+                                  colorFilter: const ColorFilter.mode(
+                                    Colors.white,
+                                    BlendMode.srcIn,
+                                  ),
+                                ),
+                              )),
                 ),
               ),
             ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class BottomNavigatorBar extends StatelessWidget {
   final int currentIndex;
@@ -13,16 +14,27 @@ class BottomNavigatorBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BottomNavigationBar(
-      items: const <BottomNavigationBarItem>[
-        BottomNavigationBarItem(
+      items: <BottomNavigationBarItem>[
+        const BottomNavigationBarItem(
           icon: Icon(Icons.dashboard),
           label: 'Dashboard',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.confirmation_number),
-          label: 'Tickets',
+          icon: SvgPicture.asset(
+            'assets/images/logo.svg',
+            width: 16,
+            height: 16,
+            colorFilter: ColorFilter.mode(
+              currentIndex == 1 ? const Color(0xFFB83A4B) : Colors.grey,
+              BlendMode.srcIn,
+            ),
+          ),
+          label: 'Starlink',
         ),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.person),
+          label: 'Profile',
+        ),
       ],
       currentIndex: currentIndex,
       selectedItemColor: const Color(0xFFB83A4B),

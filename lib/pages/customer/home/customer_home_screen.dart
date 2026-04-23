@@ -15,6 +15,7 @@ import '../subscription/customer_subscription_page.dart';
 import '../subscription/customer_subscription_detail_page.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/notification_provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -316,7 +317,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
   void _closeQuickMenu() {
     _removeOverlay();
-    if (mounted) setState(() => _quickMenuOpen = false);
+    if (mounted) {
+      setState(() {
+        _quickMenuOpen = false;
+        if (_selectedIndex == 1 && _quickAction == null) {
+          _selectedIndex = 0;
+        }
+      });
+    }
   }
 
   void _onNavTap(int index) {
@@ -1001,7 +1009,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             selected: _selectedIndex == 0,
             onTap: () {
               _closeQuickMenu();
-              setState(() => _selectedIndex = 0);
+              setState(() {
+                _selectedIndex = 0;
+                _quickAction = null; // ← reset to logo
+              });
             },
           ),
           GestureDetector(
@@ -1033,13 +1044,27 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   turns: _quickMenuOpen ? 0.125 : 0,
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeInOut,
-                  child: Icon(
-                    _quickMenuOpen
-                        ? Icons.close
-                        : _quickActionIcon(_quickAction),
-                    color: _quickMenuOpen ? _primary : Colors.white,
-                    size: 24,
-                  ),
+                  child:
+                      _quickMenuOpen
+                          ? Icon(Icons.close, color: _primary, size: 24)
+                          : (_quickAction != null
+                              ? Icon(
+                                _quickActionIcon(_quickAction),
+                                color: Colors.white,
+                                size: 24,
+                              )
+                              : Center(
+                                child: SvgPicture.asset(
+                                  'assets/images/logo.svg',
+                                  width: 18,
+                                  height: 18,
+                                  fit: BoxFit.contain,
+                                  colorFilter: const ColorFilter.mode(
+                                    Colors.white,
+                                    BlendMode.srcIn,
+                                  ),
+                                ),
+                              )),
                 ),
               ),
             ),
@@ -1050,7 +1075,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             selected: _selectedIndex == 2,
             onTap: () {
               _closeQuickMenu();
-              setState(() => _selectedIndex = 2);
+              setState(() {
+                _selectedIndex = 2;
+                _quickAction = null; // ← reset to logo
+              });
             },
           ),
         ],

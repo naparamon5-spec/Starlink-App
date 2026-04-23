@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:starlink_app/pages/agent/profile/agent_edit_profile_page.dart';
 import 'package:starlink_app/pages/agent/profile/agent_manage_users_page.dart';
 import 'package:starlink_app/pages/agent/profile/agent_user_guide_page.dart';
@@ -72,6 +73,7 @@ class _AgentDashboardState extends State<AgentDashboard> {
     setState(() {
       _selectedIndex = index;
       _quickMenuOpen = false;
+      _quickAction = null;
     });
   }
 
@@ -549,8 +551,7 @@ class _AgentFloatingNav extends StatelessWidget {
     required this.quickAction,
   });
 
-  IconData _quickIcon() {
-    if (quickMenuOpen) return Icons.close;
+  IconData _quickActionIcon() {
     switch (quickAction) {
       case AgentQuickAction.tickets:
         return Icons.confirmation_number_outlined;
@@ -630,12 +631,31 @@ class _AgentFloatingNav extends StatelessWidget {
                   turns: quickMenuOpen ? 0.125 : 0,
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeInOut,
-                  child: Icon(
-                    _quickIcon(),
-                    color:
-                        quickMenuOpen ? const Color(0xFF6366F1) : Colors.white,
-                    size: 28,
-                  ),
+                  child:
+                      quickMenuOpen
+                          ? Icon(
+                            Icons.close,
+                            color: const Color(0xFF6366F1),
+                            size: 28,
+                          )
+                          : (quickAction != null
+                              ? Icon(
+                                _quickActionIcon(),
+                                color: Colors.white,
+                                size: 28,
+                              )
+                              : Center(
+                                child: SvgPicture.asset(
+                                  'assets/images/logo.svg',
+                                  width: 20,
+                                  height: 20,
+                                  fit: BoxFit.contain,
+                                  colorFilter: const ColorFilter.mode(
+                                    Colors.white,
+                                    BlendMode.srcIn,
+                                  ),
+                                ),
+                              )),
                 ),
               ),
             ),

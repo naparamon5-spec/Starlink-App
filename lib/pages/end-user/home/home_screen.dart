@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../ticket/ticket_screen.dart'
@@ -305,8 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  IconData _fabIcon() {
-    if (_quickMenuOpen) return Icons.close;
+  IconData _quickActionIcon() {
     switch (_quickAction) {
       case _QuickActionType.tickets:
         return Icons.confirmation_number_outlined;
@@ -959,7 +959,10 @@ class _HomeScreenState extends State<HomeScreen> {
             selected: _currentIndex == 0,
             onTap: () {
               _closeQuickMenu();
-              setState(() => _currentIndex = 0);
+              setState(() {
+                _currentIndex = 0;
+                _quickAction = null;
+              });
             },
           ),
           GestureDetector(
@@ -991,11 +994,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   turns: _quickMenuOpen ? 0.125 : 0,
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeInOut,
-                  child: Icon(
-                    _fabIcon(),
-                    color: _quickMenuOpen ? _primary : Colors.white,
-                    size: 24,
-                  ),
+                  child:
+                      _quickMenuOpen
+                          ? Icon(Icons.close, color: _primary, size: 24)
+                          : (_quickAction != null
+                              ? Icon(
+                                _quickActionIcon(),
+                                color: Colors.white,
+                                size: 24,
+                              )
+                              : Center(
+                                child: SvgPicture.asset(
+                                  'assets/images/logo.svg',
+                                  width: 18,
+                                  height: 18,
+                                  fit: BoxFit.contain,
+                                  colorFilter: const ColorFilter.mode(
+                                    Colors.white,
+                                    BlendMode.srcIn,
+                                  ),
+                                ),
+                              )),
                 ),
               ),
             ),
@@ -1006,7 +1025,10 @@ class _HomeScreenState extends State<HomeScreen> {
             selected: _currentIndex == 2,
             onTap: () {
               _closeQuickMenu();
-              setState(() => _currentIndex = 2);
+              setState(() {
+                _currentIndex = 2;
+                _quickAction = null;
+              });
             },
           ),
         ],
