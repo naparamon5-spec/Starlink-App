@@ -339,14 +339,14 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
                           ],
                         ),
                       ),
-                      IconButton(
-                        onPressed: _fetchUsers,
-                        icon: const Icon(
-                          Icons.refresh_rounded,
-                          color: Colors.white70,
-                          size: 20,
-                        ),
-                      ),
+                      // IconButton(
+                      //   onPressed: _fetchUsers,
+                      //   icon: const Icon(
+                      //     Icons.refresh_rounded,
+                      //     color: Colors.white70,
+                      //     size: 20,
+                      //   ),
+                      // ),
                     ],
                   ),
                 ),
@@ -816,10 +816,10 @@ class _UserCard extends StatelessWidget {
                         Container(
                           width: 7,
                           height: 7,
-                          decoration: BoxDecoration(
-                            color: isActive ? _success : _inkTertiary,
-                            shape: BoxShape.circle,
-                          ),
+                          // decoration: BoxDecoration(
+                          //   color: isActive ? _success : _inkTertiary,
+                          //   shape: BoxShape.circle,
+                          // ),
                         ),
                       ],
                     ),
