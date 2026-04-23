@@ -517,15 +517,15 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                         padding: const EdgeInsets.only(right: 12),
                         child: Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.18),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.shield_outlined,
-                            color: Colors.white,
-                            size: 18,
-                          ),
+                          // decoration: BoxDecoration(
+                          //   color: Colors.white.withOpacity(0.18),
+                          //   borderRadius: BorderRadius.circular(10),
+                          // ),
+                          // child: const Icon(
+                          //   Icons.shield_outlined,
+                          //   color: Colors.white,
+                          //   size: 18,
+                          // ),
                         ),
                       ),
                     ],

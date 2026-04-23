@@ -1057,32 +1057,32 @@ class _HomeScreenState extends State<HomeScreen> {
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: _border),
         ),
-        actions: [
-          if (_currentIndex == 0)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: NotificationBadge(
-                badgeColor: _primary,
-                textColor: Colors.white,
-                badgeSize: 18,
-                fontSize: 9,
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.notifications_outlined,
-                    color: _ink,
-                    size: 22,
-                  ),
-                  onPressed:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationsPage(),
-                        ),
-                      ),
-                ),
-              ),
-            ),
-        ],
+        // actions: [
+        //   if (_currentIndex == 0)
+        //     Padding(
+        //       padding: const EdgeInsets.only(right: 8),
+        //       child: NotificationBadge(
+        //         badgeColor: _primary,
+        //         textColor: Colors.white,
+        //         badgeSize: 18,
+        //         fontSize: 9,
+        //         child: IconButton(
+        //           icon: const Icon(
+        //             Icons.notifications_outlined,
+        //             color: _ink,
+        //             size: 22,
+        //           ),
+        //           onPressed:
+        //               () => Navigator.push(
+        //                 context,
+        //                 MaterialPageRoute(
+        //                   builder: (_) => const NotificationsPage(),
+        //                 ),
+        //               ),
+        //         ),
+        //       ),
+        //     ),
+        // ],
       ),
       body: _buildBody(),
       bottomNavigationBar: _buildBottomNav(),

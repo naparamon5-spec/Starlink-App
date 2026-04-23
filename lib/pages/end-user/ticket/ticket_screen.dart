@@ -668,38 +668,38 @@ class _TicketScreenState extends State<TicketScreen> {
                   children: [
                     Expanded(child: _SearchBar(controller: _searchController)),
                     const SizedBox(width: 10),
-                    NotificationBadge(
-                      child: GestureDetector(
-                        onTap:
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const NotificationsPage(),
-                              ),
-                            ),
-                        child: Container(
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            color: _surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: _border),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.notifications_outlined,
-                            color: _primary,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
+                    // NotificationBadge(
+                    //   child: GestureDetector(
+                    //     onTap:
+                    //         () => Navigator.push(
+                    //           context,
+                    //           MaterialPageRoute(
+                    //             builder: (_) => const NotificationsPage(),
+                    //           ),
+                    //         ),
+                    //     child: Container(
+                    //       width: 46,
+                    //       height: 46,
+                    //       decoration: BoxDecoration(
+                    //         color: _surface,
+                    //         borderRadius: BorderRadius.circular(12),
+                    //         border: Border.all(color: _border),
+                    //         boxShadow: [
+                    //           BoxShadow(
+                    //             color: Colors.black.withOpacity(0.03),
+                    //             blurRadius: 6,
+                    //             offset: const Offset(0, 2),
+                    //           ),
+                    //         ],
+                    //       ),
+                    //       child: const Icon(
+                    //         Icons.notifications_outlined,
+                    //         color: _primary,
+                    //         size: 20,
+                    //       ),
+                    //     ),
+                    //   ),
+                    // ),
                   ],
                 ),
               ),

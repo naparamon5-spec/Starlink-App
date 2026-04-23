@@ -643,22 +643,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           ),
                                         ),
                                   ),
-                                  _MenuItemData(
-                                    icon: Icons.notifications_outlined,
-                                    label: 'Notifications',
-                                    subtitle: 'View your notifications',
-                                    iconBg: const Color(0xFFE6F4EA),
-                                    iconColor: const Color(0xFF1A7F37),
-                                    onTap:
-                                        () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder:
-                                                (_) =>
-                                                    const NotificationsPage(),
-                                          ),
-                                        ),
-                                  ),
+                                  // _MenuItemData(
+                                  //   icon: Icons.notifications_outlined,
+                                  //   label: 'Notifications',
+                                  //   subtitle: 'View your notifications',
+                                  //   iconBg: const Color(0xFFE6F4EA),
+                                  //   iconColor: const Color(0xFF1A7F37),
+                                  //   onTap:
+                                  //       () => Navigator.push(
+                                  //         context,
+                                  //         MaterialPageRoute(
+                                  //           builder:
+                                  //               (_) =>
+                                  //                   const NotificationsPage(),
+                                  //         ),
+                                  //       ),
+                                  // ),
                                 ],
                               ),
 

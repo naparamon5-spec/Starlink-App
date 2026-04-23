@@ -744,43 +744,43 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                             ),
                           ),
                         ),
-                        if (!_isLoading)
-                          TextButton(
-                            onPressed:
-                                (_isImageLoading || _isSaving)
-                                    ? null
-                                    : _saveProfile,
-                            style: TextButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.15),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                            ),
-                            child:
-                                _isSaving
-                                    ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation(
-                                          Colors.white,
-                                        ),
-                                      ),
-                                    )
-                                    : const Text(
-                                      'Save',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                          ),
+                        // if (!_isLoading)
+                        //   TextButton(
+                        //     onPressed:
+                        //         (_isImageLoading || _isSaving)
+                        //             ? null
+                        //             : _saveProfile,
+                        //     style: TextButton.styleFrom(
+                        //       backgroundColor: Colors.white.withOpacity(0.15),
+                        //       shape: RoundedRectangleBorder(
+                        //         borderRadius: BorderRadius.circular(10),
+                        //       ),
+                        //       padding: const EdgeInsets.symmetric(
+                        //         horizontal: 14,
+                        //         vertical: 8,
+                        //       ),
+                        //     ),
+                        //     child:
+                        //         _isSaving
+                        //             ? const SizedBox(
+                        //               width: 16,
+                        //               height: 16,
+                        //               child: CircularProgressIndicator(
+                        //                 strokeWidth: 2,
+                        //                 valueColor: AlwaysStoppedAnimation(
+                        //                   Colors.white,
+                        //                 ),
+                        //               ),
+                        //             )
+                        //             : const Text(
+                        //               'Save',
+                        //               style: TextStyle(
+                        //                 color: Colors.white,
+                        //                 fontWeight: FontWeight.w700,
+                        //                 fontSize: 13,
+                        //               ),
+                        //             ),
+                        //   ),
                       ],
                     ),
                   ),
