@@ -347,43 +347,43 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
                           ],
                         ),
                       ),
-                      if (!_loadingFirst &&
-                          _loadError == null &&
-                          _selected.isNotEmpty)
-                        GestureDetector(
-                          onTap: _submitting ? null : _save,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(
-                                _submitting ? 0.08 : 0.18,
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child:
-                                _submitting
-                                    ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                    : Text(
-                                      'Create (${_selected.length})',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                          ),
-                        ),
+                      // if (!_loadingFirst &&
+                      //     _loadError == null &&
+                      //     _selected.isNotEmpty)
+                      //   GestureDetector(
+                      //     onTap: _submitting ? null : _save,
+                      //     child: AnimatedContainer(
+                      //       duration: const Duration(milliseconds: 200),
+                      //       padding: const EdgeInsets.symmetric(
+                      //         horizontal: 16,
+                      //         vertical: 8,
+                      //       ),
+                      //       decoration: BoxDecoration(
+                      //         color: Colors.white.withOpacity(
+                      //           _submitting ? 0.08 : 0.18,
+                      //         ),
+                      //         borderRadius: BorderRadius.circular(10),
+                      //       ),
+                      //       child:
+                      //           _submitting
+                      //               ? const SizedBox(
+                      //                 width: 16,
+                      //                 height: 16,
+                      //                 child: CircularProgressIndicator(
+                      //                   color: Colors.white,
+                      //                   strokeWidth: 2,
+                      //                 ),
+                      //               )
+                      //               : Text(
+                      //                 'Create (${_selected.length})',
+                      //                 style: const TextStyle(
+                      //                   color: Colors.white,
+                      //                   fontWeight: FontWeight.w700,
+                      //                   fontSize: 13,
+                      //                 ),
+                      //               ),
+                      //     ),
+                      //   ),
                     ],
                   ),
                 ),
@@ -702,18 +702,18 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
                       horizontal: 8,
                       vertical: 2,
                     ),
-                    decoration: BoxDecoration(
-                      color: _primary.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${_items.length}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _primary,
-                      ),
-                    ),
+                    // decoration: BoxDecoration(
+                    //   color: _primary.withOpacity(0.08),
+                    //   borderRadius: BorderRadius.circular(20),
+                    // ),
+                    // child: Text(
+                    //   '${_items.length}',
+                    //   style: const TextStyle(
+                    //     fontSize: 11,
+                    //     fontWeight: FontWeight.w700,
+                    //     color: _primary,
+                    //   ),
+                    // ),
                   ),
               ],
             ),
@@ -737,10 +737,10 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
               16,
               8 + MediaQuery.of(context).padding.bottom,
             ),
-            decoration: const BoxDecoration(
-              color: _surface,
-              border: Border(top: BorderSide(color: _border)),
-            ),
+            // decoration: const BoxDecoration(
+            //   color: _surface,
+            //   border: Border(top: BorderSide(color: _border)),
+            // ),
             child: Row(
               children: [
                 Expanded(
@@ -749,7 +749,9 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
                         _submitting ? null : () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _inkSecondary,
-                      side: const BorderSide(color: _border),
+                      side: const BorderSide(
+                        color: Color.fromARGB(255, 240, 233, 233),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 9),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
