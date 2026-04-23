@@ -446,26 +446,26 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         if (_selectedIndex == 0)
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: NotificationBadge(
-              badgeColor: _primary,
-              textColor: Colors.white,
-              badgeSize: 18,
-              fontSize: 9,
-              child: IconButton(
-                icon: const Icon(
-                  Icons.notifications_outlined,
-                  color: _ink,
-                  size: 22,
-                ),
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const CustomerNotificationScreen(),
-                      ),
-                    ),
-              ),
-            ),
+            // child: NotificationBadge(
+            //   badgeColor: _primary,
+            //   textColor: Colors.white,
+            //   badgeSize: 18,
+            //   fontSize: 9,
+            //   child: IconButton(
+            //     icon: const Icon(
+            //       Icons.notifications_outlined,
+            //       color: _ink,
+            //       size: 22,
+            //     ),
+            //     onPressed:
+            //         () => Navigator.push(
+            //           context,
+            //           MaterialPageRoute(
+            //             builder: (_) => const CustomerNotificationScreen(),
+            //           ),
+            //         ),
+            //   ),
+            // ),
           ),
       ],
     );

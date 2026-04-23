@@ -553,13 +553,13 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh_rounded, color: _brandRed, size: 20),
-            onPressed: _isFetchingDetails ? null : _loadTicketDetails,
-            tooltip: 'Refresh',
-          ),
-        ],
+        // actions: [
+        //   IconButton(
+        //     icon: Icon(Icons.refresh_rounded, color: _brandRed, size: 20),
+        //     onPressed: _isFetchingDetails ? null : _loadTicketDetails,
+        //     tooltip: 'Refresh',
+        //   ),
+        // ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: _border),

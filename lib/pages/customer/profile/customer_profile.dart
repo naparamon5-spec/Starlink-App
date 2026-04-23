@@ -245,15 +245,22 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
     if (shouldLogout == true) {
       try {
+        await ApiService.logout();
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('user_id');
+        await prefs.remove('userId');
         await prefs.remove('token');
+        await prefs.remove('userProfile');
+        await prefs.remove('email');
+        await prefs.remove('name');
         if (!mounted) return;
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (_) => false,
         );
       } catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error logging out: ${e.toString()}'),

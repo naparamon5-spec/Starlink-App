@@ -282,6 +282,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     if (shouldLogout == true) {
       try {
+        await ApiService.logout();
         await _prefs.remove('user_id');
         await _prefs.remove('userId');
         await _prefs.remove('token');
@@ -289,10 +290,12 @@ class _ProfileScreenState extends State<ProfileScreen>
         await _prefs.remove('lastName');
         await _prefs.remove('position');
         await _prefs.remove('email');
+        await _prefs.remove('userProfile');
         if (!mounted) return;
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (_) => false,
         );
       } catch (e) {
         if (mounted) _showSnack('Error logging out: $e', isError: true);

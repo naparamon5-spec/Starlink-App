@@ -298,19 +298,19 @@ class _CustomerBillingDetailsPageState extends State<CustomerBillingDetailsPage>
                   ),
                 ),
               ),
-              actions: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: _CircleButton(
-                    onTap: _loading ? () {} : _reload,
-                    child: const Icon(
-                      Icons.refresh_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
-                ),
-              ],
+              // actions: [
+              //   Padding(
+              //     padding: const EdgeInsets.only(right: 12),
+              //     child: _CircleButton(
+              //       onTap: _loading ? () {} : _reload,
+              //       child: const Icon(
+              //         Icons.refresh_rounded,
+              //         color: Colors.white,
+              //         size: 18,
+              //       ),
+              //     ),
+              //   ),
+              // ],
               flexibleSpace: FlexibleSpaceBar(
                 collapseMode: CollapseMode.parallax,
                 background: _HeroHeader(
