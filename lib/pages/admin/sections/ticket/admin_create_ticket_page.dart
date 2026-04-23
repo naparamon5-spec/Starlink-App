@@ -1141,30 +1141,30 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                               horizontal: 16,
                               vertical: 8,
                             ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(
-                                _isSubmitting ? 0.08 : 0.18,
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child:
-                                _isSubmitting
-                                    ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                    : const Text(
-                                      'Submit',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                      ),
-                                    ),
+                            // decoration: BoxDecoration(
+                            //   color: Colors.white.withOpacity(
+                            //     _isSubmitting ? 0.08 : 0.18,
+                            //   ),
+                            //   borderRadius: BorderRadius.circular(10),
+                            // ),
+                            // child:
+                            //     _isSubmitting
+                            //         ? const SizedBox(
+                            //           width: 16,
+                            //           height: 16,
+                            //           child: CircularProgressIndicator(
+                            //             color: Colors.white,
+                            //             strokeWidth: 2,
+                            //           ),
+                            //         )
+                            //         : const Text(
+                            //           'Submit',
+                            //           style: TextStyle(
+                            //             color: Colors.white,
+                            //             fontWeight: FontWeight.w700,
+                            //             fontSize: 13,
+                            //           ),
+                            //         ),
                           ),
                         ),
                     ],
