@@ -480,16 +480,16 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
           subtitle: _normaliseRole(role),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!_isEditing)
-                _headerIconBtn(
-                  Icons.edit_outlined,
-                  Colors.white70,
-                  () => setState(() => _isEditing = true),
-                ),
-              const SizedBox(width: 4),
-              _headerIconBtn(Icons.refresh_rounded, Colors.white70, _fetchUser),
-            ],
+            // children: [
+            //   if (!_isEditing)
+            //     _headerIconBtn(
+            //       Icons.edit_outlined,
+            //       Colors.white70,
+            //       () => setState(() => _isEditing = true),
+            //     ),
+            //   const SizedBox(width: 4),
+            //   _headerIconBtn(Icons.refresh_rounded, Colors.white70, _fetchUser),
+            // ],
           ),
         ),
 
@@ -870,18 +870,18 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
           ),
         ),
         // Copy button
-        if (value != '—')
-          GestureDetector(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: value));
-              _showSnack('Copied to clipboard', _inkSecondary);
-            },
-            child: const Icon(
-              Icons.copy_outlined,
-              size: 14,
-              color: _inkTertiary,
-            ),
-          ),
+        // if (value != '—')
+        //   GestureDetector(
+        //     onTap: () {
+        //       Clipboard.setData(ClipboardData(text: value));
+        //       _showSnack('Copied to clipboard', _inkSecondary);
+        //     },
+        //     child: const Icon(
+        //       Icons.copy_outlined,
+        //       size: 14,
+        //       color: _inkTertiary,
+        //     ),
+        //   ),
       ],
     ),
   );
