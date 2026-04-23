@@ -8,6 +8,7 @@ import '../config/ssl_config.dart';
 
 class ApiService {
   static String get baseUrl => 'https://starlink-api.ardentnetworks.com.ph/api';
+  static bool _isRefreshingToken = false;
 
   static http.Client get _client {
     if (kIsWeb) return http.Client();
@@ -322,7 +323,17 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> refreshToken() async {
+    if (_isRefreshingToken) {
+      // Avoid parallel refresh calls racing and wiping tokens unexpectedly.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final latestToken = await getAccessToken();
+      if (latestToken != null && latestToken.isNotEmpty) {
+        return {'status': 'success', 'accessToken': latestToken};
+      }
+    }
+
     try {
+      _isRefreshingToken = true;
       final refreshTokenValue = await getRefreshToken();
       if (refreshTokenValue == null || refreshTokenValue.isEmpty) {
         throw Exception('No refresh token available');
@@ -340,17 +351,51 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['accessToken'] != null) {
-          await setAccessToken(data['accessToken']);
-          return {'status': 'success', 'accessToken': data['accessToken']};
+        String? newAccessToken;
+        String? newRefreshToken;
+
+        if (data is Map<String, dynamic>) {
+          newAccessToken =
+              data['accessToken']?.toString() ??
+              (data['data'] is Map<String, dynamic>
+                  ? (data['data']['accessToken']?.toString())
+                  : null);
+          newRefreshToken =
+              data['refreshToken']?.toString() ??
+              (data['data'] is Map<String, dynamic>
+                  ? (data['data']['refreshToken']?.toString())
+                  : null);
+        }
+
+        if (newAccessToken != null && newAccessToken.isNotEmpty) {
+          await setAccessToken(newAccessToken);
+          if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
+            await setRefreshToken(newRefreshToken);
+          }
+          return {'status': 'success', 'accessToken': newAccessToken};
         }
         throw Exception('No access token in refresh response');
       }
-      await clearTokens();
-      throw Exception('Token refresh failed: ${response.statusCode}');
+
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        await clearTokens();
+      }
+      throw Exception(
+        response.statusCode == 401 || response.statusCode == 403
+            ? 'Session expired. Please login again.'
+            : 'Token refresh failed: ${response.statusCode}',
+      );
     } catch (e) {
-      await clearTokens();
-      return {'status': 'error', 'message': e.toString()};
+      final message = e.toString();
+      final isPermanentAuthError =
+          message.contains('No refresh token available') ||
+          message.contains('Session expired. Please login again.');
+      if (isPermanentAuthError) {
+        await clearTokens();
+      }
+      return {'status': 'error', 'message': message};
+    } finally {
+      _isRefreshingToken = false;
     }
   }
 

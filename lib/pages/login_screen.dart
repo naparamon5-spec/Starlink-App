@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:convert';
 import 'customer/home/customer_home_screen.dart';
 import 'admin/admin_home_screen.dart';
+import 'end-user/home/home_screen.dart';
 import 'forgot_password.dart';
 import '../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -86,10 +87,12 @@ class _LoginScreenState extends State<LoginScreen>
     _errorAnimController?.reverse();
   }
 
-  Widget _getScreenForRole(String role) {
+  Widget _getScreenForRole(String role, {int userId = 0}) {
     switch (role.toLowerCase()) {
       case 'admin' || 'agent':
         return const AdminHomeScreen();
+      case 'end_user' || 'end-user' || 'enduser':
+        return HomeScreen(userId: userId, loginMessage: 'Login successful');
       case 'customer' || 'biller':
       default:
         return CustomerHomeScreen(loginMessage: 'Login successful');
@@ -133,8 +136,8 @@ class _LoginScreenState extends State<LoginScreen>
         if (profileResponse['status'] == 'success' &&
             profileResponse['data'] != null) {
           final userData = profileResponse['data'];
-          final userId = userData['id']?.toString() ?? 'undefined';
-          final detailed = await ApiService.getUserById(userId);
+          final userIdStr = userData['id']?.toString() ?? 'undefined';
+          final detailed = await ApiService.getUserById(userIdStr);
 
           if (detailed['status'] == 'success' && detailed['data'] != null) {
             final prefs = await SharedPreferences.getInstance();
@@ -145,11 +148,17 @@ class _LoginScreenState extends State<LoginScreen>
               (userData['role'] ?? userData['type'] ?? 'customer')
                   .toString()
                   .toLowerCase();
+          final userId =
+              (userData['id'] is int)
+                  ? userData['id'] as int
+                  : int.tryParse(userData['id']?.toString() ?? '') ?? 0;
 
           if (!mounted) return;
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => _getScreenForRole(userRole)),
+            MaterialPageRoute(
+              builder: (_) => _getScreenForRole(userRole, userId: userId),
+            ),
           );
         } else if (response.containsKey('user')) {
           final userData = response['user'];
@@ -157,10 +166,16 @@ class _LoginScreenState extends State<LoginScreen>
               (userData['role'] ?? userData['type'] ?? 'customer')
                   .toString()
                   .toLowerCase();
+          final userId =
+              (userData['id'] is int)
+                  ? userData['id'] as int
+                  : int.tryParse(userData['id']?.toString() ?? '') ?? 0;
           if (!mounted) return;
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => _getScreenForRole(userRole)),
+            MaterialPageRoute(
+              builder: (_) => _getScreenForRole(userRole, userId: userId),
+            ),
           );
         } else {
           _setError('Failed to load user profile. Please try again.');
@@ -494,7 +509,7 @@ class _LoginScreenState extends State<LoginScreen>
   Widget _buildErrorBanner() {
     return Container(
       margin: const EdgeInsets.only(top: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: _primary.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),

@@ -5,9 +5,12 @@ import 'package:provider/provider.dart';
 import 'package:app_links/app_links.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart'; // 👈 add this
 
-import 'pages/splash_screen.dart';
 import 'pages/login_screen.dart';
 import 'pages/reset_password.dart';
+import 'pages/customer/home/customer_home_screen.dart';
+import 'pages/admin/admin_home_screen.dart';
+import 'pages/end-user/home/home_screen.dart';
+import 'services/api_service.dart';
 import 'providers/notification_provider.dart';
 import 'config/ssl_config.dart'
     if (dart.library.html) 'config/ssl_config_stub.dart'
@@ -35,19 +38,78 @@ void main() async {
     OneSignal.Notifications.requestPermission(false);
   }
 
+  final initialHome = await _resolveInitialHomeForLaunch();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
-      child: const MyApp(),
+      child: MyApp(initialHome: initialHome),
     ),
   );
 }
 
+Widget _getScreenForRole(String role, {int userId = 0}) {
+  switch (role.toLowerCase()) {
+    case 'admin':
+    case 'agent':
+      return const AdminHomeScreen();
+    case 'end_user':
+    case 'end-user':
+    case 'enduser':
+      return HomeScreen(userId: userId, loginMessage: 'Session restored');
+    case 'customer':
+    case 'biller':
+    default:
+      return CustomerHomeScreen(loginMessage: 'Session restored');
+  }
+}
+
+Future<Widget> _resolveInitialHomeForLaunch() async {
+  if (kIsWeb) {
+    final uri = Uri.base;
+    if (uri.host == 'sandbox.ardentnetworks.com.ph' &&
+        uri.path == '/reset-password') {
+      final token = uri.queryParameters['token'];
+      if (token != null && token.isNotEmpty) {
+        return ResetPasswordScreen(
+          token: token,
+          email: '',
+          verificationCode: '',
+        );
+      }
+    }
+    return const LoginScreen();
+  }
+
+  final token = await ApiService.getValidAccessToken();
+  if (token == null || token.isEmpty) {
+    return const LoginScreen();
+  }
+
+  final profileResponse = await ApiService.getCurrentUserProfile();
+  if (profileResponse['status'] == 'success' && profileResponse['data'] != null) {
+    final userData = profileResponse['data'];
+    final userId =
+        (userData['id'] is int)
+            ? userData['id'] as int
+            : int.tryParse(userData['id']?.toString() ?? '') ?? 0;
+    final userRole =
+        (userData['role'] ?? userData['type'] ?? 'customer')
+            .toString()
+            .toLowerCase();
+    return _getScreenForRole(userRole, userId: userId);
+  }
+
+  return CustomerHomeScreen(loginMessage: 'Session restored');
+}
+
 // 👇 Changed from StatelessWidget to StatefulWidget
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.initialHome});
+
+  final Widget initialHome;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -71,9 +133,10 @@ class _MyAppState extends State<MyApp> {
     });
 
     // App already open or in background
-    _appLinks.uriLinkStream.listen((uri) {
-      _navigateFromLink(uri);
-    });
+    _appLinks.uriLinkStream.listen(
+      (uri) => _navigateFromLink(uri),
+      onError: (err) => debugPrint('Deep link error: $err'),
+    );
   }
 
   void _navigateFromLink(Uri uri) {
@@ -95,26 +158,6 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  Widget _buildHome() {
-    if (kIsWeb) {
-      final uri = Uri.base;
-      if (uri.host == 'sandbox.ardentnetworks.com.ph' &&
-          uri.path == '/reset-password') {
-        final token = uri.queryParameters['token'];
-        if (token != null && token.isNotEmpty) {
-          return ResetPasswordScreen(
-            token: token,
-            email: '',
-            verificationCode: '',
-          );
-        }
-      }
-    }
-
-    // return const SplashScreen();
-    return const LoginScreen();
-  }
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -134,7 +177,7 @@ class _MyAppState extends State<MyApp> {
         ),
         useMaterial3: true,
       ),
-      home: _buildHome(),
+      home: widget.initialHome,
     );
   }
 }
