@@ -437,22 +437,22 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   preferredSize: const Size.fromHeight(1),
                   child: Container(height: 1, color: _border),
                 ),
-                actions: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.notifications_outlined,
-                      color: _ink,
-                      size: 22,
-                    ),
-                    onPressed:
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AdminNotificationScreen(),
-                          ),
-                        ),
-                  ),
-                ],
+                // actions: [
+                //   IconButton(
+                //     icon: const Icon(
+                //       Icons.notifications_outlined,
+                //       color: _ink,
+                //       size: 22,
+                //     ),
+                //     onPressed:
+                //         () => Navigator.push(
+                //           context,
+                //           MaterialPageRoute(
+                //             builder: (_) => const AdminNotificationScreen(),
+                //           ),
+                //         ),
+                //   ),
+                // ],
               )
               : null,
       body: SafeArea(
