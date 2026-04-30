@@ -663,12 +663,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               shape: BoxShape.circle,
               border: Border.all(color: _border, width: 2),
             ),
-            child: IconButton(
-              icon: const Icon(Icons.camera_alt, size: 16, color: _primary),
-              onPressed: _isImageLoading ? null : _showImageOptions,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              padding: const EdgeInsets.all(6),
-            ),
+            // child: IconButton(
+            //   icon: const Icon(Icons.camera_alt, size: 16, color: _primary),
+            //   onPressed: _isImageLoading ? null : _showImageOptions,
+            //   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            //   padding: const EdgeInsets.all(6),
+            // ),
           ),
         ),
       ],

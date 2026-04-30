@@ -156,11 +156,11 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                             width: 2,
                           ),
                         ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 13,
-                        ),
+                        // child: const Icon(
+                        //   Icons.camera_alt,
+                        //   color: Colors.white,
+                        //   size: 13,
+                        // ),
                       ),
                     ),
                   ],
