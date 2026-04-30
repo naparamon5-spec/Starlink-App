@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../../services/api_service.dart';
 import '../../login_screen.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
@@ -101,11 +99,6 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
     });
   }
 
-  Future<int?> _getUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('user_id');
-  }
-
   Future<void> _saveSecuritySettings() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -114,34 +107,19 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
       return;
     }
 
-    final userId = await _getUserId();
-    if (userId == null) {
-      _showSnack('User not found. Please log in again.', isError: true);
-      return;
-    }
-
     setState(() => _isSaving = true);
 
     try {
-      final response = await http.post(
-        Uri.parse(
-          'http://10.0.2.2/starlink_app/backend/routes/change_password.php',
-        ),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'user_id': userId,
-          'current_password': _currentPasswordController.text,
-          'new_password': _newPasswordController.text,
-        }),
+      final response = await ApiService.changePassword(
+        oldPassword: _currentPasswordController.text,
+        newPassword: _newPasswordController.text,
       );
 
-      final data = jsonDecode(response.body);
-
-      if (data['success']) {
+      if (response['status'] == 'success') {
         if (mounted) _showSuccessDialog();
       } else {
         _showSnack(
-          data['message'] ?? 'Failed to update password.',
+          response['message']?.toString() ?? 'Failed to update password.',
           isError: true,
         );
       }
