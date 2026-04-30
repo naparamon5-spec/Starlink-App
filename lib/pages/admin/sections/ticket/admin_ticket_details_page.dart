@@ -898,8 +898,8 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     final ticketType = _str(t['ticket_type'] ?? t['type'] ?? t['category']);
     final description = _str(t['description'] ?? t['body'] ?? t['content']);
     final createdBy = _str(t['created_by'] ?? t['createdBy'] ?? t['creator']);
-    final assignedTo = _str(t['assigned_to'] ?? t['assignedTo'] ?? t['agent']);
-    final contact = _str(t['contact'] ?? t['contact_name']);
+    // final assignedTo = _str(t['assigned_to'] ?? t['assignedTo'] ?? t['agent']);
+    // final contact = _str(t['contact'] ?? t['contact_name']);
     final subscription = _str(
       t['subscription_id'] ?? t['subscription'] ?? t['serviceLineNumber'],
     );
@@ -1020,10 +1020,10 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               children: [
                 _KVRow(label: 'Created By', value: createdBy),
                 const SizedBox(height: 8),
-                _KVRow(label: 'Assigned To', value: assignedTo),
-                const SizedBox(height: 8),
-                _KVRow(label: 'Contact', value: contact),
-                const SizedBox(height: 8),
+                // _KVRow(label: 'Assigned To', value: assignedTo),
+                // const SizedBox(height: 8),
+                // _KVRow(label: 'Contact', value: contact),
+                // const SizedBox(height: 8),
                 _KVRow(label: 'Subscription', value: subscription),
                 const SizedBox(height: 8),
                 _KVRow(label: 'Created At', value: createdAt),
