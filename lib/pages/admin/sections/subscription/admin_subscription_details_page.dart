@@ -103,10 +103,13 @@ class _AdminSubscriptionDetailsPageState
       final res = await ApiService.getSubscriptionByServiceLineNumber(sln);
       if (res['status'] == 'success') {
         final d = res['data'];
-        subResult =
-            d is Map
-                ? Map<String, dynamic>.from(d)
-                : <String, dynamic>{'raw': d};
+        if (d is Map) {
+          subResult = Map<String, dynamic>.from(d);
+        } else if (d is List && d.isNotEmpty) {
+          subResult = Map<String, dynamic>.from(d.first);
+        } else {
+          subResult = <String, dynamic>{'raw': d};
+        }
       } else {
         subErr = res['message']?.toString() ?? 'Subscription fetch failed';
       }
@@ -202,6 +205,51 @@ class _AdminSubscriptionDetailsPageState
         _error = 'Failed to load subscription data.';
       }
     });
+  }
+
+  void _changeEndDate() async {
+    final current = _subscriptionData?['endDate']?.toString();
+    DateTime initial = DateTime.now();
+    if (current != null && current != 'null' && current.isNotEmpty) {
+      try {
+        final clean =
+            current.contains('T') ? current.split('T').first : current.split(' ').first;
+        initial = DateTime.parse('${clean}T00:00:00');
+      } catch (_) {}
+    }
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: _brandRed,
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF000000),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Selected new end date: ${picked.toString().split(' ').first}',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: _brandRed,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   Future<void> _loadBillingForPeriod(_BillingPeriod period) async {
@@ -371,7 +419,10 @@ class _AdminSubscriptionDetailsPageState
           if (_subscriptionError != null)
             _ErrorCard(message: 'Subscription: $_subscriptionError')
           else
-            _SubscriptionCard(data: _subscriptionData),
+            _SubscriptionCard(
+              data: _subscriptionData,
+              onDateTap: _changeEndDate,
+            ),
 
           const SizedBox(height: 14),
 
@@ -481,7 +532,8 @@ class _ServiceLineChip extends StatelessWidget {
 
 class _SubscriptionCard extends StatelessWidget {
   final Map<String, dynamic>? data;
-  const _SubscriptionCard({required this.data});
+  final VoidCallback? onDateTap;
+  const _SubscriptionCard({required this.data, this.onDateTap});
 
   String _str(dynamic v) =>
       (v == null || v.toString() == 'null' || v.toString().isEmpty)
@@ -551,6 +603,12 @@ class _SubscriptionCard extends StatelessWidget {
     final progress =
         usageLimit > 0 ? (consumed / usageLimit).clamp(0.0, 1.0) : 0.0;
 
+    final rtm = data?['routerTerminalMap'];
+    final hardware =
+        (rtm is List && rtm.isNotEmpty)
+            ? Map<String, dynamic>.from(rtm.first)
+            : (rtm is Map ? Map<String, dynamic>.from(rtm) : null);
+
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,6 +659,47 @@ class _SubscriptionCard extends StatelessWidget {
           const SizedBox(height: 14),
           const _HDivider(),
 
+          // Hardware Info Section
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Column(
+              children: [
+                _InfoRow(
+                  label: 'Starlink ID',
+                  value: _str(
+                    hardware?['starlink_id'] ??
+                        hardware?['starlinkId'] ??
+                        data?['starlink_id'] ??
+                        data?['starlinkId'],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _InfoRow(
+                  label: 'Serial Number',
+                  value: _str(
+                    hardware?['serial_number'] ??
+                        hardware?['serialNumber'] ??
+                        data?['serial_number'] ??
+                        data?['serialNumber'],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _InfoRow(
+                  label: 'Kit Number',
+                  value: _str(
+                    hardware?['kit_number'] ??
+                        hardware?['kitNumber'] ??
+                        data?['kit_number'] ??
+                        data?['kitNumber'],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+          const _HDivider(),
+
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
@@ -615,35 +714,45 @@ class _SubscriptionCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 7),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today_rounded,
-                        size: 14,
-                        color: Color(0xFF8A96A3),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _formatDate(data?['endDate']?.toString()),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF000000),
-                            fontWeight: FontWeight.w500,
+                InkWell(
+                  onTap: onDateTap,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_today_rounded,
+                          size: 14,
+                          color: Color(0xFF8A96A3),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _formatDate(data?['endDate']?.toString()),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF000000),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                        if (onDateTap != null)
+                          const Icon(
+                            Icons.edit_calendar_outlined,
+                            size: 16,
+                            color: Color(0xFFEB1E23),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -752,6 +861,33 @@ class _SubscriptionCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: Color(0xFF8A96A3)),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF000000),
+          ),
+        ),
+      ],
     );
   }
 }
