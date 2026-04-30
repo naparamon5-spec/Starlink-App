@@ -605,6 +605,53 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     return const Color(0xFF94A3B8);
   }
 
+  bool _isCommentActivity(dynamic act) {
+    if (act is! Map) return false;
+
+    String? firstNonEmpty(List<String> keys) {
+      for (final k in keys) {
+        final v = act[k];
+        final s = v?.toString().trim();
+        if (s != null && s.isNotEmpty && s != 'null') return s;
+      }
+      return null;
+    }
+
+    final action =
+        (firstNonEmpty([
+              'action',
+              'type',
+              'event',
+              'title',
+              'status',
+            ])?.toLowerCase() ??
+            '');
+
+    final hasCommentText = firstNonEmpty([
+      'comment',
+      'message',
+      'note',
+      'remarks',
+      'body',
+      'content',
+      'details',
+      'description',
+      'new_value',
+    ]);
+
+    if (hasCommentText == null) return false;
+
+    // Most comment records from the API use comment/message/note.
+    if (act['comment'] != null ||
+        act['message'] != null ||
+        act['note'] != null) {
+      return true;
+    }
+
+    // Fallback: action/title looks like a comment entry.
+    return action.contains('comment') || action.contains('note');
+  }
+
   Future<void> _updateTicketStatus(String newStatus) async {
     final ticketId = widget.ticketId.trim();
     if (ticketId.isEmpty) return;
@@ -824,6 +871,8 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                     _buildAttachmentsCard(),
                     const SizedBox(height: 14),
                     _buildActivitiesCard(),
+                    const SizedBox(height: 14),
+                    _buildCommentsCard(),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -1261,7 +1310,8 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   // ── Activities Card ────────────────────────────────────────────────────────
 
   Widget _buildActivitiesCard() {
-    final canComment = _currentStatus == 'IN PROGRESS';
+    final timelineItems =
+        _activities.where((a) => !_isCommentActivity(a)).toList();
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1293,57 +1343,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                   ),
                 ),
                 const Spacer(),
-                if (canComment)
-                  InkWell(
-                    onTap:
-                        (_isCommentPosting || _loading)
-                            ? null
-                            : _showAddCommentDialog,
-                    borderRadius: BorderRadius.circular(999),
-                    child: Ink(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _brandRed.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: _brandRed.withOpacity(0.18)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _isCommentPosting
-                              ? SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    _brandRed,
-                                  ),
-                                ),
-                              )
-                              : Icon(
-                                Icons.add_comment_outlined,
-                                color: _brandRed,
-                                size: 18,
-                              ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Comment',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              color: _brandRed,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (_activities.isNotEmpty)
+                if (timelineItems.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -1354,7 +1354,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${_activities.length}',
+                      '${timelineItems.length}',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -1371,7 +1371,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               padding: const EdgeInsets.all(16),
               child: _ErrorCard(message: _activitiesError!),
             )
-          else if (_activities.isEmpty)
+          else if (timelineItems.isEmpty)
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
               child: Row(
@@ -1393,9 +1393,9 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Column(
-                children: List.generate(_activities.length, (i) {
-                  final act = _activities[i];
-                  final isLast = i == _activities.length - 1;
+                children: List.generate(timelineItems.length, (i) {
+                  final act = timelineItems[i];
+                  final isLast = i == timelineItems.length - 1;
 
                   String field(List<String> keys) {
                     if (act is! Map) return '—';
@@ -1470,6 +1470,210 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                         (performedBy != '—' && performedBy.isNotEmpty)
                             ? performedBy
                             : null,
+                    formattedDate:
+                        timestamp != null ? _formatDate(timestamp) : null,
+                    timeAgo: _timeAgo(timestamp),
+                  );
+                }),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentsCard() {
+    final canComment = _currentStatus == 'IN PROGRESS';
+    final commentItems = _activities.where(_isCommentActivity).toList();
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.comment_outlined,
+                    color: Color(0xFF6366F1),
+                    size: 17,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Comments',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF000000),
+                  ),
+                ),
+                const Spacer(),
+                if (canComment)
+                  InkWell(
+                    onTap:
+                        (_isCommentPosting || _loading)
+                            ? null
+                            : _showAddCommentDialog,
+                    borderRadius: BorderRadius.circular(999),
+                    child: Ink(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _brandRed.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: _brandRed.withOpacity(0.18)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _isCommentPosting
+                              ? SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    _brandRed,
+                                  ),
+                                ),
+                              )
+                              : Icon(
+                                Icons.add_comment_outlined,
+                                color: _brandRed,
+                                size: 18,
+                              ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Add',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              color: _brandRed,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (commentItems.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${commentItems.length}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF6366F1),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const _HDivider(),
+          if (_activitiesError != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: _ErrorCard(message: _activitiesError!),
+            )
+          else if (commentItems.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    color: Color(0xFF8A96A3),
+                    size: 16,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'No comments yet',
+                    style: TextStyle(color: Color(0xFF8A96A3), fontSize: 13),
+                  ),
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                children: List.generate(commentItems.length, (i) {
+                  final act = commentItems[i];
+                  final isLast = i == commentItems.length - 1;
+                  if (act is! Map) return const SizedBox.shrink();
+
+                  String field(List<String> keys) {
+                    for (final k in keys) {
+                      final v = act[k];
+                      if (v != null &&
+                          v.toString().isNotEmpty &&
+                          v.toString() != 'null') {
+                        return v.toString();
+                      }
+                    }
+                    return '—';
+                  }
+
+                  final comment = field([
+                    'comment',
+                    'message',
+                    'note',
+                    'remarks',
+                    'body',
+                    'content',
+                    'details',
+                    'description',
+                    'new_value',
+                  ]);
+                  final by = field([
+                    'name',
+                    'user_name',
+                    'performed_by',
+                    'user',
+                    'created_by',
+                    'actor',
+                    'performed_by_name',
+                    'username',
+                    'agent',
+                    'agent_name',
+                  ]);
+                  final timestamp =
+                      (act['created_at'] ??
+                              act['timestamp'] ??
+                              act['performed_at'] ??
+                              act['updated_at'] ??
+                              act['date'])
+                          ?.toString();
+
+                  return _TimelineRow(
+                    icon: Icons.comment_outlined,
+                    color: const Color(0xFF6366F1),
+                    isLast: isLast,
+                    action: by != '—' && by.isNotEmpty ? by : 'Unknown',
+                    description: comment != '—' ? comment : null,
+                    performedBy: null,
                     formattedDate:
                         timestamp != null ? _formatDate(timestamp) : null,
                     timeAgo: _timeAgo(timestamp),

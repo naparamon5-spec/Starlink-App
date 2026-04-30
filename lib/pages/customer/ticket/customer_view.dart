@@ -240,6 +240,49 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
     return const Color(0xFF94A3B8);
   }
 
+  bool _isCommentActivity(dynamic act) {
+    if (act is! Map) return false;
+
+    String? firstNonEmpty(List<String> keys) {
+      for (final k in keys) {
+        final v = act[k];
+        final s = v?.toString().trim();
+        if (s != null && s.isNotEmpty && s != 'null') return s;
+      }
+      return null;
+    }
+
+    final action =
+        (firstNonEmpty([
+              'action',
+              'type',
+              'event',
+              'title',
+              'status',
+            ])?.toLowerCase() ??
+            '');
+
+    final hasText = firstNonEmpty([
+      'comment',
+      'message',
+      'note',
+      'remarks',
+      'body',
+      'content',
+      'details',
+      'description',
+      'new_value',
+    ]);
+    if (hasText == null) return false;
+
+    if (act['comment'] != null ||
+        act['message'] != null ||
+        act['note'] != null) {
+      return true;
+    }
+    return action.contains('comment') || action.contains('note');
+  }
+
   String _timeAgo(String? raw) {
     if (raw == null || raw.isEmpty || raw == 'null') return '';
     try {
@@ -644,6 +687,10 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         rawTimeline is List ? rawTimeline : [];
     final List<dynamic> timeline =
         _activities.isNotEmpty ? _activities : embeddedTimeline;
+    final List<dynamic> timelineEvents =
+        timeline.where((a) => !_isCommentActivity(a)).toList();
+    final List<dynamic> commentItems =
+        timeline.where(_isCommentActivity).toList();
 
     final dynamic rawAttachments =
         data['attachments'] ?? passedFull['attachments'];
@@ -1057,9 +1104,9 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                                   color: _brandRed,
                                 ),
                               )
-                            else if (timeline.isNotEmpty)
+                            else if (timelineEvents.isNotEmpty)
                               _CountBadge(
-                                count: timeline.length,
+                                count: timelineEvents.length,
                                 color: _brandRed,
                               ),
                           ],
@@ -1162,7 +1209,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                             ),
                           ),
                         )
-                      else if (timeline.isEmpty)
+                      else if (timelineEvents.isEmpty)
                         const Padding(
                           padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
                           child: Row(
@@ -1187,8 +1234,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                           child: Column(
-                            children: List.generate(timeline.length, (i) {
-                              final act = timeline[i];
+                            children: List.generate(timelineEvents.length, (i) {
+                              final act = timelineEvents[i];
                               if (act is! Map) return const SizedBox.shrink();
                               final rawStatus = act['status']?.toString();
                               final action =
@@ -1220,12 +1267,224 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
 
                               final color = _activityColor(action);
                               final icon = _activityIcon(action);
-                              final isLast = i == timeline.length - 1;
+                              final isLast = i == timelineEvents.length - 1;
                               return _TimelineRow(
-                                icon: icon,
-                                color: color,
+                                icon: Icons.comment_outlined,
+                                color: const Color(0xFF6366F1),
                                 isLast: isLast,
-                                action: action,
+                                action:
+                                    (userName.isNotEmpty && userName != '—')
+                                        ? userName
+                                        : 'Unknown',
+                                changeDesc: comment.isNotEmpty ? comment : null,
+                                performedBy: null,
+                                formattedDate:
+                                    timestamp != null
+                                        ? _formatDate(timestamp)
+                                        : null,
+                                timeAgo: _timeAgo(timestamp),
+                              );
+                            }),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                // ── Comments Card ─────────────────────────────────────────────
+                _Card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF6366F1,
+                                ).withOpacity(0.10),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.comment_outlined,
+                                color: Color(0xFF6366F1),
+                                size: 17,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Comments',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: _ink,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (!_isFetchingDetails && commentItems.isNotEmpty)
+                              _CountBadge(
+                                count: commentItems.length,
+                                color: const Color(0xFF6366F1),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const _HDivider(),
+                      if (_isFetchingDetails)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: _brandRed,
+                                ),
+                                SizedBox(height: 10),
+                                Text(
+                                  'Loading comments…',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _inkTertiary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else if (_fetchError != null)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 11,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF1F0),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _brandRed.withOpacity(0.35),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: _brandRed,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _fetchError!,
+                                    style: const TextStyle(
+                                      color: _brandRed,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else if (_activitiesError != null)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 11,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF1F0),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _brandRed.withOpacity(0.35),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: _brandRed,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _activitiesError!,
+                                    style: const TextStyle(
+                                      color: _brandRed,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else if (commentItems.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline_rounded,
+                                color: _inkTertiary,
+                                size: 16,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'No comments yet',
+                                style: TextStyle(
+                                  color: _inkTertiary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          child: Column(
+                            children: List.generate(commentItems.length, (i) {
+                              final act = commentItems[i];
+                              if (act is! Map) return const SizedBox.shrink();
+
+                              final userName = _str(
+                                act['name'] ??
+                                    act['user_name'] ??
+                                    act['performed_by'],
+                                fallback: '',
+                              );
+
+                              final comment = _str(
+                                act['comment'] ??
+                                    act['message'] ??
+                                    act['note'] ??
+                                    act['new_value'],
+                                fallback: '',
+                              );
+
+                              final timestamp =
+                                  (act['date'] ?? act['created_at'])
+                                      ?.toString();
+
+                              final isLast = i == commentItems.length - 1;
+                              return _TimelineRow(
+                                icon: Icons.comment_outlined,
+                                color: const Color(0xFF6366F1),
+                                isLast: isLast,
+                                action: 'COMMENT',
                                 changeDesc: comment.isNotEmpty ? comment : null,
                                 performedBy:
                                     (userName.isNotEmpty && userName != '—')
