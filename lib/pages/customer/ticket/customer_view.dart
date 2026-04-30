@@ -36,10 +36,37 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   String? _attachmentsError;
   final Map<String, bool> _downloadingMap = {};
 
+  List<dynamic> _activities = [];
+  String? _activitiesError;
+
+  bool _canManageTickets = false;
+
   @override
   void initState() {
     super.initState();
+    _loadRoleCapabilities();
     _loadTicketDetails();
+  }
+
+  Future<void> _loadRoleCapabilities() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final role =
+          (prefs.getString('role') ??
+                  prefs.getString('position') ??
+                  prefs.getString('user_role') ??
+                  '')
+              .toLowerCase()
+              .trim();
+      if (!mounted) return;
+      setState(() {
+        _canManageTickets = role == 'admin' || role == 'agent';
+      });
+    } catch (_) {
+      // Default to safe: view-only
+      if (!mounted) return;
+      setState(() => _canManageTickets = false);
+    }
   }
 
   Future<void> _loadTicketDetails() async {
@@ -49,6 +76,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
       _fetchError = null;
       _attachments = [];
       _attachmentsError = null;
+      _activities = [];
+      _activitiesError = null;
     });
     try {
       final ticketId =
@@ -65,6 +94,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
 
       final results = await Future.wait([
         ApiService.getTicketById(ticketId),
+        ApiService.getTicketComments(ticketId),
         ApiService.getTicketAttachments(ticketId),
       ]);
       if (!mounted) return;
@@ -81,9 +111,20 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
             'Failed to load ticket details.';
       }
 
+      List<dynamic> activities = [];
+      String? activitiesErr;
+      final actRes = results[1];
+      if (actRes['status'] == 'success') {
+        activities = _extractList(actRes['data']);
+        if (activities.isEmpty) activities = _extractList(actRes['raw']);
+      } else {
+        activitiesErr =
+            actRes['message']?.toString() ?? 'Failed to load activities.';
+      }
+
       List<dynamic> attachments = [];
       String? attachmentsErr;
-      final attRes = results[1];
+      final attRes = results[2];
       if (attRes['status'] == 'success') {
         attachments = _extractList(attRes['data']);
         if (attachments.isEmpty) attachments = _extractList(attRes['raw']);
@@ -95,6 +136,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
       setState(() {
         _fetchedTicket = ticket;
         _fetchError = ticketError;
+        _activities = activities;
+        _activitiesError = activitiesErr;
         _attachments = attachments;
         _attachmentsError = attachmentsErr;
         _isFetchingDetails = false;
@@ -324,10 +367,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   Future<void> _acceptTicket() async {
     setState(() => _isActionLoading = true);
     try {
-      final response = await ApiService.updateTicketStatus(
-        widget.ticket['id'].toString(),
-        'in_progress',
-      );
+      final response = await ApiService.acceptTicket(widget.ticket['id'].toString());
       if (response['status'] == 'success') {
         _updateLocalStatus('IN PROGRESS');
         await _setTicketInProgress(widget.ticket['id'].toString());
@@ -352,10 +392,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   Future<void> _resolveTicket() async {
     setState(() => _isActionLoading = true);
     try {
-      final response = await ApiService.updateTicketStatus(
-        widget.ticket['id'].toString(),
-        'resolved',
-      );
+      final response = await ApiService.resolveTicket(widget.ticket['id'].toString());
       if (response['status'] == 'success') {
         _updateLocalStatus('RESOLVED');
         await _removeTicketInProgress(widget.ticket['id'].toString());
@@ -379,10 +416,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   Future<void> _closeTicket() async {
     setState(() => _isActionLoading = true);
     try {
-      final response = await ApiService.updateTicketStatus(
-        widget.ticket['id'].toString(),
-        'closed',
-      );
+      final response = await ApiService.closeTicket(widget.ticket['id'].toString());
       if (response['status'] == 'success') {
         _updateLocalStatus('CLOSED');
         await _removeTicketInProgress(widget.ticket['id'].toString());
@@ -465,6 +499,99 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
+  Widget _buildActionBar(String status) {
+    final isOpen = status == 'OPEN';
+    final isInProgress = status == 'IN PROGRESS';
+    if (!isOpen && !isInProgress) return const SizedBox.shrink();
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: _border)),
+        ),
+        child: Row(
+          children: [
+            if (isOpen)
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isActionLoading ? null : _acceptTicket,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _brandRed,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon:
+                      _isActionLoading
+                          ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                          : const Icon(Icons.check_circle_outline_rounded),
+                  label: const Text(
+                    'Accept Ticket',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            if (isInProgress) ...[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _isActionLoading ? null : _resolveTicket,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _success,
+                    side: const BorderSide(color: _success, width: 1.2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.verified_outlined),
+                  label: const Text(
+                    'Resolve',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isActionLoading ? null : _closeTicket,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _brandRed,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.lock_outline_rounded),
+                  label: const Text(
+                    'Close',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final passedFull =
@@ -507,7 +634,9 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
     ], fallback: 'No description provided.');
 
     final dynamic rawTimeline = data['timeline'];
-    final List<dynamic> timeline = rawTimeline is List ? rawTimeline : [];
+    final List<dynamic> embeddedTimeline = rawTimeline is List ? rawTimeline : [];
+    final List<dynamic> timeline =
+        _activities.isNotEmpty ? _activities : embeddedTimeline;
 
     final dynamic rawAttachments =
         data['attachments'] ?? passedFull['attachments'];
@@ -515,13 +644,6 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         _attachments.isNotEmpty
             ? _attachments
             : (rawAttachments is List ? rawAttachments : []);
-
-    // ── Determine if action bar should be shown ───────────────────────────
-    // Customers create tickets and should NOT be able to accept/resolve/close
-    // their own tickets — those are admin-only actions.
-    // We detect "customer-created" by checking the role stored in SharedPrefs.
-    // Since this screen is always in the customer flow, we simply hide the bar.
-    const bool isCustomerView = true; // always true in this screen
 
     return Scaffold(
       backgroundColor: _surfaceSubtle,
@@ -565,13 +687,19 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
           child: Container(height: 1, color: _border),
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadTicketDetails,
-        color: _brandRed,
-        // ── No Stack/Positioned needed — no action bar for customers ──────
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          children: [
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _loadTicketDetails,
+            color: _brandRed,
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                _canManageTickets ? 104 : 24,
+              ),
+              children: [
             // ── Ticket Info Card ──────────────────────────────────────────
             _Card(
               child: Column(
@@ -976,6 +1104,42 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                         ),
                       ),
                     )
+                  else if (_activitiesError != null)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 11,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF1F0),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _brandRed.withOpacity(0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: _brandRed,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _activitiesError!,
+                                style: const TextStyle(
+                                  color: _brandRed,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
                   else if (timeline.isEmpty)
                     const Padding(
                       padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
@@ -1001,25 +1165,30 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                         children: List.generate(timeline.length, (i) {
                           final act = timeline[i];
                           if (act is! Map) return const SizedBox.shrink();
-                          final action = _str(
-                            act['action'],
-                            fallback: 'Activity',
-                          );
+                          final rawStatus = act['status']?.toString();
+                          final action =
+                              rawStatus != null && rawStatus.isNotEmpty
+                                  ? _normalizeStatus(rawStatus)
+                                  : _str(act['action'], fallback: 'COMMENT');
+
                           final userName = _str(
-                            act['user_name'] ?? act['performed_by'],
+                            act['name'] ??
+                                act['user_name'] ??
+                                act['performed_by'],
                             fallback: '',
                           );
-                          final oldVal = act['old_value']?.toString();
-                          final newVal = act['new_value']?.toString();
-                          final timestamp = act['created_at']?.toString();
-                          String? changeDesc;
-                          if (oldVal != null &&
-                              newVal != null &&
-                              oldVal != 'null' &&
-                              newVal != 'null') {
-                            changeDesc =
-                                '${_prettifyValue(oldVal)}  →  ${_prettifyValue(newVal)}';
-                          }
+
+                          final comment = _str(
+                            act['comment'] ??
+                                act['message'] ??
+                                act['note'] ??
+                                act['new_value'],
+                            fallback: '',
+                          );
+
+                          final timestamp =
+                              (act['date'] ?? act['created_at'])?.toString();
+
                           final color = _activityColor(action);
                           final icon = _activityIcon(action);
                           final isLast = i == timeline.length - 1;
@@ -1028,7 +1197,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                             color: color,
                             isLast: isLast,
                             action: action,
-                            changeDesc: changeDesc,
+                            changeDesc: comment.isNotEmpty ? comment : null,
                             performedBy:
                                 (userName.isNotEmpty && userName != '—')
                                     ? userName
@@ -1098,8 +1267,17 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                 ],
               ),
             ),
-          ],
-        ),
+              ],
+            ),
+          ),
+          if (_canManageTickets)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _buildActionBar(status),
+            ),
+        ],
       ),
     );
   }

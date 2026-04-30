@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../components/Table.dart';
 import '../../../services/api_service.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'dart:convert';
 import 'dart:io';
 
 // Top-level function for mapping serviceLineNumber to nickname
@@ -253,14 +253,30 @@ class _TicketScreenState extends State<TicketScreen> {
       final response = await ApiService.updateTicketStatus(ticketId, newStatus);
       if (response['status'] == 'success') {
         setState(() {
-          _selectedTicket!['status'] = newStatus.toUpperCase();
-          if (_selectedTicket!['full_data'] != null) {
-            _selectedTicket!['full_data']['status'] = newStatus.toUpperCase();
+          final normalized = newStatus.replaceAll('_', ' ').toUpperCase();
+          // Update selected ticket if present
+          if (_selectedTicket != null) {
+            _selectedTicket!['status'] = normalized;
+            if (_selectedTicket!['full_data'] != null) {
+              _selectedTicket!['full_data']['status'] = normalized;
+            }
+          }
+
+          // Update list rows by id
+          final idx = _tickets.indexWhere(
+            (t) => t['id']?.toString() == ticketId.toString(),
+          );
+          if (idx != -1) {
+            _tickets[idx]['Status'] = normalized;
+            if (_tickets[idx]['full_data'] != null) {
+              _tickets[idx]['full_data']['status'] = normalized;
+            }
+            _filteredTickets = List.from(_tickets);
           }
         });
 
         Navigator.pop(context, {
-          'status': newStatus.toUpperCase(),
+          'status': newStatus.replaceAll('_', ' ').toUpperCase(),
           'id': ticketId,
         });
 
@@ -285,9 +301,210 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
+  Future<void> _showAddCommentComposer(BuildContext dialogContext, String ticketId) async {
+    final id = ticketId.trim();
+    if (id.isEmpty) return;
+    final controller = TextEditingController();
+    bool posting = false;
+
+    await showModalBottomSheet<void>(
+      context: dialogContext,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+            final canPost = controller.text.trim().isNotEmpty && !posting;
+
+            Future<void> post() async {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              setSheetState(() => posting = true);
+              final res = await ApiService.addTicketComment(id, text);
+              setSheetState(() => posting = false);
+
+              if (!ctx.mounted) return;
+              if (res['status'] == 'success') {
+                Navigator.of(ctx).pop();
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Comment added.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                await _loadTickets();
+              } else {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      res['message']?.toString() ?? 'Failed to add comment.',
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE5E7EB),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF133343).withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.add_comment_outlined,
+                                color: Color(0xFF133343),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'Add a comment',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: posting ? null : () => Navigator.of(ctx).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: TextField(
+                            controller: controller,
+                            autofocus: true,
+                            minLines: 3,
+                            maxLines: 6,
+                            textInputAction: TextInputAction.newline,
+                            onChanged: (_) => setSheetState(() {}),
+                            decoration: const InputDecoration(
+                              hintText: 'Write something helpful…',
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${controller.text.trim().length}/1000',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF94A3B8),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: canPost ? post : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFEB1E23),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (posting) ...[
+                                    const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  const Text(
+                                    'Post Comment',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showTicketDetails(Map<String, dynamic> ticket) {
+    // Keep a reference to allow status updates without null errors.
+    _selectedTicket = ticket;
     final fullData = ticket['full_data'] as Map<String, dynamic>;
     debugPrint(fullData.toString());
+
+    String normalizeStatus(String raw) {
+      return raw.replaceAll('_', ' ').toUpperCase().trim();
+    }
+
+    final ticketId = fullData['id']?.toString() ?? ticket['id']?.toString() ?? '';
+    final status = normalizeStatus(fullData['status']?.toString() ?? 'OPEN');
+    final isOpen = status == 'OPEN';
+    final isInProgress = status == 'IN PROGRESS';
 
     showDialog(
       context: context,
@@ -323,6 +540,93 @@ class _TicketScreenState extends State<TicketScreen> {
                     ],
                   ),
                   const Divider(height: 24),
+                  if (ticketId.isNotEmpty && (isOpen || isInProgress)) ...[
+                    Row(
+                      children: [
+                        if (isOpen)
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed:
+                                  () => _updateTicketStatus(
+                                    ticketId,
+                                    'in_progress',
+                                  ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF133343),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(
+                                Icons.check_circle_outline_rounded,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                'Accept Ticket',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                        if (isInProgress) ...[
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  () =>
+                                      _updateTicketStatus(ticketId, 'resolved'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF24A148),
+                                side: const BorderSide(
+                                  color: Color(0xFF24A148),
+                                  width: 1.2,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(Icons.verified_outlined, size: 18),
+                              label: const Text(
+                                'Resolve',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed:
+                                  () =>
+                                      _updateTicketStatus(ticketId, 'closed'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFEB1E23),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(Icons.lock_outline_rounded, size: 18),
+                              label: const Text(
+                                'Close',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                  ],
                   Expanded(
                     child: SingleChildScrollView(
                       child: Column(
@@ -439,6 +743,201 @@ class _TicketScreenState extends State<TicketScreen> {
                               style: const TextStyle(fontSize: 14),
                             ),
                           ),
+                          const SizedBox(height: 24),
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Comments',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF133343),
+                                  ),
+                                ),
+                              ),
+                              if (isInProgress && ticketId.isNotEmpty)
+                                InkWell(
+                                  onTap:
+                                      () => _showAddCommentComposer(
+                                        context,
+                                        ticketId,
+                                      ),
+                                  borderRadius: BorderRadius.circular(999),
+                                  child: Ink(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF133343)
+                                          .withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                        color: const Color(0xFF133343)
+                                            .withOpacity(0.14),
+                                      ),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.add_comment_outlined,
+                                          size: 18,
+                                          color: Color(0xFF133343),
+                                        ),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          'Comment',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 12,
+                                            letterSpacing: 0.2,
+                                            color: Color(0xFF133343),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (ticketId.isEmpty)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey[300]!),
+                              ),
+                              child: const Text(
+                                'Ticket ID not available.',
+                                style: TextStyle(fontSize: 14),
+                              ),
+                            )
+                          else
+                            FutureBuilder<Map<String, dynamic>>(
+                              future: ApiService.getTicketComments(ticketId),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[50],
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey[300]!),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text('Loading comments...'),
+                                      ],
+                                    ),
+                                  );
+                                }
+
+                                if (snapshot.hasError) {
+                                  return Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[50],
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey[300]!),
+                                    ),
+                                    child: Text(
+                                      'Failed to load comments: ${snapshot.error}',
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  );
+                                }
+
+                                final res = snapshot.data ?? {};
+                                final ok = res['status'] == 'success';
+                                final data = ok ? res['data'] : null;
+                                final list =
+                                    data is List ? data : (data is Map ? data['data'] : null);
+                                final items = (list is List) ? list : const [];
+
+                                if (items.isEmpty) {
+                                  return Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[50],
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey[300]!),
+                                    ),
+                                    child: const Text(
+                                      'No comments yet.',
+                                      style: TextStyle(fontSize: 14),
+                                    ),
+                                  );
+                                }
+
+                                return Column(
+                                  children: items.map((e) {
+                                    if (e is! Map) return const SizedBox.shrink();
+                                    final name = e['name']?.toString() ?? '—';
+                                    final dateRaw = e['date']?.toString();
+                                    final comment = e['comment']?.toString() ?? '';
+                                    return Container(
+                                      width: double.infinity,
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[50],
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: Colors.grey[300]!),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  name,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFF133343),
+                                                  ),
+                                                ),
+                                              ),
+                                              Text(
+                                                _formatDate(dateRaw),
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            comment.trim().isEmpty
+                                                ? '—'
+                                                : comment.trim(),
+                                            style: const TextStyle(fontSize: 14),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                );
+                              },
+                            ),
                           if (fullData['attachments'] != null &&
                               fullData['attachments'].toString().isNotEmpty &&
                               fullData['attachments'].toString() != '[]') ...[
@@ -624,26 +1123,19 @@ class _TicketScreenState extends State<TicketScreen> {
       return;
     }
     try {
-      final response = await http.get(
-        Uri.parse(
-          '${ApiService.baseUrl}/api.php?action=download_attachment&attachment_id=$fileId',
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        String? contentDisposition = response.headers['content-disposition'];
-        String fileName = 'downloaded_file';
-        if (contentDisposition != null) {
-          final matches = RegExp(
-            r'filename="(.+?)"',
-          ).firstMatch(contentDisposition);
-          if (matches != null && matches.groupCount >= 1) {
-            fileName = matches.group(1)!;
-          }
+      final response = await ApiService.downloadAttachment(fileId);
+      if (response['status'] == 'success') {
+        final fileName = response['filename']?.toString().trim();
+        final base64Str = response['base64']?.toString().trim();
+        if (fileName == null ||
+            fileName.isEmpty ||
+            base64Str == null ||
+            base64Str.isEmpty) {
+          throw Exception('Server returned invalid attachment data.');
         }
         final directory = await getApplicationDocumentsDirectory();
         final file = File('${directory.path}/$fileName');
-        await file.writeAsBytes(response.bodyBytes);
+        await file.writeAsBytes(base64Decode(base64Str));
 
         if (mounted) {
           ScaffoldMessenger.of(ctx).showSnackBar(
@@ -654,7 +1146,9 @@ class _TicketScreenState extends State<TicketScreen> {
           );
         }
       } else {
-        throw Exception('Failed to download file');
+        throw Exception(
+          response['message']?.toString() ?? 'Failed to download file',
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -973,25 +1467,19 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
       return;
     }
     try {
-      final response = await http.get(
-        Uri.parse(
-          '${ApiService.baseUrl}/api.php?action=download_attachment&attachment_id=$fileId',
-        ),
-      );
-      if (response.statusCode == 200) {
-        String? contentDisposition = response.headers['content-disposition'];
-        String fileName = 'downloaded_file';
-        if (contentDisposition != null) {
-          final matches = RegExp(
-            r'filename="(.+?)"',
-          ).firstMatch(contentDisposition);
-          if (matches != null && matches.groupCount >= 1) {
-            fileName = matches.group(1)!;
-          }
+      final response = await ApiService.downloadAttachment(fileId);
+      if (response['status'] == 'success') {
+        final fileName = response['filename']?.toString().trim();
+        final base64Str = response['base64']?.toString().trim();
+        if (fileName == null ||
+            fileName.isEmpty ||
+            base64Str == null ||
+            base64Str.isEmpty) {
+          throw Exception('Server returned invalid attachment data.');
         }
         final directory = await getApplicationDocumentsDirectory();
         final file = File('${directory.path}/$fileName');
-        await file.writeAsBytes(response.bodyBytes);
+        await file.writeAsBytes(base64Decode(base64Str));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1001,7 +1489,9 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
           );
         }
       } else {
-        throw Exception('Failed to download file');
+        throw Exception(
+          response['message']?.toString() ?? 'Failed to download file',
+        );
       }
     } catch (e) {
       if (mounted) {

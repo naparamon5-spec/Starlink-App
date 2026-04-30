@@ -21,6 +21,8 @@ class AdminTicketDetailsPage extends StatefulWidget {
 class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   bool _loading = true;
   String? _error;
+  bool _isActionLoading = false;
+  bool _isCommentPosting = false;
 
   Map<String, dynamic>? _ticket;
   List<dynamic> _activities = [];
@@ -133,7 +135,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
 
     final results = await Future.wait([
       ApiService.getTicketById(id),
-      ApiService.getTicketActivities(id),
+      ApiService.getTicketComments(id),
       ApiService.getTicketAttachments(id),
     ]);
 
@@ -529,6 +531,34 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
 
   // ── status / priority / activity helpers ───────────────────────────────────
 
+  String _normalizeStatus(String raw) {
+    switch (raw.toLowerCase().trim()) {
+      case 'open':
+      case 'opened':
+        return 'OPEN';
+      case 'in_progress':
+      case 'in progress':
+      case 'inprogress':
+        return 'IN PROGRESS';
+      case 'resolved':
+      case 'done':
+      case 'completed':
+        return 'RESOLVED';
+      case 'closed':
+      case 'close':
+        return 'CLOSED';
+      default:
+        return raw.replaceAll('_', ' ').toUpperCase();
+    }
+  }
+
+  String get _currentStatus {
+    final t = _ticket;
+    if (t == null) return 'OPEN';
+    final raw = (t['status'] ?? t['ticket_status'] ?? '').toString();
+    return _normalizeStatus(raw.isEmpty ? 'open' : raw);
+  }
+
   Color _statusColor(String s) {
     final v = s.toLowerCase();
     if (v.contains('open')) return const Color(0xFF64748B);
@@ -573,6 +603,140 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     }
     if (v.contains('assign')) return _brandRed;
     return const Color(0xFF94A3B8);
+  }
+
+  Future<void> _updateTicketStatus(String newStatus) async {
+    final ticketId = widget.ticketId.trim();
+    if (ticketId.isEmpty) return;
+    if (_isActionLoading) return;
+
+    setState(() => _isActionLoading = true);
+    try {
+      final response = await ApiService.updateTicketStatus(ticketId, newStatus);
+      if (!mounted) return;
+      if (response['status'] == 'success') {
+        setState(() {
+          _ticket ??= <String, dynamic>{};
+          _ticket!['status'] = newStatus;
+        });
+        _showSnack('Ticket status updated successfully.');
+        await _load();
+      } else {
+        _showSnack(
+          response['message']?.toString() ?? 'Failed to update ticket status.',
+          isError: true,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack('Error updating ticket status: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isActionLoading = false);
+    }
+  }
+
+  Widget _buildActionBar() {
+    final status = _currentStatus;
+    final isOpen = status == 'OPEN';
+    final isInProgress = status == 'IN PROGRESS';
+
+    if (!isOpen && !isInProgress) return const SizedBox.shrink();
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Color(0xFFE8ECF0))),
+        ),
+        child: Row(
+          children: [
+            if (isOpen)
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed:
+                      _isActionLoading ? null : () => _updateTicketStatus(
+                        'in_progress',
+                      ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _brandRed,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon:
+                      _isActionLoading
+                          ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                          : const Icon(Icons.check_circle_outline_rounded),
+                  label: const Text(
+                    'Accept Ticket',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            if (isInProgress) ...[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed:
+                      _isActionLoading ? null : () => _updateTicketStatus(
+                        'resolved',
+                      ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF10B981),
+                    side: const BorderSide(color: Color(0xFF10B981), width: 1.2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.verified_outlined),
+                  label: const Text(
+                    'Resolve',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed:
+                      _isActionLoading ? null : () => _updateTicketStatus(
+                        'closed',
+                      ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _brandRed,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.lock_outline_rounded),
+                  label: const Text(
+                    'Close',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   // ── build ──────────────────────────────────────────────────────────────────
@@ -621,6 +785,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
           child: Container(height: 1, color: const Color(0xFFE8ECF0)),
         ),
       ),
+      bottomNavigationBar: (_ticket != null && !_loading) ? _buildActionBar() : null,
       body:
           _loading
               ? Center(
@@ -1092,6 +1257,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   // ── Activities Card ────────────────────────────────────────────────────────
 
   Widget _buildActivitiesCard() {
+    final canComment = _currentStatus == 'IN PROGRESS';
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1123,6 +1289,56 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                   ),
                 ),
                 const Spacer(),
+                if (canComment)
+                  InkWell(
+                    onTap:
+                        (_isCommentPosting || _loading)
+                            ? null
+                            : _showAddCommentDialog,
+                    borderRadius: BorderRadius.circular(999),
+                    child: Ink(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _brandRed.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: _brandRed.withOpacity(0.18)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _isCommentPosting
+                              ? SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    _brandRed,
+                                  ),
+                                ),
+                              )
+                              : Icon(
+                                Icons.add_comment_outlined,
+                                color: _brandRed,
+                                size: 18,
+                              ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Comment',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              color: _brandRed,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (_activities.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1190,17 +1406,18 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                     return '—';
                   }
 
-                  // The timeline object from the API uses 'action' and 'user_name'
-                  final action = field([
-                    'action',
-                    'type',
-                    'activity_type',
-                    'event',
-                    'status',
-                    'title',
-                    'name',
-                  ]);
+                  // Activities API uses: { date, comment, name, status }
+                  // Ticket timeline API uses: { action, user_name, new_value, ... }
+                  final rawStatus = field(['status']);
+                  final action =
+                      rawStatus != '—' && rawStatus.isNotEmpty
+                          ? _normalizeStatus(rawStatus)
+                          : field(['action', 'type', 'event', 'title']) != '—'
+                          ? field(['action', 'type', 'event', 'title'])
+                          : 'COMMENT';
+
                   final description = field([
+                    'comment', // activities API key
                     'description',
                     'message',
                     'note',
@@ -1208,10 +1425,12 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                     'details',
                     'body',
                     'remarks',
-                    'new_value', // timeline uses new_value for change details
+                    'new_value',
                   ]);
+
                   final performedBy = field([
-                    'user_name', // timeline API key
+                    'name', // activities API key
+                    'user_name',
                     'performed_by',
                     'user',
                     'created_by',
@@ -1256,6 +1475,202 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
             ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showAddCommentDialog() async {
+    final controller = TextEditingController();
+    final ticketId = widget.ticketId.trim();
+    if (ticketId.isEmpty) {
+      _showSnack('Ticket ID missing.', isError: true);
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+            final canPost = controller.text.trim().isNotEmpty;
+
+            Future<void> post() async {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+
+              setSheetState(() => _isCommentPosting = true);
+              try {
+                final res = await ApiService.addTicketComment(ticketId, text);
+                if (!mounted) return;
+                if (res['status'] == 'success') {
+                  if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                  _showSnack('Comment added.');
+                  await _load();
+                } else {
+                  _showSnack(
+                    res['message']?.toString() ?? 'Failed to add comment.',
+                    isError: true,
+                  );
+                }
+              } catch (e) {
+                if (!mounted) return;
+                _showSnack('Failed to add comment: $e', isError: true);
+              } finally {
+                if (mounted) setState(() => _isCommentPosting = false);
+                setSheetState(() => _isCommentPosting = false);
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE5E7EB),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: _brandRed.withOpacity(0.10),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                Icons.add_comment_outlined,
+                                color: _brandRed,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'Add a comment',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed:
+                                  _isCommentPosting
+                                      ? null
+                                      : () => Navigator.of(ctx).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: TextField(
+                            controller: controller,
+                            autofocus: true,
+                            minLines: 3,
+                            maxLines: 6,
+                            textInputAction: TextInputAction.newline,
+                            onChanged: (_) => setSheetState(() {}),
+                            decoration: const InputDecoration(
+                              hintText: 'Write something helpful…',
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${controller.text.trim().length}/1000',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF94A3B8),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed:
+                                  (!_isCommentPosting && canPost)
+                                      ? post
+                                      : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _brandRed,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_isCommentPosting) ...[
+                                    const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  const Text(
+                                    'Post Comment',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
