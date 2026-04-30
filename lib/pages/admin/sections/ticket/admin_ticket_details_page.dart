@@ -656,11 +656,11 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed:
-                      _isActionLoading ? null : () => _updateTicketStatus(
-                        'in_progress',
-                      ),
+                      _isActionLoading
+                          ? null
+                          : () => _updateTicketStatus('in_progress'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _brandRed,
+                    backgroundColor: const Color(0xFF10B981),
                     foregroundColor: Colors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -691,12 +691,15 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed:
-                      _isActionLoading ? null : () => _updateTicketStatus(
-                        'resolved',
-                      ),
+                      _isActionLoading
+                          ? null
+                          : () => _updateTicketStatus('resolved'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF10B981),
-                    side: const BorderSide(color: Color(0xFF10B981), width: 1.2),
+                    side: const BorderSide(
+                      color: Color(0xFF10B981),
+                      width: 1.2,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -713,11 +716,11 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed:
-                      _isActionLoading ? null : () => _updateTicketStatus(
-                        'closed',
-                      ),
+                      _isActionLoading
+                          ? null
+                          : () => _updateTicketStatus('closed'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _brandRed,
+                    backgroundColor: const Color.fromARGB(255, 240, 136, 67),
                     foregroundColor: Colors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -785,7 +788,8 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
           child: Container(height: 1, color: const Color(0xFFE8ECF0)),
         ),
       ),
-      bottomNavigationBar: (_ticket != null && !_loading) ? _buildActionBar() : null,
+      bottomNavigationBar:
+          (_ticket != null && !_loading) ? _buildActionBar() : null,
       body:
           _loading
               ? Center(
@@ -1618,9 +1622,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                             ),
                             ElevatedButton(
                               onPressed:
-                                  (!_isCommentPosting && canPost)
-                                      ? post
-                                      : null,
+                                  (!_isCommentPosting && canPost) ? post : null,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: _brandRed,
                                 foregroundColor: Colors.white,
@@ -1644,8 +1646,8 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                                         strokeWidth: 2,
                                         valueColor:
                                             AlwaysStoppedAnimation<Color>(
-                                          Colors.white,
-                                        ),
+                                              Colors.white,
+                                            ),
                                       ),
                                     ),
                                     const SizedBox(width: 8),

@@ -301,7 +301,10 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
-  Future<void> _showAddCommentComposer(BuildContext dialogContext, String ticketId) async {
+  Future<void> _showAddCommentComposer(
+    BuildContext dialogContext,
+    String ticketId,
+  ) async {
     final id = ticketId.trim();
     if (id.isEmpty) return;
     final controller = TextEditingController();
@@ -375,7 +378,9 @@ class _TicketScreenState extends State<TicketScreen> {
                               width: 38,
                               height: 38,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF133343).withOpacity(0.08),
+                                color: const Color(
+                                  0xFF133343,
+                                ).withOpacity(0.08),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(
@@ -396,7 +401,10 @@ class _TicketScreenState extends State<TicketScreen> {
                               ),
                             ),
                             TextButton(
-                              onPressed: posting ? null : () => Navigator.of(ctx).pop(),
+                              onPressed:
+                                  posting
+                                      ? null
+                                      : () => Navigator.of(ctx).pop(),
                               child: const Text('Cancel'),
                             ),
                           ],
@@ -461,8 +469,8 @@ class _TicketScreenState extends State<TicketScreen> {
                                         strokeWidth: 2,
                                         valueColor:
                                             AlwaysStoppedAnimation<Color>(
-                                          Colors.white,
-                                        ),
+                                              Colors.white,
+                                            ),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -501,7 +509,8 @@ class _TicketScreenState extends State<TicketScreen> {
       return raw.replaceAll('_', ' ').toUpperCase().trim();
     }
 
-    final ticketId = fullData['id']?.toString() ?? ticket['id']?.toString() ?? '';
+    final ticketId =
+        fullData['id']?.toString() ?? ticket['id']?.toString() ?? '';
     final status = normalizeStatus(fullData['status']?.toString() ?? 'OPEN');
     final isOpen = status == 'OPEN';
     final isInProgress = status == 'IN PROGRESS';
@@ -552,7 +561,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                     'in_progress',
                                   ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF133343),
+                                backgroundColor: const Color(0xFF10B981),
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 padding: const EdgeInsets.symmetric(
@@ -591,7 +600,10 @@ class _TicketScreenState extends State<TicketScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
-                              icon: const Icon(Icons.verified_outlined, size: 18),
+                              icon: const Icon(
+                                Icons.verified_outlined,
+                                size: 18,
+                              ),
                               label: const Text(
                                 'Resolve',
                                 style: TextStyle(fontWeight: FontWeight.w700),
@@ -602,10 +614,14 @@ class _TicketScreenState extends State<TicketScreen> {
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed:
-                                  () =>
-                                      _updateTicketStatus(ticketId, 'closed'),
+                                  () => _updateTicketStatus(ticketId, 'closed'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFEB1E23),
+                                backgroundColor: const Color.fromARGB(
+                                  255,
+                                  240,
+                                  136,
+                                  67,
+                                ),
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 padding: const EdgeInsets.symmetric(
@@ -615,7 +631,10 @@ class _TicketScreenState extends State<TicketScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
-                              icon: const Icon(Icons.lock_outline_rounded, size: 18),
+                              icon: const Icon(
+                                Icons.lock_outline_rounded,
+                                size: 18,
+                              ),
                               label: const Text(
                                 'Close',
                                 style: TextStyle(fontWeight: FontWeight.w700),
@@ -770,12 +789,14 @@ class _TicketScreenState extends State<TicketScreen> {
                                       vertical: 8,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF133343)
-                                          .withOpacity(0.08),
+                                      color: const Color(
+                                        0xFF133343,
+                                      ).withOpacity(0.08),
                                       borderRadius: BorderRadius.circular(999),
                                       border: Border.all(
-                                        color: const Color(0xFF133343)
-                                            .withOpacity(0.14),
+                                        color: const Color(
+                                          0xFF133343,
+                                        ).withOpacity(0.14),
                                       ),
                                     ),
                                     child: const Row(
@@ -829,7 +850,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                     decoration: BoxDecoration(
                                       color: Colors.grey[50],
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey[300]!),
+                                      border: Border.all(
+                                        color: Colors.grey[300]!,
+                                      ),
                                     ),
                                     child: const Row(
                                       children: [
@@ -854,7 +877,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                     decoration: BoxDecoration(
                                       color: Colors.grey[50],
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey[300]!),
+                                      border: Border.all(
+                                        color: Colors.grey[300]!,
+                                      ),
                                     ),
                                     child: Text(
                                       'Failed to load comments: ${snapshot.error}',
@@ -867,7 +892,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                 final ok = res['status'] == 'success';
                                 final data = ok ? res['data'] : null;
                                 final list =
-                                    data is List ? data : (data is Map ? data['data'] : null);
+                                    data is List
+                                        ? data
+                                        : (data is Map ? data['data'] : null);
                                 final items = (list is List) ? list : const [];
 
                                 if (items.isEmpty) {
@@ -877,7 +904,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                     decoration: BoxDecoration(
                                       color: Colors.grey[50],
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey[300]!),
+                                      border: Border.all(
+                                        color: Colors.grey[300]!,
+                                      ),
                                     ),
                                     child: const Text(
                                       'No comments yet.',
@@ -887,54 +916,70 @@ class _TicketScreenState extends State<TicketScreen> {
                                 }
 
                                 return Column(
-                                  children: items.map((e) {
-                                    if (e is! Map) return const SizedBox.shrink();
-                                    final name = e['name']?.toString() ?? '—';
-                                    final dateRaw = e['date']?.toString();
-                                    final comment = e['comment']?.toString() ?? '';
-                                    return Container(
-                                      width: double.infinity,
-                                      margin: const EdgeInsets.only(bottom: 10),
-                                      padding: const EdgeInsets.all(14),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[50],
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: Colors.grey[300]!),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
+                                  children:
+                                      items.map((e) {
+                                        if (e is! Map)
+                                          return const SizedBox.shrink();
+                                        final name =
+                                            e['name']?.toString() ?? '—';
+                                        final dateRaw = e['date']?.toString();
+                                        final comment =
+                                            e['comment']?.toString() ?? '';
+                                        return Container(
+                                          width: double.infinity,
+                                          margin: const EdgeInsets.only(
+                                            bottom: 10,
+                                          ),
+                                          padding: const EdgeInsets.all(14),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[50],
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.grey[300]!,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Expanded(
-                                                child: Text(
-                                                  name,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Color(0xFF133343),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      name,
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Color(
+                                                          0xFF133343,
+                                                        ),
+                                                      ),
+                                                    ),
                                                   ),
-                                                ),
+                                                  Text(
+                                                    _formatDate(dateRaw),
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
+                                              const SizedBox(height: 8),
                                               Text(
-                                                _formatDate(dateRaw),
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.grey[600],
+                                                comment.trim().isEmpty
+                                                    ? '—'
+                                                    : comment.trim(),
+                                                style: const TextStyle(
+                                                  fontSize: 14,
                                                 ),
                                               ),
                                             ],
                                           ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            comment.trim().isEmpty
-                                                ? '—'
-                                                : comment.trim(),
-                                            style: const TextStyle(fontSize: 14),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
+                                        );
+                                      }).toList(),
                                 );
                               },
                             ),
