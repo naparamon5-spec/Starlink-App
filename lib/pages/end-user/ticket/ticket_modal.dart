@@ -164,6 +164,7 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
         'Authorization': 'Bearer $token',
       };
 
+      // ── CHANGE 1: always use the base subscriptions endpoint ──────────────
       final subUrl = _buildSubscriptionUrl();
 
       final results = await Future.wait([
@@ -207,15 +208,25 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
               }).toList();
         }
 
+        // ── CHANGE 2: robust subscription list parsing ────────────────────
         if (results[2].statusCode == 200) {
           dynamic raw = subsBody['data'];
-          if (raw is Map) raw = raw['data'] ?? raw;
+          List<dynamic> list = [];
+          if (raw is List) {
+            list = raw;
+          } else if (raw is Map<String, dynamic>) {
+            final inner = raw['data'];
+            if (inner is List) list = inner;
+          }
           _subscriptions =
-              _asList(raw).map((item) {
-                return Map<String, dynamic>.fromEntries(
-                  item.entries.map((e) => MapEntry(e.key, e.value ?? '')),
-                );
-              }).toList();
+              list
+                  .whereType<Map<String, dynamic>>()
+                  .map(
+                    (item) => Map<String, dynamic>.fromEntries(
+                      item.entries.map((e) => MapEntry(e.key, e.value ?? '')),
+                    ),
+                  )
+                  .toList();
         }
 
         _isLoadingData = false;
@@ -232,14 +243,9 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
     }
   }
 
+  // ── CHANGE 1: simplified subscription URL ─────────────────────────────────
   String _buildSubscriptionUrl() {
-    if (_euCode != null && _euCode!.isNotEmpty) {
-      return '$_baseUrl/api/v1/subscriptions/end-user/$_euCode';
-    }
-    if (_endUserCode != null && _endUserCode!.isNotEmpty) {
-      return '$_baseUrl/api/v1/subscriptions/end-user/$_endUserCode';
-    }
-    return '$_baseUrl/api/v1/subscriptions/paginated?page=1&limit=200';
+    return '$_baseUrl/api/v1/subscriptions/';
   }
 
   Future<void> _loadEndUserCodes() async {
@@ -1180,30 +1186,6 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
                               horizontal: 16,
                               vertical: 8,
                             ),
-                            // decoration: BoxDecoration(
-                            //   color: Colors.white.withOpacity(
-                            //     _isSubmitting ? 0.08 : 0.18,
-                            //   ),
-                            //   borderRadius: BorderRadius.circular(10),
-                            // ),
-                            // child:
-                            //     _isSubmitting
-                            //         ? const SizedBox(
-                            //           width: 16,
-                            //           height: 16,
-                            //           child: CircularProgressIndicator(
-                            //             color: Colors.white,
-                            //             strokeWidth: 2,
-                            //           ),
-                            //         )
-                            //         : const Text(
-                            //           'Submit',
-                            //           style: TextStyle(
-                            //             color: Colors.white,
-                            //             fontWeight: FontWeight.w700,
-                            //             fontSize: 13,
-                            //           ),
-                            //         ),
                           ),
                         ),
                     ],
