@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import '../services/api_service.dart';
 import 'login_screen.dart';
 
@@ -55,120 +53,99 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     });
 
     try {
-      final requestBody = {
-        'token': widget.token, // 👈 only send token
-      };
-
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/routes/reset_password.php'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode(requestBody),
+      final data = await ApiService.resetPassword(
+        token: widget.token,
+        newPassword: _passwordController.text.trim(),
+        email: widget.email,
+        verificationCode: widget.verificationCode,
       );
 
       if (!mounted) return;
 
-      try {
-        final data = json.decode(response.body) as Map<String, dynamic>;
-
-        if (response.statusCode == 200) {
-          if (data['status'] == 'success' || data['success'] == true) {
-            await showDialog<void>(
-              context: context,
-              barrierDismissible: false,
-              builder:
-                  (ctx) => AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+      if (data['status'] == 'success' || data['success'] == true) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFFF0F0),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_circle_outline_rounded,
+                        color: _primary,
+                        size: 28,
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFFFF0F0),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check_circle_outline_rounded,
-                            color: _primary,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Password Reset!',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: _ink,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Your password has been reset successfully. You can now sign in with your new password.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: _inkSecondary,
-                            height: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.of(ctx).pop();
-                              Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(
-                                  builder: (context) => const LoginScreen(),
-                                ),
-                                (route) => false,
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _primary,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              'Back to Login',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Password Reset!',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: _ink,
+                      ),
                     ),
-                  ),
-            );
-          } else {
-            final error =
-                data['message'] as String? ?? data['error'] as String?;
-            setState(() {
-              _errorMessage = error ?? 'Failed to reset password';
-            });
-          }
-        } else {
-          setState(() {
-            _errorMessage = 'Server error. Please try again later.';
-          });
-        }
-      } catch (e) {
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Your password has been reset successfully. You can now sign in with your new password.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _inkSecondary,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (context) => const LoginScreen(),
+                            ),
+                            (route) => false,
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _primary,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Back to Login',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+        );
+      } else {
+        final error = data['message'] as String? ?? data['error'] as String?;
         setState(() {
-          _errorMessage = 'Invalid server response. Please try again.';
+          _errorMessage = error ?? 'Failed to reset password';
         });
       }
     } catch (e) {

@@ -131,6 +131,111 @@ class ApiService {
     Map<String, String>? queryParameters,
   }) => _authorizedGet(path, queryParameters: queryParameters);
 
+  // ─── Core authorized write helper (POST/PUT/PATCH/DELETE) ──────────────────
+  static Future<Map<String, dynamic>> _authorizedWrite(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Duration timeout = const Duration(seconds: 25),
+  }) async {
+    try {
+      final accessToken = await getValidAccessToken();
+      if (accessToken == null || accessToken.isEmpty) {
+        return {
+          'status': 'error',
+          'message': 'No access token available. Please login again.',
+        };
+      }
+
+      final uri = Uri.parse('$baseUrl$path');
+
+      Future<http.Response> doRequest(String token) {
+        final headers = <String, String>{
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        };
+
+        final encodedBody = body == null ? null : json.encode(body);
+        switch (method.toUpperCase()) {
+          case 'POST':
+            return _client
+                .post(uri, headers: headers, body: encodedBody)
+                .timeout(timeout);
+          case 'PUT':
+            return _client
+                .put(uri, headers: headers, body: encodedBody)
+                .timeout(timeout);
+          case 'PATCH':
+            return _client
+                .patch(uri, headers: headers, body: encodedBody)
+                .timeout(timeout);
+          case 'DELETE':
+            return _client
+                .delete(uri, headers: headers, body: encodedBody)
+                .timeout(timeout);
+          default:
+            return _client
+                .post(uri, headers: headers, body: encodedBody)
+                .timeout(timeout);
+        }
+      }
+
+      http.Response response = await doRequest(accessToken);
+
+      if (response.statusCode == 401) {
+        final refreshResult = await refreshToken();
+        if (refreshResult['status'] == 'success' &&
+            refreshResult['accessToken'] != null) {
+          response = await doRequest(refreshResult['accessToken'].toString());
+        } else {
+          await clearTokens();
+          return {
+            'status': 'error',
+            'message': 'Session expired. Please login again.',
+          };
+        }
+      }
+
+      dynamic decoded;
+      try {
+        decoded = json.decode(response.body);
+      } catch (_) {
+        decoded = null;
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (decoded is Map<String, dynamic>) {
+          final data = decoded.containsKey('data') ? decoded['data'] : decoded;
+          return {
+            'status': decoded['status']?.toString() ?? 'success',
+            'message': decoded['message']?.toString() ?? 'Success',
+            'data': data,
+            'raw': decoded,
+          };
+        }
+        return {'status': 'success', 'data': decoded, 'raw': decoded};
+      }
+
+      String msg = 'Server error: ${response.statusCode}';
+      if (decoded is Map) {
+        final m = decoded['message'] ?? decoded['Message'] ?? decoded['error'];
+        if (m != null) msg = m.toString();
+      }
+      return {
+        'status': 'error',
+        'message': msg,
+        'statusCode': response.statusCode,
+        'raw': decoded,
+      };
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
+
   static Future<Map<String, dynamic>> _getV1WithAuth(
     String path, {
     Duration timeout = const Duration(seconds: 20),
@@ -572,6 +677,94 @@ class ApiService {
         return {'status': 'error', 'message': msg, 'details': e.toString()};
       }
       return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> resetPassword({
+    required String token,
+    required String newPassword,
+    String? email,
+    String? verificationCode,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'token': token,
+        // Send common variants for backend compatibility.
+        'new_password': newPassword,
+        'password': newPassword,
+      };
+      if (email != null && email.trim().isNotEmpty) {
+        payload['email'] = email.trim();
+      }
+      if (verificationCode != null && verificationCode.trim().isNotEmpty) {
+        payload['verification_code'] = verificationCode.trim();
+        payload['otp'] = verificationCode.trim();
+      }
+
+      final response = await _client
+          .post(
+            Uri.parse('$baseUrl/v1/auth/reset-password'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: json.encode(payload),
+          )
+          .timeout(
+            const Duration(seconds: 20),
+            onTimeout:
+                () => http.Response(
+                  json.encode({
+                    'status': 'error',
+                    'message': 'Connection timed out. Please try again.',
+                  }),
+                  408,
+                ),
+          );
+
+      dynamic decoded;
+      try {
+        decoded = json.decode(response.body);
+      } catch (_) {
+        decoded = null;
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (decoded is Map<String, dynamic>) {
+          final status = decoded['status']?.toString().toLowerCase();
+          if (status == 'error' || decoded['success'] == false) {
+            return {
+              'status': 'error',
+              'message':
+                  decoded['message']?.toString() ?? 'Failed to reset password.',
+              'raw': decoded,
+            };
+          }
+          return {
+            'status': decoded['status']?.toString() ?? 'success',
+            'message':
+                decoded['message']?.toString() ??
+                'Password has been reset successfully.',
+            'raw': decoded,
+          };
+        }
+        return {
+          'status': 'success',
+          'message': 'Password has been reset successfully.',
+        };
+      }
+
+      String msg = 'Server error: ${response.statusCode}';
+      if (decoded is Map) {
+        final m = decoded['message'] ?? decoded['Message'] ?? decoded['error'];
+        if (m != null) msg = m.toString();
+      }
+      return {'status': 'error', 'message': msg, 'raw': decoded};
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
     }
   }
 
@@ -1367,6 +1560,57 @@ class ApiService {
     String ticketId,
     String newStatus,
   ) async {
+    final id = ticketId.trim();
+    final status = newStatus.trim();
+    if (id.isEmpty || status.isEmpty) {
+      return {'status': 'error', 'message': 'Ticket ID and status are required.'};
+    }
+
+    // Prefer v1 API (authenticated). Backend implementations vary; try common
+    // routes and payload keys, then fall back to legacy endpoint.
+    final candidates = <Map<String, dynamic>>[
+      {
+        'method': 'PUT',
+        'path': '/v1/tickets/$id',
+        'body': {'status': status},
+      },
+      {
+        'method': 'PATCH',
+        'path': '/v1/tickets/$id',
+        'body': {'status': status},
+      },
+      {
+        'method': 'PUT',
+        'path': '/v1/tickets/$id/status',
+        'body': {'status': status},
+      },
+      {
+        'method': 'POST',
+        'path': '/v1/tickets/$id/status',
+        'body': {'status': status},
+      },
+      {
+        'method': 'POST',
+        'path': '/v1/tickets/status/$id',
+        'body': {'status': status},
+      },
+      {
+        'method': 'POST',
+        'path': '/v1/tickets/update/status',
+        'body': {'ticket_id': id, 'status': status},
+      },
+    ];
+
+    for (final c in candidates) {
+      final result = await _authorizedWrite(
+        c['method'] as String,
+        c['path'] as String,
+        body: Map<String, dynamic>.from(c['body'] as Map),
+      );
+      if (result['status'] == 'success') return result;
+    }
+
+    // Legacy fallback (some environments still use this).
     try {
       final response = await _client.post(
         Uri.parse('$baseUrl/api.php?action=update_ticket_status'),
@@ -1374,18 +1618,44 @@ class ApiService {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: json.encode({'ticket_id': ticketId, 'status': newStatus}),
+        body: json.encode({'ticket_id': id, 'status': status}),
       );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') return data;
-        throw Exception(data['message'] ?? 'Failed to update ticket status');
+      dynamic decoded;
+      try {
+        decoded = json.decode(response.body);
+      } catch (_) {
+        decoded = null;
       }
-      throw Exception('Server error: ${response.statusCode}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (decoded is Map<String, dynamic>) return decoded;
+        return {'status': 'success', 'data': decoded, 'raw': decoded};
+      }
+
+      String msg = 'Server error: ${response.statusCode}';
+      if (decoded is Map) {
+        final m = decoded['message'] ?? decoded['Message'] ?? decoded['error'];
+        if (m != null) msg = m.toString();
+      }
+      return {'status': 'error', 'message': msg, 'raw': decoded};
     } catch (e) {
-      throw Exception('Failed to update ticket status: $e');
+      return {
+        'status': 'error',
+        'message': 'Failed to update ticket status: $e',
+      };
     }
   }
+
+  // ─── Ticket status shortcuts (Accept/Resolve/Close) ───────────────────────
+
+  static Future<Map<String, dynamic>> acceptTicket(String ticketId) async =>
+      updateTicketStatus(ticketId, 'in_progress');
+
+  static Future<Map<String, dynamic>> resolveTicket(String ticketId) async =>
+      updateTicketStatus(ticketId, 'resolved');
+
+  static Future<Map<String, dynamic>> closeTicket(String ticketId) async =>
+      updateTicketStatus(ticketId, 'closed');
 
   static Future<Map<String, dynamic>> getTicketCategories() async {
     try {
@@ -1504,6 +1774,74 @@ class ApiService {
     final result = await _authorizedGetJson('/v1/activities/$ticketId');
     if (result['status'] != 'success') return Map<String, dynamic>.from(result);
     return {'status': 'success', 'data': result['data'], 'raw': result['raw']};
+  }
+
+  // Alias for clarity in UI code: "activities" are ticket comments/timeline.
+  static Future<Map<String, dynamic>> getTicketComments(String ticketId) async =>
+      getTicketActivities(ticketId);
+
+  // ─── Add ticket comment (Activities) ──────────────────────────────────────
+  static Future<Map<String, dynamic>> addTicketComment(
+    String ticketId,
+    String comment,
+  ) async {
+    final id = ticketId.trim();
+    final text = comment.trim();
+    if (id.isEmpty || text.isEmpty) {
+      return {'status': 'error', 'message': 'Ticket ID and comment are required.'};
+    }
+
+    // Try common backend shapes. We keep this resilient because deployments
+    // sometimes expose different routes/payload keys.
+    final candidates = <Map<String, dynamic>>[
+      // POST /v1/activities/:ticketNo  { comment: "..." }
+      {
+        'method': 'POST',
+        'path': '/v1/activities/$id',
+        'body': {'comment': text},
+      },
+      // POST /v1/activities  { ticket_no: 123, comment: "..." }
+      {
+        'method': 'POST',
+        'path': '/v1/activities',
+        'body': {'ticket_no': id, 'comment': text},
+      },
+      // POST /v1/tickets/:id/comments  { comment: "..." }
+      {
+        'method': 'POST',
+        'path': '/v1/tickets/$id/comments',
+        'body': {'comment': text},
+      },
+      // POST /v1/tickets/:id/comment  { comment: "..." }
+      {
+        'method': 'POST',
+        'path': '/v1/tickets/$id/comment',
+        'body': {'comment': text},
+      },
+      // POST /v1/comments  { ticket_no: 123, comment: "..." }
+      {
+        'method': 'POST',
+        'path': '/v1/comments',
+        'body': {'ticket_no': id, 'comment': text},
+      },
+    ];
+
+    Map<String, dynamic>? lastError;
+    for (final c in candidates) {
+      final result = await _authorizedWrite(
+        c['method'] as String,
+        c['path'] as String,
+        body: Map<String, dynamic>.from(c['body'] as Map),
+      );
+      if (result['status'] == 'success') return result;
+      lastError = result;
+    }
+
+    return lastError ??
+        {
+          'status': 'error',
+          'message': 'Failed to add comment.',
+        };
   }
 
   static Future<Map<String, dynamic>> getTicketAttachments(
