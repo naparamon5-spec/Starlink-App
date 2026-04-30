@@ -1114,12 +1114,18 @@ class CreateUserSheet extends StatefulWidget {
   final VoidCallback onCreated;
   final void Function(String msg) onError;
   final String currentUserRole;
+  final String? prefilledRole;
+  final String? prefilledCompanyCode;
+  final String? prefilledCompanyName;
 
   const CreateUserSheet({
     super.key,
     required this.onCreated,
     required this.onError,
     required this.currentUserRole,
+    this.prefilledRole,
+    this.prefilledCompanyCode,
+    this.prefilledCompanyName,
   });
 
   @override
@@ -1160,7 +1166,22 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
   @override
   void initState() {
     super.initState();
+    _selectedRoleValue = widget.prefilledRole;
+    if (widget.prefilledRole != null) {
+      if (widget.prefilledRole == 'end_user') {
+        _selectedRoleLabel = 'End User';
+      } else if (widget.prefilledRole == 'customer') {
+        _selectedRoleLabel = 'Customer';
+      } else {
+        _selectedRoleLabel = widget.prefilledRole![0].toUpperCase() + widget.prefilledRole!.substring(1);
+      }
+    }
+    _selectedCompanyValue = widget.prefilledCompanyCode;
+    _selectedCompanyLabel = widget.prefilledCompanyName;
     _loadRoles();
+    if (_selectedRoleValue != null) {
+      _loadCompanies(clearSelection: false);
+    }
   }
 
   @override
@@ -1225,12 +1246,14 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
     }
   }
 
-  Future<void> _loadCompanies() async {
+  Future<void> _loadCompanies({bool clearSelection = true}) async {
     setState(() {
       _loadingCompanies = true;
       _companies = [];
-      _selectedCompanyValue = null;
-      _selectedCompanyLabel = null;
+      if (clearSelection) {
+        _selectedCompanyValue = null;
+        _selectedCompanyLabel = null;
+      }
     });
 
     try {

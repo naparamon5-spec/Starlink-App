@@ -192,6 +192,9 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
       builder:
           (_) => CreateUserSheet(
             currentUserRole: 'admin',
+            prefilledRole: 'end_user',
+            prefilledCompanyCode: widget.endUserCode,
+            prefilledCompanyName: widget.endUserName,
             onCreated: () {
               _loadAll();
               ScaffoldMessenger.of(context).showSnackBar(
