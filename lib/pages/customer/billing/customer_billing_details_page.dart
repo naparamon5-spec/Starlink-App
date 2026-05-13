@@ -335,15 +335,17 @@ class _CustomerBillingDetailsPageState extends State<CustomerBillingDetailsPage>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // ── Payment status banner ────────────────────
-                        _PaymentBanner(
-                          isPaid: isPaid,
-                          amount: amount,
-                          paid: paid,
-                          balance: balance,
-                          progress: progress,
-                          fmtAmt: _fmtAmt,
-                        ),
-                        const SizedBox(height: 24),
+                        if (amount > 0 && paid > 0) ...[
+                          _PaymentBanner(
+                            isPaid: isPaid,
+                            amount: amount,
+                            paid: paid,
+                            balance: balance,
+                            progress: progress,
+                            fmtAmt: _fmtAmt,
+                          ),
+                          const SizedBox(height: 24),
+                        ],
 
                         // ── Summary stat row ─────────────────────────
                         const _SectionLabel(label: 'PAYMENT OVERVIEW'),
@@ -912,10 +914,10 @@ class _PaymentDetailCard extends StatelessWidget {
             icon: Icons.account_balance_wallet_outlined,
             iconColor: _paidGreen,
             label: 'Payment Summary',
-            trailing: _StatusBadge(
-              label: isPaid ? 'PAID' : 'OUTSTANDING',
-              color: isPaid ? _paidGreen : _accent,
-            ),
+            trailing:
+                isPaid
+                    ? const _StatusBadge(label: 'PAID', color: _paidGreen)
+                    : null,
           ),
           const _HDivider(),
           Padding(

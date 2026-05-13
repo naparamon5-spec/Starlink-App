@@ -286,7 +286,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   String _timeAgo(String? raw) {
     if (raw == null || raw.isEmpty || raw == 'null') return '';
     try {
-      final dt = DateTime.parse(raw).toLocal();
+      final dt = DateTime.parse(raw).toUtc().toLocal();
       final diff = DateTime.now().difference(dt);
       if (diff.inSeconds < 60) return 'just now';
       if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
@@ -301,27 +301,21 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   String _formatDate(String? raw) {
     if (raw == null || raw.isEmpty || raw == 'null') return '—';
     try {
-      final dt = DateTime.parse(raw).toLocal();
+      final utcDate = DateTime.parse(raw).toUtc();
+      final manilaDate = utcDate.add(const Duration(hours: 8));
+      
       const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
       ];
-      final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-      final m = dt.minute.toString().padLeft(2, '0');
-      final period = dt.hour >= 12 ? 'PM' : 'AM';
-      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}  $h:$m $period';
+      
+      final h = manilaDate.hour % 12 == 0 ? 12 : manilaDate.hour % 12;
+      final m = manilaDate.minute.toString().padLeft(2, '0');
+      final period = manilaDate.hour >= 12 ? 'PM' : 'AM';
+      
+      return '${months[manilaDate.month - 1]} ${manilaDate.day.toString().padLeft(2, '0')}, ${manilaDate.year}  $h:$m $period';
     } catch (_) {
-      return raw;
+      return raw ?? '—';
     }
   }
 
@@ -669,6 +663,10 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
       data['requester']?.toString(),
       widget.ticket['Contact']?.toString(),
     ]);
+    final String email = _resolveValue([
+      data['created_by_email']?.toString(),
+      widget.ticket['Email']?.toString(),
+    ]);
 
     final String createdAt = _resolveValue([
       data['created_at']?.toString(),
@@ -857,6 +855,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                           children: [
                             _KVRow(label: 'Contact', value: contact),
                             const SizedBox(height: 8),
+                            _KVRow(label: 'Email', value: email),
+                            const SizedBox(height: 8),
                             _KVRow(
                               label: 'Created At',
                               value: _formatDate(createdAt),
@@ -944,7 +944,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                             final att = attachments[i];
                             if (att is! Map) return const SizedBox.shrink();
                             final name = _str(
-                              att['name'] ??
+                              att['original_name'] ??
+                                  att['name'] ??
                                   att['filename'] ??
                                   att['file_name'],
                               fallback: 'Unknown file',
@@ -953,10 +954,12 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                                 name.contains('.')
                                     ? name.split('.').last.toLowerCase()
                                     : '';
-                            final size = _str(
+                            final sizeStr = _str(
                               att['size'] ?? att['file_size'],
-                              fallback: '',
+                              fallback: '0',
                             );
+                            final sizeInBytes = double.tryParse(sizeStr) ?? 0.0;
+                            final sizeDisplay = '${(sizeInBytes / 1024).toStringAsFixed(1)}KB';
                             return Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -1010,14 +1013,13 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                                             color: _ink,
                                           ),
                                         ),
-                                        if (size.isNotEmpty)
-                                          Text(
-                                            size,
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: _inkTertiary,
-                                            ),
+                                        Text(
+                                          sizeDisplay,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: _inkTertiary,
                                           ),
+                                        ),
                                       ],
                                     ),
                                   ),

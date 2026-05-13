@@ -7,6 +7,9 @@ import '../../login_screen.dart';
 import 'security_settings.dart';
 import 'notifications.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -87,55 +90,106 @@ class _ProfileScreenState extends State<ProfileScreen>
     return null;
   }
 
+  // ── Helper ───────────────────────────────────────────────────────────────
+  
+  http.Client get _httpClient {
+    final httpClient = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15)
+      ..badCertificateCallback = (cert, host, port) => true;
+    return IOClient(httpClient);
+  }
+
   Future<void> _loadProfileData() async {
     try {
       _prefs = await SharedPreferences.getInstance();
       final userId = await _resolveUserId();
-      if (userId == null) throw Exception('User ID not found');
+      
+      Map<String, dynamic> response;
+      if (userId != null) {
+        response = await ApiService.getCurrentUser(userId);
+      } else {
+        // Fallback: try fetching the current user profile directly
+        final token = await ApiService.getValidAccessToken();
+        if (token == null) throw Exception('User not authenticated');
+        
+        final res = await _httpClient.get(
+            Uri.parse('${ApiService.baseUrl}/v1/auth/me'),
+            headers: {'Authorization': 'Bearer $token'},
+        );
+        if (res.statusCode == 200) {
+          response = {'status': 'success', 'data': json.decode(res.body)};
+        } else {
+          throw Exception('User ID not found and failed to fetch profile');
+        }
+      }
 
       final savedImagePath = _prefs.getString('profileImagePath');
       if (savedImagePath != null) {
         setState(() => _profileImagePath = savedImagePath);
       }
 
-      final response = await ApiService.getCurrentUser(userId);
+      Map<String, dynamic> merged = {};
       if (response['status'] == 'success' && response['data'] != null) {
-        final userData = response['data'];
-        final firstName = userData['first_name'] ?? '';
-        final lastName = userData['last_name'] ?? '';
-        final middleName = userData['middle_name'] ?? '';
-        final fullName =
-            (firstName +
-                    (middleName.isNotEmpty ? ' $middleName' : '') +
-                    (lastName.isNotEmpty ? ' $lastName' : ''))
-                .trim();
-
-        setState(() {
-          _userId = userData['id']?.toString() ?? 'N/A';
-          _fullName =
-              fullName.isNotEmpty ? fullName : (userData['name'] ?? 'N/A');
-          _lastName =
-              lastName.isNotEmpty ? lastName : (userData['last_name'] ?? 'N/A');
-          _position = userData['position'] ?? 'end_user';
-          _userEmail = userData['email'] ?? _prefs.getString('email') ?? 'N/A';
-          _isLoading = false;
-        });
-
-        final parsedId = int.tryParse(_userId);
-        if (parsedId != null) await _prefs.setInt('user_id', parsedId);
-        await _prefs.setString('name', _fullName);
-        await _prefs.setString('lastName', _lastName);
-        await _prefs.setString('position', _position);
-        await _prefs.setString('email', _userEmail);
-
-        _fadeController.forward(from: 0);
+        merged.addAll(Map<String, dynamic>.from(response['data'] as Map));
       } else {
         throw Exception(response['message'] ?? 'Failed to fetch user data');
       }
+
+      // Step 2: Get supplemental info (e.g. position)
+      try {
+        final token = await ApiService.getValidAccessToken();
+        if (token != null && token.isNotEmpty) {
+          final uri = Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/');
+          final response = await _httpClient.get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          ).timeout(const Duration(seconds: 15));
+
+          if (response.statusCode == 200) {
+            final decoded = json.decode(response.body);
+            if (decoded is Map<String, dynamic>) {
+              final extraData = (decoded['data'] as Map<String, dynamic>?) ?? decoded;
+              merged.addAll(extraData);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[ProfileScreen] Supplemental data error: $e');
+      }
+
+      // Step 3: Set State
+      final userData = merged;
+      final firstName = userData['first_name'] ?? '';
+      final lastName = userData['last_name'] ?? '';
+      final middleName = userData['middle_name'] ?? '';
+      final fullName = (firstName +
+              (middleName.isNotEmpty ? ' $middleName' : '') +
+              (lastName.isNotEmpty ? ' $lastName' : ''))
+          .trim();
+
+      setState(() {
+        _userId = userData['id']?.toString() ?? 'N/A';
+        _fullName = fullName.isNotEmpty ? fullName : (userData['name'] ?? 'N/A');
+        _lastName = lastName.isNotEmpty ? lastName : (userData['last_name'] ?? 'N/A');
+        _position = userData['position']?.toString() ?? userData['role']?.toString() ?? 'end_user';
+        _userEmail = userData['email'] ?? _prefs.getString('email') ?? 'N/A';
+        _isLoading = false;
+      });
+
+      final parsedId = int.tryParse(_userId);
+      if (parsedId != null) await _prefs.setInt('user_id', parsedId);
+      await _prefs.setString('name', _fullName);
+      await _prefs.setString('lastName', _lastName);
+      await _prefs.setString('position', _position);
+      await _prefs.setString('email', _userEmail);
+
+      _fadeController.forward(from: 0);
     } catch (e) {
       setState(() {
-        _userId =
-            _prefs.getString('userId') ?? _prefs.getString('user_id') ?? 'N/A';
+        _userId = _prefs.getString('userId') ?? _prefs.getString('user_id') ?? 'N/A';
         _fullName = _prefs.getString('name') ?? 'N/A';
         _lastName = _prefs.getString('lastName') ?? 'N/A';
         _position = _prefs.getString('position') ?? 'N/A';

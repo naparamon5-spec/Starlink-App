@@ -44,6 +44,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   // Read-only fields from API
   String? _position;
+  String? _role;
   bool? _isActive; // true = active, false = inactive, null = unknown
 
   // The user ID resolved from the API (not from prefs)
@@ -99,12 +100,13 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     _prefs = await SharedPreferences.getInstance();
 
     // ── Step 1: Call /v1/auth/me for id, names, email ──────────────────────
-    Map<String, dynamic>? meData;
+    Map<String, dynamic> merged = {};
     try {
       final response = await ApiService.getMe();
       if (response['status'] == 'success') {
-        meData = _unwrapUser(response['data']);
+        final meData = _unwrapUser(response['data']);
         if (meData != null) {
+          merged.addAll(meData);
           final rawId = meData['id'];
           if (rawId != null) {
             _resolvedUserId = int.tryParse(rawId.toString());
@@ -118,81 +120,72 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       debugPrint('[EditProfile] getMe error: $e');
     }
 
-    // ── Step 2: Call /api/v1/users/my/profile/ for position & inactive ─────
-    Map<String, dynamic>? profileData;
+    // ── Step 2: Call Supplemental profile: /v1/users/my/profile/ ──────────
     try {
       final token = await ApiService.getValidAccessToken();
       if (token != null && token.isNotEmpty) {
-        final uri = Uri.parse(
-          'https://starlink-api.ardentnetworks.com.ph/api/v1/users/my/profile/',
-        );
-        final res = await _httpClient
-            .get(
-              uri,
-              headers: {
-                'Accept': 'application/json',
-                'Authorization': 'Bearer $token',
-              },
-            )
-            .timeout(const Duration(seconds: 15));
+        final res = await _httpClient.get(
+          Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/'),
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ).timeout(const Duration(seconds: 10));
 
         if (res.statusCode == 200) {
           final decoded = json.decode(res.body);
           if (decoded is Map<String, dynamic>) {
-            profileData = (decoded['data'] as Map<String, dynamic>?) ?? decoded;
+            final extra = (decoded['data'] is Map<String, dynamic>)
+                ? decoded['data'] as Map<String, dynamic>
+                : decoded;
+            extra.forEach((k, v) {
+              if (v != null && v.toString().isNotEmpty && v.toString() != 'null') {
+                merged[k] = v;
+              }
+            });
           }
-        } else {
-          debugPrint('[EditProfile] profile endpoint ${res.statusCode}');
         }
       }
     } catch (e) {
-      debugPrint('[EditProfile] profile fetch error: $e');
+      debugPrint('[EditProfile] Supplemental fetch error (non-fatal): $e');
     }
 
-    // ── Step 3: Merge — profileData wins on conflict ────────────────────────
-    // meData      → id, first_name, last_name, middle_name, email
-    // profileData → position, inactive (may also carry name/email)
-    final merged = <String, dynamic>{...?meData, ...?profileData};
-
     if (merged.isNotEmpty) {
-      final firstName = _str(merged, 'first_name');
-      final lastName = _str(merged, 'last_name');
-      final middleName = _str(merged, 'middle_name') ?? '';
+      final firstName = _str(merged, 'first_name') ?? _str(merged, 'firstName');
+      final lastName = _str(merged, 'last_name') ?? _str(merged, 'lastName');
+      final middleName = _str(merged, 'middle_name') ?? _str(merged, 'middleName') ?? '';
       final email = _str(merged, 'email') ?? '';
 
-      if (firstName != null) await _prefs.setString('firstName', firstName);
-      if (lastName != null) await _prefs.setString('lastName', lastName);
+      await _prefs.setString('firstName', firstName ?? '');
+      await _prefs.setString('lastName', lastName ?? '');
       await _prefs.setString('middleName', middleName);
       await _prefs.setString('email', email);
 
-      // Position: check common field names from both endpoints
-      _position =
-          _str(merged, 'position') ??
-          _str(merged, 'job_title') ??
-          _str(merged, 'designation');
+      // Extract Position & Role
+      _position = _resolvePosition(merged);
+      _role = _resolveRole(merged);
 
-      // Inactive flag from the profile endpoint
+      // Inactive flag
       _isActive = _resolveActive(merged);
 
       setState(() {
-        _firstNameController.text =
-            firstName ?? _prefs.getString('firstName') ?? '';
-        _lastNameController.text =
-            lastName ?? _prefs.getString('lastName') ?? '';
+        _firstNameController.text = firstName ?? '';
+        _lastNameController.text = lastName ?? '';
         _middleNameController.text = middleName;
         _emailController.text = email;
         _savedImagePath = _prefs.getString('profileImagePath');
         _isLoading = false;
       });
 
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _animController.forward(),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) => _animController.forward());
       return;
     }
 
     // ── Fallback: cached SharedPreferences ──────────────────────────────────
     _resolvedUserId ??= _prefs.getInt('user_id');
+    _position = _prefs.getString('position') ?? 'Customer';
+    _role = _prefs.getString('role') ?? 'User';
+    
     setState(() {
       _firstNameController.text = _prefs.getString('firstName') ?? '';
       _lastNameController.text = _prefs.getString('lastName') ?? '';
@@ -202,10 +195,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       _isLoading = false;
     });
 
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _animController.forward(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _animController.forward());
   }
+
+  // ── Helper methods ────────────────────────────────────────────────────────
 
   /// Defensively unwraps the user object from whatever shape arrives.
   Map<String, dynamic>? _unwrapUser(dynamic raw) {
@@ -231,14 +224,48 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     return v;
   }
 
+  String _toTitleCase(String input) {
+    return input
+        .replaceAll('_', ' ')
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .join(' ');
+  }
+
+  String _resolvePosition(Map<String, dynamic> data) {
+    const keys = ['position', 'job_title', 'jobTitle', 'title'];
+    for (final key in keys) {
+      final raw = data[key];
+      if (raw != null) {
+        final v = raw.toString().trim();
+        if (v.isNotEmpty && v.toLowerCase() != 'null') return _toTitleCase(v);
+      }
+    }
+    return 'Customer';
+  }
+
+  String _resolveRole(Map<String, dynamic> data) {
+    const keys = ['role', 'user_role', 'userRole', 'type', 'account_type'];
+    for (final key in keys) {
+      final raw = data[key];
+      if (raw != null) {
+        final v = raw.toString().trim();
+        if (v.isNotEmpty && v.toLowerCase() != 'null') return _toTitleCase(v);
+      }
+    }
+    return 'User';
+  }
+
   /// Resolves active status.
   /// Profile API: "inactive": "N" → active (true), "inactive": "Y" → inactive (false)
   bool? _resolveActive(Map<String, dynamic> data) {
     final inactiveRaw = data['inactive'];
     if (inactiveRaw != null) {
       final s = inactiveRaw.toString().toUpperCase().trim();
-      if (s == 'N' || s == 'FALSE' || s == '0') return true;
-      if (s == 'Y' || s == 'TRUE' || s == '1') return false;
+      // 'N' means Not Inactive (Active), 'Y' means Yes Inactive (Inactive)
+      if (s == 'N') return true;
+      if (s == 'Y') return false;
     }
     for (final k in ['active', 'is_active', 'isActive', 'status', 'state']) {
       final raw = data[k];
@@ -597,81 +624,57 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   );
 
   Widget _avatar() => Center(
-    child: Stack(
-      children: [
-        GestureDetector(
-          onTap: _showImageOptions,
-          child: Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: _primaryDark.withOpacity(0.35),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-              image:
-                  _getProfileImage() != null
-                      ? DecorationImage(
-                        image: _getProfileImage()!,
-                        fit: BoxFit.cover,
-                      )
-                      : null,
-            ),
-            child:
-                _getProfileImage() == null
-                    ? Center(
-                      child:
-                          _isImageLoading
-                              ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
-                              : Text(
-                                _initials,
-                                style: const TextStyle(
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                    )
-                    : null,
-          ),
+    child: Container(
+      width: 88,
+      height: 88,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        Positioned(
-          right: -2,
-          bottom: -2,
-          child: Container(
-            decoration: BoxDecoration(
-              color: _surface,
-              shape: BoxShape.circle,
-              border: Border.all(color: _border, width: 2),
-            ),
-            // child: IconButton(
-            //   icon: const Icon(Icons.camera_alt, size: 16, color: _primary),
-            //   onPressed: _isImageLoading ? null : _showImageOptions,
-            //   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            //   padding: const EdgeInsets.all(6),
-            // ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: _primaryDark.withOpacity(0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
-        ),
-      ],
+        ],
+        image:
+            _getProfileImage() != null
+                ? DecorationImage(
+                  image: _getProfileImage()!,
+                  fit: BoxFit.cover,
+                )
+                : null,
+      ),
+      child:
+          _getProfileImage() == null
+              ? Center(
+                child:
+                    _isImageLoading
+                        ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                        : Text(
+                          _initials,
+                          style: const TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+              )
+              : null,
     ),
   );
 
@@ -681,6 +684,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   Widget build(BuildContext context) {
     final positionDisplay =
         (_position != null && _position!.isNotEmpty) ? _position! : '—';
+    final roleDisplay =
+        (_role != null && _role!.isNotEmpty) ? _role! : '—';
 
     final String statusLabel;
     final Color statusColor;
@@ -820,17 +825,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                 children: [
                                   // Avatar
                                   _avatar(),
-                                  const SizedBox(height: 8),
-                                  const Center(
-                                    child: Text(
-                                      'Tap to change photo',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: _inkTertiary,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ),
                                   const SizedBox(height: 28),
 
                                   // ── Personal Information ──────────────────
@@ -884,6 +878,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                   _card(
                                     child: Column(
                                       children: [
+                                        _infoRow(
+                                          icon: Icons.badge_outlined,
+                                          label: 'Role',
+                                          value: roleDisplay,
+                                        ),
+                                        const SizedBox(height: 12),
                                         _infoRow(
                                           icon: Icons.work_outline_rounded,
                                           label: 'Position',

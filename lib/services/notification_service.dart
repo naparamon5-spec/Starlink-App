@@ -4,11 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
-// import '../config/ssl_config.dart'; // Commented out as it’s not provided
+import 'api_service.dart';
 
 class NotificationService {
   static const String _notificationsKey = 'app_notifications';
   static const String _unreadCountKey = 'unread_notifications_count';
+
+  static String get baseUrl => ApiService.baseUrl;
 
   // Create a new notification
   static Future<void> createNotification({
@@ -307,9 +309,6 @@ class NotificationService {
   }
 
   // BACKEND-BASED CUSTOMER NOTIFICATIONS
-  static String get baseUrl {
-    return 'https://starlink-api.ardentnetworks.com.ph/api/';
-  }
 
   // Create a custom HTTP client that uses our SSL configuration
   static http.Client get _client {

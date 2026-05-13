@@ -15,6 +15,7 @@ import 'profile/admin_edit_profile_page.dart';
 import 'profile/admin_manage_users_page.dart';
 import 'profile/admin_user_guide_page.dart';
 import 'sections/agent/admin_create_agent_page.dart';
+import '../change-password.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -113,6 +114,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     if (!mounted) return;
 
     if (meRes['status'] != 'success') {
+      if (meRes['message']?.toString().contains('login') == true ||
+          meRes['statusCode'] == 401) {
+        // Redirect to login if session is expired
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+        return;
+      }
       setState(() {
         _loadingDashboard = false;
         _dashboardError =
@@ -1281,7 +1288,7 @@ class _RecentActivitySection extends StatelessWidget {
         ],
       );
     }
-    final top = activities.take(5).toList();
+    final top = activities.take(3).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1559,151 +1566,112 @@ class _SettingsSection extends StatelessWidget {
             style: TextStyle(fontSize: 13, color: _inkSecondary),
           ),
           const SizedBox(height: 20),
-          GestureDetector(
-            onTap:
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const AdminEditProfilePage(),
-                  ),
-                ),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: _primaryDark.withOpacity(0.35),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: Row(
-                children: [
-                  Stack(
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: _primaryDark.withOpacity(0.35),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 66,
+                  height: 66,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.2),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.5),
+                      width: 2.5,
+                    ),
+                  ),
+                  child:
+                      avatarUrl != null && avatarUrl.startsWith('http')
+                          ? ClipOval(
+                            child: Image.network(
+                              avatarUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder:
+                                  (_, __, ___) =>
+                                      _AvatarInitials(initials: initials),
+                            ),
+                          )
+                          : _AvatarInitials(initials: initials),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 66,
-                        height: 66,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.2),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.5),
-                            width: 2.5,
-                          ),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
                         ),
-                        child:
-                            avatarUrl != null && avatarUrl.startsWith('http')
-                                ? ClipOval(
-                                  child: Image.network(
-                                    avatarUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (_, __, ___) =>
-                                            _AvatarInitials(initials: initials),
-                                  ),
-                                )
-                                : _AvatarInitials(initials: initials),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          width: 22,
-                          height: 22,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: _primary.withOpacity(0.3),
-                              width: 1.5,
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.email_outlined,
+                            color: Colors.white.withOpacity(0.7),
+                            size: 12,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              email,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          child: const Icon(
-                            Icons.edit,
-                            color: _primary,
-                            size: 12,
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          role,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.3,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.email_outlined,
-                              color: Colors.white.withOpacity(0.7),
-                              size: 12,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                email,
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.18),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            role,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: Colors.white.withOpacity(0.6),
-                    size: 22,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 24),
@@ -1731,6 +1699,19 @@ class _SettingsSection extends StatelessWidget {
                 () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const AdminEditProfilePage(),
+                  ),
+                ),
+          ),
+          const SizedBox(height: 10),
+          _SettingsCard(
+            icon: Icons.lock_outline_rounded,
+            iconColor: const Color.fromARGB(255, 187, 90, 94),
+            title: 'Change Password',
+            subtitle: 'Update your account login credentials.',
+            onTap:
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AdminChangePasswordPage(),
                   ),
                 ),
           ),
@@ -1801,7 +1782,7 @@ class _SettingsSection extends StatelessWidget {
                   if (context.mounted) {
                     Navigator.of(
                       context,
-                    ).pushNamedAndRemoveUntil('/', (route) => false);
+                    ).pushNamedAndRemoveUntil('/login', (route) => false);
                   }
                 }
               },

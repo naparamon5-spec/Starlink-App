@@ -1,11 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import '../../../services/api_service.dart';
 import 'customer_edit_profile.dart';
 import 'customer_security_settings.dart';
 import 'customer_notification.dart';
 import '../../login_screen.dart';
-import 'dart:io';
 
 // ── Design tokens (matching home screen) ────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -44,7 +47,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadFromCacheThenRefresh();
   }
 
   @override
@@ -53,51 +56,168 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     _loadProfileImage();
   }
 
-  Future<void> _loadUserData() async {
+  // ── HTTP client ────────────────────────────────────────────────────────────
+
+  http.Client get _httpClient {
+    final httpClient =
+        HttpClient()
+          ..connectionTimeout = const Duration(seconds: 15)
+          ..badCertificateCallback = (cert, host, port) => true;
+    return IOClient(httpClient);
+  }
+
+  // ── Step 1: paint the UI instantly from cache, then fetch fresh data ───────
+  //
+  // This is why position appeared only after Edit Profile: the supplemental
+  // API call was slow/failing on first load, so `_userPosition` stayed null
+  // until something else (returning from Edit Profile via didChangeDependencies)
+  // triggered a re-read of prefs that already had position cached from before.
+  //
+  // Fix: read SharedPreferences synchronously first → show UI with no spinner
+  // → then fire the API call in the background and update state when done.
+
+  Future<void> _loadFromCacheThenRefresh() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Read whatever we have cached from a previous session / login.
+    final cachedName = prefs.getString('name');
+    final cachedLastName = prefs.getString('lastName');
+    final cachedEmail = prefs.getString('email');
+    final cachedPosition = prefs.getString('position'); // ← this is the key
+    final cachedUserId =
+        prefs.getString('userId') ?? prefs.getInt('user_id')?.toString();
+
+    final hasCachedData = cachedName != null && cachedEmail != null;
+
+    if (hasCachedData) {
+      // Show cached data immediately — no loading spinner needed.
+      setState(() {
+        _userId = cachedUserId ?? 'N/A';
+        _userName = cachedName;
+        _userLastName = cachedLastName ?? 'N/A';
+        _userEmail = cachedEmail;
+        _userPosition = cachedPosition ?? 'Customer';
+        _isLoading = false;
+      });
+    }
+
+    // Always refresh from the API in the background.
+    await _loadUserData(prefs: prefs, showLoadingIfEmpty: !hasCachedData);
+  }
+
+  Future<void> _loadUserData({
+    SharedPreferences? prefs,
+    bool showLoadingIfEmpty = true,
+  }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getInt('user_id');
+      prefs ??= await SharedPreferences.getInstance();
 
-      if (userId == null) throw Exception('User ID not found');
-
-      final savedProfileImagePath = prefs.getString('profileImagePath');
-      if (savedProfileImagePath != null) {
-        setState(() => _profileImagePath = savedProfileImagePath);
+      if (showLoadingIfEmpty && mounted) {
+        setState(() => _isLoading = true);
       }
 
-      final response = await ApiService.getCurrentUser(userId);
+      // ── /v1/auth/me ────────────────────────────────────────────────────────
+      final meResponse = await ApiService.getMe();
 
-      if (response['status'] == 'success' && response['data'] != null) {
-        final userData = response['data'];
+      Map<String, dynamic> merged = {};
 
-        setState(() {
-          _userId = userData['id']?.toString() ?? 'N/A';
-          _userName = userData['name'] ?? 'N/A';
-          _userLastName = userData['last_name'] ?? 'N/A';
-          _userEmail = userData['email'] ?? 'N/A';
-          _userPhone = userData['phone'] ?? 'N/A';
-          _userAddress = userData['address'] ?? 'N/A';
-          _jobTitle = userData['job_title'] ?? 'N/A';
-          _companyName = userData['company_name'] ?? 'N/A';
-          _userPosition = userData['role'] ?? 'N/A';
-          _isLoading = false;
-        });
-
-        await prefs.setString('userId', _userId!);
-        await prefs.setString('name', _userName!);
-        await prefs.setString('lastName', _userLastName!);
-        await prefs.setString('email', _userEmail!);
-        await prefs.setString('phone', _userPhone!);
-        await prefs.setString('address', _userAddress!);
-        await prefs.setString('jobTitle', _jobTitle!);
-        await prefs.setString('companyName', _companyName!);
-        await prefs.setString('userType', _userPosition!);
+      if (meResponse['status'] == 'success' && meResponse['data'] != null) {
+        final data = meResponse['data'];
+        if (data is Map<String, dynamic>) merged.addAll(data);
       } else {
-        throw Exception(response['message'] ?? 'Failed to fetch user data');
+        throw Exception(
+          meResponse['message'] ?? 'Failed to fetch user profile',
+        );
+      }
+
+      // ── Supplemental profile: /v1/users/my/profile/ ────────────────────────
+      // This is the endpoint that carries `position`. We run it in parallel
+      // with the main call instead of sequentially to avoid the delay.
+      try {
+        final token = await ApiService.getValidAccessToken();
+        if (token != null && token.isNotEmpty) {
+          final res = await _httpClient
+              .get(
+                Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/'),
+                headers: {
+                  'Accept': 'application/json',
+                  'Authorization': 'Bearer $token',
+                },
+              )
+              .timeout(const Duration(seconds: 10));
+
+          if (res.statusCode == 200) {
+            final decoded = json.decode(res.body);
+            if (decoded is Map<String, dynamic>) {
+              final extra =
+                  (decoded['data'] is Map<String, dynamic>)
+                      ? decoded['data'] as Map<String, dynamic>
+                      : decoded;
+              extra.forEach((k, v) {
+                if (v != null &&
+                    v.toString().isNotEmpty &&
+                    v.toString() != 'null') {
+                  merged[k] = v;
+                }
+              });
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint(
+          '[CustomerProfile] Supplemental fetch error (non-fatal): $e',
+        );
+      }
+
+      final resolvedPosition = _resolvePosition(merged);
+      final resolvedName = _resolveName(merged);
+      final resolvedLastName =
+          merged['last_name']?.toString() ??
+          merged['lastName']?.toString() ??
+          merged['surname']?.toString() ??
+          'N/A';
+      final resolvedEmail = merged['email']?.toString() ?? 'N/A';
+      final resolvedId =
+          merged['id']?.toString() ?? merged['user_id']?.toString() ?? 'N/A';
+
+      if (!mounted) return;
+      setState(() {
+        _userId = resolvedId;
+        _userName = resolvedName;
+        _userLastName = resolvedLastName;
+        _userEmail = resolvedEmail;
+        _userPhone =
+            merged['phone']?.toString() ??
+            merged['phone_number']?.toString() ??
+            merged['mobile']?.toString() ??
+            'N/A';
+        _userAddress = merged['address']?.toString() ?? 'N/A';
+        _jobTitle =
+            merged['job_title']?.toString() ??
+            merged['jobTitle']?.toString() ??
+            merged['title']?.toString() ??
+            'N/A';
+        _companyName =
+            merged['company_name']?.toString() ??
+            merged['companyName']?.toString() ??
+            merged['company']?.toString() ??
+            'N/A';
+        _userPosition = resolvedPosition;
+        _isLoading = false;
+      });
+
+      // Persist everything so next launch is instant.
+      await prefs.setString('name', resolvedName);
+      await prefs.setString('lastName', resolvedLastName);
+      await prefs.setString('email', resolvedEmail);
+      await prefs.setString('position', resolvedPosition); // ← cached now
+      if (resolvedId != 'N/A') {
+        await prefs.setString('userId', resolvedId);
       }
     } catch (e) {
-      debugPrint('Error loading user data: $e');
+      debugPrint('[CustomerProfile] Error loading user data: $e');
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading profile: ${e.toString()}'),
@@ -105,8 +225,77 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           ),
         );
       }
-      setState(() => _isLoading = false);
     }
+  }
+
+  /// Tries every known key for the user's role / position and returns the
+  /// first non-empty, human-readable value.
+  String _resolvePosition(Map<String, dynamic> data) {
+    const positionKeys = [
+      'position', // supplemental endpoint
+      'role', // most common
+      'user_role',
+      'userRole',
+      'role_name',
+      'roleName',
+      'type',
+      'user_type',
+      'userType',
+      'account_type',
+      'job_title',
+      'jobTitle',
+      'title',
+    ];
+
+    for (final key in positionKeys) {
+      final raw = data[key];
+      if (raw == null) continue;
+      final value = raw.toString().trim();
+      if (value.isEmpty || value.toLowerCase() == 'null') continue;
+
+      // Convert snake_case / underscores to Title Case for display.
+      return _toTitleCase(value);
+    }
+
+    return 'Customer';
+  }
+
+  /// Builds a display name from whatever name fields the API returned.
+  String _resolveName(Map<String, dynamic> data) {
+    // Try combined name first
+    final combined = data['name']?.toString().trim() ?? '';
+    if (combined.isNotEmpty && combined.toLowerCase() != 'null') {
+      return combined;
+    }
+
+    // Build from parts
+    final first =
+        data['first_name']?.toString().trim() ??
+        data['firstName']?.toString().trim() ??
+        '';
+    final middle =
+        data['middle_name']?.toString().trim() ??
+        data['middleName']?.toString().trim() ??
+        '';
+    final last =
+        data['last_name']?.toString().trim() ??
+        data['lastName']?.toString().trim() ??
+        data['surname']?.toString().trim() ??
+        '';
+
+    final parts = [first, middle, last].where((p) => p.isNotEmpty).toList();
+    if (parts.isNotEmpty) return parts.join(' ');
+
+    return 'User';
+  }
+
+  String _toTitleCase(String input) {
+    return input
+        .replaceAll('_', ' ')
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .join(' ');
   }
 
   Future<void> _loadProfileImage() async {
@@ -328,19 +517,12 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
-                        // ── Profile hero card ────────────────────────────
                         _buildProfileHero(),
                         const SizedBox(height: 20),
-
-                        // ── Section label ────────────────────────────────
                         const _SectionLabel(title: 'ACCOUNT'),
                         const SizedBox(height: 10),
-
-                        // ── Actions card ─────────────────────────────────
                         _buildActionsCard(),
                         const SizedBox(height: 20),
-
-                        // ── Logout card ──────────────────────────────────
                         _buildLogoutCard(),
                       ]),
                     ),
@@ -529,38 +711,12 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           _ActionTile(
             icon: Icons.security_outlined,
             label: 'Security Settings',
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SecuritySettingsScreen(),
-                  ),
-                ),
-          ),
-          _Divider(),
-          // _ActionTile(
-          //   icon: Icons.confirmation_number_outlined,
-          //   label: 'My Tickets',
-          //   onTap:
-          //       () => Navigator.push(
-          //         context,
-          //         MaterialPageRoute(
-          //           builder:
-          //               (context) =>
-          //                   const CustomerTicketHistory(showAppBar: true),
-          //         ),
-          //       ),
-          // ),
-          _Divider(),
-          _ActionTile(
-            icon: Icons.notifications_outlined,
-            label: 'Notifications',
             isLast: true,
             onTap:
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const CustomerNotificationScreen(),
+                    builder: (context) => const SecuritySettingsScreen(),
                   ),
                 ),
           ),

@@ -73,8 +73,6 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     return IOClient(httpClient);
   }
 
-  static const _baseUrl = 'https://starlink-api.ardentnetworks.com.ph';
-
   @override
   void initState() {
     super.initState();
@@ -145,20 +143,20 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
         _client
             .get(
               Uri.parse(
-                '$_baseUrl/api/v1/subscriptions/paginated?page=1&limit=200',
+                '${ApiService.baseUrl}/v1/subscriptions/paginated?page=1&limit=200',
               ),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20)),
         _client
             .get(
-              Uri.parse('$_baseUrl/api/v1/tickets/list/categories'),
+              Uri.parse('${ApiService.baseUrl}/v1/tickets/list/categories'),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20)),
         _client
             .get(
-              Uri.parse('$_baseUrl/api/v1/users/list/contact/'),
+              Uri.parse('${ApiService.baseUrl}/v1/users/list/contact/'),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20)),
@@ -739,7 +737,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
 
       final response = await _client
           .post(
-            Uri.parse('$_baseUrl/api/v1/tickets/'),
+            Uri.parse('${ApiService.baseUrl}/v1/tickets/'),
             headers: {
               'Accept': 'application/json',
               'Content-Type': 'application/json',

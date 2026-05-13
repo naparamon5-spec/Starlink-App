@@ -441,23 +441,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                                                     : _primaryDark,
                                           ),
                                           const SizedBox(width: 6),
-                                          if (sln != '—')
-                                            Container(
-                                              width: 24,
-                                              height: 24,
-                                              decoration: BoxDecoration(
-                                                color: _purple.withOpacity(
-                                                  0.08,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                              ),
-                                              child: const Icon(
-                                                Icons.chevron_right_rounded,
-                                                size: 16,
-                                                color: _purple,
-                                              ),
-                                            ),
                                         ],
                                       ),
                                     ],
@@ -705,19 +688,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                                   ),
                                   const SizedBox(width: 8),
                                   // Chevron — indicates row is tappable
-                                  Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: _success.withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Icon(
-                                      Icons.chevron_right_rounded,
-                                      size: 16,
-                                      color: _success,
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),

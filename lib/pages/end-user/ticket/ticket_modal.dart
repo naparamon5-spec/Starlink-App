@@ -82,8 +82,6 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
   String? _endUserCode;
 
   // ── HTTP client ───────────────────────────────────────────────────────────
-  static const _baseUrl = 'https://starlink-api.ardentnetworks.com.ph';
-
   http.Client get _client {
     final httpClient =
         HttpClient()
@@ -170,13 +168,13 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
       final results = await Future.wait([
         _client
             .get(
-              Uri.parse('$_baseUrl/api/v1/tickets/list/categories'),
+              Uri.parse('${ApiService.baseUrl}/v1/tickets/list/categories'),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20)),
         _client
             .get(
-              Uri.parse('$_baseUrl/api/v1/users/list/contact/'),
+              Uri.parse('${ApiService.baseUrl}/v1/users/list/contact/'),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20)),
@@ -245,7 +243,7 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
 
   // ── CHANGE 1: simplified subscription URL ─────────────────────────────────
   String _buildSubscriptionUrl() {
-    return '$_baseUrl/api/v1/subscriptions/';
+    return '${ApiService.baseUrl}/v1/subscriptions/';
   }
 
   Future<void> _loadEndUserCodes() async {
@@ -671,7 +669,7 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
 
       final response = await _client
           .post(
-            Uri.parse('$_baseUrl/api/v1/tickets/'),
+            Uri.parse('${ApiService.baseUrl}/v1/tickets/'),
             headers: {
               'Accept': 'application/json',
               'Content-Type': 'application/json',

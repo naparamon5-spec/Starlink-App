@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../../../services/api_service.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -19,6 +20,9 @@ const _divider = Color(0xFFF1F5F9);
 const _purple = Color(0xFF7C3AED);
 const _orange = Color(0xFFEA580C);
 const _teal = Color(0xFF0891B2);
+const _amber = Color(0xFFF59E0B);
+const _emerald = Color(0xFF10B981);
+const _indigo = Color(0xFF6366F1);
 
 /// Shared robust active-status resolver.
 bool _isActiveSub(Map<String, dynamic> sub) {
@@ -123,6 +127,32 @@ class _UserSubscriptionDetailsPageState
     return d == 0 ? '0 GB' : '${d.toStringAsFixed(2)} GB';
   }
 
+  String _toMonthYear(String? raw) {
+    if (raw == null || raw.isEmpty || raw == 'null') return '—';
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    try {
+      final clean =
+          raw.contains('T') ? raw.split('T').first : raw.split(' ').first;
+      final dt = DateTime.parse('${clean}T00:00:00');
+      return '${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return raw ?? '—';
+    }
+  }
+
   String _fmtDate(String? raw) {
     if (raw == null || raw.isEmpty || raw == 'null' || raw == '0000-00-00') {
       return '—';
@@ -152,31 +182,9 @@ class _UserSubscriptionDetailsPageState
   }
 
   String _periodLabel(_BillingPeriod p) {
-    try {
-      final s = DateTime.parse(
-        p.startDate.contains('T') ? p.startDate : '${p.startDate}T00:00:00',
-      );
-      final e = DateTime.parse(
-        p.endDate.contains('T') ? p.endDate : '${p.endDate}T00:00:00',
-      );
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return '${months[s.month - 1]} ${s.year} – ${months[e.month - 1]} ${e.year}';
-    } catch (_) {
-      return '${p.startDate} – ${p.endDate}';
-    }
+    final s = _toMonthYear(p.startDate);
+    final e = _toMonthYear(p.endDate);
+    return s == e ? s : '$s - $e';
   }
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -222,25 +230,6 @@ class _UserSubscriptionDetailsPageState
     final List<_BillingPeriod> periods = [];
 
     if (subResult != null) {
-      final bc = subResult['billingCycle'];
-      if (bc is Map) {
-        final bcm = Map<String, dynamic>.from(bc);
-        startDate = _pickDate(bcm, ['startDate', 'start_date', 'start']);
-        endDate = _pickDate(bcm, ['endDate', 'end_date', 'end']);
-      }
-      startDate ??= _pickDate(subResult, [
-        'startDate',
-        'start_date',
-        'cycleStart',
-        'billingStart',
-      ]);
-      endDate ??= _pickDate(subResult, [
-        'endDate',
-        'end_date',
-        'cycleEnd',
-        'billingEnd',
-      ]);
-
       final dd = subResult['dd'];
       if (dd is List) {
         for (final item in dd) {
@@ -254,8 +243,29 @@ class _UserSubscriptionDetailsPageState
           }
         }
       }
-      if (periods.isEmpty && startDate != null && endDate != null) {
-        periods.add(_BillingPeriod(startDate: startDate, endDate: endDate));
+
+      if (periods.isEmpty) {
+        final bc = subResult['billingCycle'];
+        if (bc is Map) {
+          final bcm = Map<String, dynamic>.from(bc);
+          startDate = _pickDate(bcm, ['startDate', 'start_date', 'start']);
+          endDate = _pickDate(bcm, ['endDate', 'end_date', 'end']);
+        }
+        startDate ??= _pickDate(subResult, [
+          'startDate',
+          'start_date',
+          'cycleStart',
+          'billingStart',
+        ]);
+        endDate ??= _pickDate(subResult, [
+          'endDate',
+          'end_date',
+          'cycleEnd',
+          'billingEnd',
+        ]);
+        if (startDate != null && endDate != null) {
+          periods.add(_BillingPeriod(startDate: startDate, endDate: endDate));
+        }
       }
     }
 
@@ -546,6 +556,42 @@ class _UserSubscriptionDetailsPageState
     final isActive = sub != null ? _isActiveSub(sub) : false;
     final nickname = _str(sub?['nickname']);
 
+    // Parse hardware info
+    final rtm = sub?['routerTerminalMap'];
+    final hardware =
+        (rtm is List && rtm.isNotEmpty)
+            ? Map<String, dynamic>.from(rtm.first)
+            : (rtm is Map ? Map<String, dynamic>.from(rtm) : null);
+
+    // Parse usage
+    final bc = sub?['billingCycle'];
+    final Map<String, dynamic>? billing =
+        bc is Map ? Map<String, dynamic>.from(bc) : null;
+    final totalPriorityGB = _parseGb(
+      billing?['totalPriorityGB'] ?? billing?['total_priority_gb'],
+    );
+    final dataplanGb = _parseGb(sub?['dataplan']);
+    final serviceTopUps = sub?['serviceTopUp'] as List?;
+    double topup = 0;
+    if (serviceTopUps != null) {
+      for (final item in serviceTopUps) {
+        if (item is Map) {
+          topup += _parseGb(item['amountGB'] ?? item['amount_gb']);
+        }
+      }
+    }
+    final usageLimitGb = _parseGb(
+      billing?['usageLimitGB'] ??
+          billing?['usage_limit_gb'] ??
+          sub?['usageLimitGB'] ??
+          sub?['usage_limit_gb'],
+    );
+    final effectiveLimit = usageLimitGb > 0 ? usageLimitGb : dataplanGb;
+    final totalUsed = totalPriorityGB + topup;
+    final progress =
+        effectiveLimit > 0 ? (totalUsed / effectiveLimit).clamp(0.0, 1.0) : 0.0;
+    final isOverLimit = effectiveLimit > 0 && totalUsed > effectiveLimit;
+
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: [
@@ -566,19 +612,6 @@ class _UserSubscriptionDetailsPageState
               ),
             ),
           ),
-          // actions: [
-          //   Padding(
-          //     padding: const EdgeInsets.only(right: 12),
-          //     child: _CircleButton(
-          //       onTap: _loading ? () {} : _load,
-          //       child: const Icon(
-          //         Icons.refresh_rounded,
-          //         color: Colors.white,
-          //         size: 18,
-          //       ),
-          //     ),
-          //   ),
-          // ],
           flexibleSpace: FlexibleSpaceBar(
             collapseMode: CollapseMode.parallax,
             background: _UserHeroHeader(
@@ -596,49 +629,53 @@ class _UserSubscriptionDetailsPageState
             child: SlideTransition(
               position: _slideAnim,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 48),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Status banner
-                    _UserStatusBanner(isActive: isActive),
-                    const SizedBox(height: 28),
+                    // ── Service Line Chip ────────────────────────────
+                    _ServiceLineChip(
+                      serviceLineNumber: widget.serviceLineNumber,
+                    ),
+                    const SizedBox(height: 14),
 
-                    // ── Plan Details ─────────────────────────────────
-                    _SectionLabel(label: 'MY PLAN'),
-                    const SizedBox(height: 12),
-
+                    // ── Subscription Card ────────────────────────────
                     if (_subscriptionError != null)
                       _InlineError(message: _subscriptionError!)
-                    else ...[
-                      _PlanOverviewCard(
-                        nickname: _str(sub?['nickname']),
-                        endDate: _fmtDate(sub?['endDate']?.toString()),
-                        address: _str(sub?['address']),
+                    else
+                      _SubscriptionCard(
+                        data: sub,
+                        hardware: hardware,
+                        totalUsed: totalUsed,
+                        effectiveLimit: effectiveLimit,
+                        dataplanGb: dataplanGb,
+                        topup: topup,
+                        progress: progress,
+                        isOverLimit: isOverLimit,
+                        isActive: isActive,
+                        gbStr: _gbStr,
+                        fmtDate: _fmtDate,
+                        strVal: _str,
                       ),
-                      const SizedBox(height: 12),
-                      _UserUsageCard(subscriptionData: sub),
-                    ],
 
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 14),
 
-                    // ── Billing ──────────────────────────────────────
-                    _SectionLabel(label: 'BILLING CYCLE'),
-                    const SizedBox(height: 12),
-
-                    _UserBillingSection(
+                    // ── Billing Card ─────────────────────────────────
+                    _BillingCard(
                       billingData: _billingData,
                       billingError: _billingError,
                       periods: _billingPeriods,
                       selectedPeriod: _selectedPeriod,
+                      toMonthYear: _toMonthYear,
                       onPeriodChanged: (p) {
                         setState(() => _selectedPeriod = p);
                         _loadBillingForPeriod(p);
                       },
-                      periodLabel: _periodLabel,
                       gbStr: _gbStr,
                       parseGb: _parseGb,
                     ),
+
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
@@ -677,7 +714,6 @@ class _UserHeroHeader extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Decorative circles
           Positioned(
             top: -30,
             right: -50,
@@ -702,7 +738,6 @@ class _UserHeroHeader extends StatelessWidget {
               color: Colors.white.withOpacity(0.05),
             ),
           ),
-          // Content
           Padding(
             padding: EdgeInsets.fromLTRB(
               24,
@@ -714,7 +749,6 @@ class _UserHeroHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                // Badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -788,28 +822,21 @@ class _UserHeroHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// User Status Banner
+// Service Line Chip
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _UserStatusBanner extends StatelessWidget {
-  final bool isActive;
-  const _UserStatusBanner({required this.isActive});
+class _ServiceLineChip extends StatelessWidget {
+  final String serviceLineNumber;
+  const _ServiceLineChip({required this.serviceLineNumber});
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive ? _activeGreen : _inactiveRed;
-    final label = isActive ? 'Active' : 'Inactive';
-    final message =
-        isActive
-            ? 'Your subscription is active and running.'
-            : 'Your subscription is currently inactive.';
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
+        color: _surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: _border),
       ),
       child: Row(
         children: [
@@ -817,12 +844,12 @@ class _UserStatusBanner extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              shape: BoxShape.circle,
+              color: _accent.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              isActive ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-              color: color,
+            child: const Icon(
+              Icons.satellite_alt_rounded,
+              color: _accent,
               size: 20,
             ),
           ),
@@ -831,717 +858,1077 @@ class _UserStatusBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
+                const Text(
+                  'Service Line',
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: color,
+                    fontSize: 11,
+                    color: _inkLight,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  message,
+                  serviceLineNumber,
                   style: const TextStyle(
-                    fontSize: 11,
-                    color: _inkMid,
-                    height: 1.4,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: _inkDark,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ],
             ),
           ),
-          _PulseDot(color: color, active: isActive),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Plan Overview Card — combines nickname, end date, and address cleanly
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _PlanOverviewCard extends StatelessWidget {
-  final String nickname;
-  final String endDate;
-  final String address;
-
-  const _PlanOverviewCard({
-    required this.nickname,
-    required this.endDate,
-    required this.address,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Plan name row
-          _PlanRow(
-            icon: Icons.label_outline_rounded,
-            iconColor: _accent,
-            label: 'Plan Name',
-            value: nickname,
-          ),
-          _RowDivider(),
-          // End date row
-          _PlanRow(
-            icon: Icons.event_rounded,
-            iconColor: _orange,
-            label: 'Valid Until',
-            value: endDate,
-          ),
-          _RowDivider(),
-          // Address row
-          _PlanRow(
-            icon: Icons.location_on_rounded,
-            iconColor: _teal,
-            label: 'Service Address',
-            value: address,
-            multiLine: true,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PlanRow extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final String value;
-  final bool multiLine;
-
-  const _PlanRow({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.value,
-    this.multiLine = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        crossAxisAlignment:
-            multiLine ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-        children: [
           Container(
-            width: 36,
-            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(10),
+              color: _accent.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _accent.withOpacity(0.2)),
             ),
-            child: Icon(icon, color: iconColor, size: 18),
+            child: const Text(
+              'Refreshes every 30–45 min',
+              style: TextStyle(
+                fontSize: 9,
+                color: _accent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subscription Card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SubscriptionCard extends StatelessWidget {
+  final Map<String, dynamic>? data;
+  final Map<String, dynamic>? hardware;
+  final double totalUsed;
+  final double effectiveLimit;
+  final double dataplanGb;
+  final double topup;
+  final double progress;
+  final bool isOverLimit;
+  final bool isActive;
+  final String Function(dynamic) gbStr;
+  final String Function(String?) fmtDate;
+  final String Function(dynamic) strVal;
+
+  const _SubscriptionCard({
+    required this.data,
+    required this.hardware,
+    required this.totalUsed,
+    required this.effectiveLimit,
+    required this.dataplanGb,
+    required this.topup,
+    required this.progress,
+    required this.isOverLimit,
+    required this.isActive,
+    required this.gbStr,
+    required this.fmtDate,
+    required this.strVal,
+  });
+
+  String _hw(String? a, String? b) {
+    if (a != null && a != 'null' && a.isNotEmpty) return a;
+    if (b != null && b != 'null' && b.isNotEmpty) return b;
+    return '—';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final starlinkId = _hw(
+      hardware?['starlink_id']?.toString() ??
+          hardware?['starlinkId']?.toString(),
+      data?['starlink_id']?.toString() ?? data?['starlinkId']?.toString(),
+    );
+    final serialNumber = _hw(
+      hardware?['serial_number']?.toString() ??
+          hardware?['serialNumber']?.toString(),
+      data?['serial_number']?.toString() ?? data?['serialNumber']?.toString(),
+    );
+    final kitNumber = _hw(
+      hardware?['kit_number']?.toString() ?? hardware?['kitNumber']?.toString(),
+      data?['kit_number']?.toString() ?? data?['kitNumber']?.toString(),
+    );
+
+    return _SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ─────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Nickname',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _inkLight,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        strVal(data?['nickname']),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: _inkDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Row(
+                  children: [
+                    const Text(
+                      'Status: ',
+                      style: TextStyle(fontSize: 12, color: _inkLight),
+                    ),
+                    _StatusBadge(active: isActive),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+          const _HDivider(),
+
+          // ── Hardware ───────────────────────────────────────────────
+          if (starlinkId != '—' || serialNumber != '—' || kitNumber != '—')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: Column(
+                children: [
+                  if (starlinkId != '—') ...[
+                    _InfoRow(label: 'Starlink ID', value: starlinkId),
+                    const SizedBox(height: 10),
+                  ],
+                  if (serialNumber != '—') ...[
+                    _InfoRow(label: 'Serial Number', value: serialNumber),
+                    const SizedBox(height: 10),
+                  ],
+                  if (kitNumber != '—')
+                    _InfoRow(label: 'Kit Number', value: kitNumber),
+                ],
+              ),
+            ),
+
+          if (starlinkId != '—' || serialNumber != '—' || kitNumber != '—') ...[
+            const SizedBox(height: 14),
+            const _HDivider(),
+          ],
+
+          // ── End Date ───────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 10,
+                const Text(
+                  'Valid Until',
+                  style: TextStyle(
+                    fontSize: 11,
                     color: _inkLight,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: _inkDark,
-                    fontWeight: FontWeight.w600,
-                    height: 1.45,
-                  ),
-                  maxLines: multiLine ? 3 : 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RowDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Container(
-    height: 1,
-    margin: const EdgeInsets.symmetric(horizontal: 16),
-    color: _divider,
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// User Usage Card
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _UserUsageCard extends StatelessWidget {
-  final Map<String, dynamic>? subscriptionData;
-  const _UserUsageCard({required this.subscriptionData});
-
-  double _pg(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0.0;
-
-  String _gb(dynamic v) {
-    final d = _pg(v);
-    return d == 0 ? '0 GB' : '${d.toStringAsFixed(2)} GB';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final consumed = _pg(
-      subscriptionData?['consumedAmountGB'] ??
-          subscriptionData?['consumed_amount_gb'],
-    );
-    final limit = _pg(
-      subscriptionData?['usageLimitGB'] ?? subscriptionData?['usage_limit_gb'],
-    );
-    final monthly = _pg(
-      subscriptionData?['totalPriorityGB'] ??
-          subscriptionData?['total_priority_gb'] ??
-          subscriptionData?['currentMonthlyData'],
-    );
-    final topup = _pg(
-      subscriptionData?['totalStandardGB'] ??
-          subscriptionData?['total_standard_gb'] ??
-          subscriptionData?['topUpData'],
-    );
-    final progress = limit > 0 ? (consumed / limit).clamp(0.0, 1.0) : 0.0;
-
-    final Color barColor =
-        progress > 0.9
-            ? _inactiveRed
-            : progress > 0.7
-            ? const Color(0xFFF59E0B)
-            : _accent;
-
-    final String statusLabel =
-        progress > 0.9
-            ? 'Almost full'
-            : progress > 0.7
-            ? 'Getting full'
-            : 'Healthy';
-
-    final Color statusColor =
-        progress > 0.9
-            ? _inactiveRed
-            : progress > 0.7
-            ? const Color(0xFFF59E0B)
-            : _activeGreen;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: _accent.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  child: const Icon(
-                    Icons.data_usage_rounded,
-                    color: _accent,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Data Usage',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: _inkDark,
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 7),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
+                    horizontal: 12,
+                    vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: statusColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Big consumed number
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  _gb(consumed),
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                    color: _inkDark,
-                    letterSpacing: -1,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Text(
-                    limit > 0 ? 'of ${_gb(limit)}' : 'used',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: _inkLight,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Progress bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: const Color(0xFFE2E8F0),
-                valueColor: AlwaysStoppedAnimation<Color>(barColor),
-                minHeight: 10,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${(progress * 100).toStringAsFixed(1)}% used',
-                  style: const TextStyle(fontSize: 11, color: _inkLight),
-                ),
-                if (limit > 0)
-                  Text(
-                    '${_gb(limit - consumed)} left',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: barColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(height: 1, color: _divider),
-            const SizedBox(height: 16),
-
-            // Mini stats
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniStat(
-                    label: 'Monthly Data',
-                    value: _gb(monthly),
-                    color: _accent,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _MiniStat(
-                    label: 'Top-Up Data',
-                    value: _gb(topup),
-                    color: _purple,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// User Billing Section
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _UserBillingSection extends StatelessWidget {
-  final Map<String, dynamic>? billingData;
-  final String? billingError;
-  final List<_BillingPeriod> periods;
-  final _BillingPeriod? selectedPeriod;
-  final ValueChanged<_BillingPeriod> onPeriodChanged;
-  final String Function(_BillingPeriod) periodLabel;
-  final String Function(dynamic) gbStr;
-  final double Function(dynamic) parseGb;
-
-  const _UserBillingSection({
-    required this.billingData,
-    required this.billingError,
-    required this.periods,
-    required this.selectedPeriod,
-    required this.onPeriodChanged,
-    required this.periodLabel,
-    required this.gbStr,
-    required this.parseGb,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Period selector
-        Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: _purple.withOpacity(0.08),
+                    color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _border),
                   ),
-                  child: const Icon(
-                    Icons.calendar_month_rounded,
-                    color: _purple,
-                    size: 18,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_today_rounded,
+                        size: 14,
+                        color: _inkLight,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        fmtDate(data?['endDate']?.toString()),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _inkDark,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child:
-                      periods.isEmpty
-                          ? const Text(
-                            'No billing periods available',
-                            style: TextStyle(fontSize: 13, color: _inkLight),
-                          )
-                          : DropdownButtonHideUnderline(
-                            child: DropdownButton<_BillingPeriod>(
-                              value: selectedPeriod,
-                              isExpanded: true,
-                              dropdownColor: _surface,
-                              icon: const Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                color: _inkLight,
-                                size: 20,
-                              ),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: _inkDark,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              items:
-                                  periods
-                                      .map(
-                                        (p) => DropdownMenuItem(
-                                          value: p,
-                                          child: Text(periodLabel(p)),
-                                        ),
-                                      )
-                                      .toList(),
-                              onChanged: (p) {
-                                if (p != null) onPeriodChanged(p);
-                              },
-                            ),
-                          ),
                 ),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 12),
 
-        // Data card or loading/error
-        if (billingError != null)
-          _InlineError(message: billingError!)
-        else if (billingData == null)
-          Container(
-            height: 100,
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _border),
-            ),
-            child: const Center(
-              child: CircularProgressIndicator(
-                color: _accent,
-                strokeWidth: 2.5,
-              ),
-            ),
-          )
-        else
-          _UserBillingDataCard(
-            billingData: billingData!,
-            gbStr: gbStr,
-            parseGb: parseGb,
-          ),
-      ],
-    );
-  }
-}
+          const SizedBox(height: 16),
+          const _HDivider(),
 
-class _UserBillingDataCard extends StatelessWidget {
-  final Map<String, dynamic> billingData;
-  final String Function(dynamic) gbStr;
-  final double Function(dynamic) parseGb;
-
-  const _UserBillingDataCard({
-    required this.billingData,
-    required this.gbStr,
-    required this.parseGb,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final consumed = parseGb(billingData['consumedAmountGB']);
-    final limit = parseGb(billingData['usageLimitGB']);
-    final priority = parseGb(billingData['totalPriorityGB']);
-    final standard = parseGb(billingData['totalStandardGB']);
-    final overage = parseGb(billingData['overageGB']);
-    final progress =
-        limit > 0
-            ? (consumed / limit).clamp(0.0, 1.0)
-            : (consumed > 0 ? 1.0 : 0.0);
-
-    final Color barColor =
-        progress > 0.9
-            ? _inactiveRed
-            : progress > 0.7
-            ? const Color(0xFFF59E0B)
-            : _accent;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Label + big number
-            const Text(
-              'THIS BILLING PERIOD',
-              style: TextStyle(
-                fontSize: 10,
-                color: _inkLight,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+          // ── Current Plan Usage ─────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  gbStr(consumed),
-                  style: const TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    color: _inkDark,
-                    letterSpacing: -1,
-                    height: 1,
-                  ),
-                ),
-                if (limit > 0) ...[
-                  const SizedBox(width: 6),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      'of ${gbStr(limit)}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: _inkLight,
-                        fontWeight: FontWeight.w500,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Current Plan Usage',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: _inkDark,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Progress bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: const Color(0xFFE2E8F0),
-                valueColor: AlwaysStoppedAnimation<Color>(barColor),
-                minHeight: 10,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${(progress * 100).toStringAsFixed(1)}% used',
-                  style: const TextStyle(fontSize: 11, color: _inkLight),
-                ),
-                if (limit > 0)
-                  Text(
-                    '${gbStr(limit - consumed)} remaining',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: barColor,
-                      fontWeight: FontWeight.w600,
+                    Text(
+                      '${gbStr(totalUsed)} / ${gbStr(effectiveLimit)}',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: isOverLimit ? _inactiveRed : _inkDark,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Container(height: 1, color: _divider),
-            const SizedBox(height: 16),
-
-            // Stats grid
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniStat(
-                    label: 'Priority Data',
-                    value: gbStr(priority),
-                    color: _accent,
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _MiniStat(
-                    label: 'Standard Data',
-                    value: gbStr(standard),
-                    color: const Color(0xFF6366F1),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniStat(
-                    label: 'Data Limit',
-                    value: gbStr(limit),
-                    color: _inkLight,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _MiniStat(
-                    label: 'Overage',
-                    value: gbStr(overage),
-                    color: overage > 0 ? _inactiveRed : _activeGreen,
-                  ),
-                ),
-              ],
-            ),
-
-            // Overage warning
-            if (overage > 0) ...[
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: _inactiveRed.withOpacity(0.06),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _inactiveRed.withOpacity(0.2)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_rounded, color: _inactiveRed, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'You have exceeded your data limit by ${gbStr(overage)}.',
-                        style: const TextStyle(
+                if (isOverLimit) ...[
+                  const SizedBox(height: 4),
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 13,
+                        color: _inactiveRed,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Data limit exceeded',
+                        style: TextStyle(
                           fontSize: 11,
                           color: _inactiveRed,
-                          fontWeight: FontWeight.w600,
-                          height: 1.4,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: _border,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isOverLimit
+                          ? _inactiveRed
+                          : progress > 0.7
+                          ? _amber
+                          : _accent,
+                    ),
+                    minHeight: 6,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _UsageRow(
+                  label: 'Current monthly data',
+                  value: gbStr(dataplanGb),
+                ),
+                const SizedBox(height: 8),
+                _UsageRow(label: 'Top-Up data', value: gbStr(topup)),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          const _HDivider(),
+
+          // ── Address ────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Service Address',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _inkLight,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 1),
+                      child: Icon(
+                        Icons.location_on_rounded,
+                        size: 14,
+                        color: _inkLight,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        strVal(data?['address']),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _inkDark,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
                   ],
                 ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Billing Card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BillingCard extends StatelessWidget {
+  final Map<String, dynamic>? billingData;
+  final String? billingError;
+  final List<_BillingPeriod> periods;
+  final _BillingPeriod? selectedPeriod;
+  final String Function(String?) toMonthYear;
+  final ValueChanged<_BillingPeriod> onPeriodChanged;
+  final String Function(dynamic) gbStr;
+  final double Function(dynamic) parseGb;
+
+  const _BillingCard({
+    required this.billingData,
+    required this.billingError,
+    required this.periods,
+    required this.selectedPeriod,
+    required this.toMonthYear,
+    required this.onPeriodChanged,
+    required this.gbStr,
+    required this.parseGb,
+  });
+
+  String _periodLabel(_BillingPeriod p) {
+    final s = toMonthYear(p.startDate);
+    final e = toMonthYear(p.endDate);
+    return s == e ? s : '$s - $e';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    double totalPriorityFromDatasets = 0;
+    final dailyUsage = billingData?['dailyUsage'];
+    final List<dynamic> graphs =
+        (dailyUsage is Map) ? (dailyUsage['graphs'] as List? ?? []) : [];
+
+    if (graphs.isNotEmpty) {
+      final g = graphs.first;
+      final dataMap = g['data'] as Map? ?? {};
+      final datasets = dataMap['datasets'] as List? ?? [];
+      for (var d in datasets) {
+        if (d is Map) {
+          final dataList = d['data'] as List? ?? [];
+          if (dataList.isNotEmpty) {
+            totalPriorityFromDatasets += parseGb(dataList[0]);
+          }
+        }
+      }
+    }
+
+    return _SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Period Dropdown ─────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Select billing period:',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _inkLight,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: _surface,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
+                      ),
+                      builder: (ctx) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: _border,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Select Billing Period',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: _inkDark,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxHeight:
+                                      MediaQuery.of(context).size.height * 0.4,
+                                ),
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  padding: EdgeInsets.zero,
+                                  itemCount: periods.length,
+                                  itemBuilder: (context, index) {
+                                    final p = periods[index];
+                                    final isSelected = p == selectedPeriod;
+                                    return ListTile(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 24,
+                                          ),
+                                      title: Text(
+                                        _periodLabel(p),
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight:
+                                              isSelected
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w500,
+                                          color:
+                                              isSelected ? _accent : _inkDark,
+                                        ),
+                                      ),
+                                      trailing:
+                                          isSelected
+                                              ? const Icon(
+                                                Icons.check_circle_rounded,
+                                                color: _accent,
+                                                size: 20,
+                                              )
+                                              : null,
+                                      onTap: () {
+                                        onPeriodChanged(p);
+                                        Navigator.pop(ctx);
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _border),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            selectedPeriod != null
+                                ? _periodLabel(selectedPeriod!)
+                                : 'Select period',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _inkDark,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: _inkLight,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          const _HDivider(),
+
+          if (billingError != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: _InlineError(message: billingError!),
+            )
+          else if (billingData == null)
+            const Padding(
+              padding: EdgeInsets.all(36),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: _accent,
+                  strokeWidth: 2.5,
+                ),
               ),
-            ],
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Updated Data Usage ─────────────────────────────
+                  const Text(
+                    'Updated Data Usage',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _inkLight,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _accent.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _accent.withOpacity(0.1)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // const Text(
+                        //   'Total Priority Data',
+                        //   style: TextStyle(
+                        //     fontSize: 12,
+                        //     color: _inkMid,
+                        //     fontWeight: FontWeight.w500,
+                        //   ),
+                        // ),
+                        // const SizedBox(height: 4),
+                        Text(
+                          gbStr(totalPriorityFromDatasets),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: _accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+                  const _HDivider(),
+                  const SizedBox(height: 16),
+
+                  // ── Daily Usage Graph ──────────────────────────────
+                  const Text(
+                    'Daily Usage Trends',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _inkLight,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Builder(
+                    builder: (_) {
+                      if (graphs.isEmpty) {
+                        return Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _border),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'No daily usage data available',
+                              style: TextStyle(fontSize: 13, color: _inkLight),
+                            ),
+                          ),
+                        );
+                      }
+                      final g = graphs.first;
+                      final dataMap = g['data'] as Map? ?? {};
+                      final labels =
+                          (dataMap['labels'] as List? ?? [])
+                              .map((e) => e.toString())
+                              .toList();
+                      final datasets = dataMap['datasets'] as List? ?? [];
+
+                      return _UsageUnifiedGraph(
+                        labels: labels,
+                        datasets: datasets,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unified Usage Graph — Scrollable fl_chart implementation
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _UsageUnifiedGraph extends StatelessWidget {
+  final List<String> labels;
+  final List<dynamic> datasets;
+
+  const _UsageUnifiedGraph({required this.labels, required this.datasets});
+
+  double _parse(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0.0;
+
+  String _formatDate(String date) {
+    try {
+      final clean =
+          date.contains('T') ? date.split('T').first : date.split(' ').first;
+      final dt = DateTime.parse('${clean}T00:00:00');
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+    } catch (_) {
+      return date;
+    }
+  }
+
+  void _showDetailDialog(BuildContext context, int index) {
+    if (index < 0 || index >= labels.length) return;
+
+    final date = labels[index];
+    final dataList = index < datasets.length ? datasets[index]['data'] : [];
+
+    final p = _parse(dataList.length > 0 ? dataList[0] : 0);
+    final s = _parse(dataList.length > 1 ? dataList[1] : 0);
+    final o = _parse(dataList.length > 2 ? dataList[2] : 0);
+    final n = _parse(dataList.length > 3 ? dataList[3] : 0);
+
+    final maxVal = [p, s, o, n].reduce((a, b) => a > b ? a : b);
+    final effectiveMax = maxVal == 0 ? 1.0 : maxVal;
+
+    showDialog(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: _surface,
+            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Usage Details',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: _inkDark,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(ctx),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: _inkLight,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatDate(date),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: _inkLight,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _dialogMetric('Priority', p, _accent, effectiveMax),
+                const SizedBox(height: 14),
+                _dialogMetric('Standard', s, _indigo, effectiveMax),
+                const SizedBox(height: 14),
+                _dialogMetric('Opt-in Priority', o, _amber, effectiveMax),
+                const SizedBox(height: 14),
+                _dialogMetric('Non-Billable', n, _emerald, effectiveMax),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: _HDivider(),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total Daily Usage',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _inkDark,
+                      ),
+                    ),
+                    Text(
+                      '${(p + s + o + n).toStringAsFixed(2)} GB',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: _accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _dialogMetric(String label, double value, Color color, double max) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: _inkMid,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Text(
+              '${value.toStringAsFixed(2)} GB',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
           ],
         ),
-      ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: (value / max).clamp(0.0, 1.0),
+            backgroundColor: _border,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 8,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (labels.isEmpty) return const SizedBox.shrink();
+
+    double maxY = 1.0;
+    final List<FlSpot> pSpots = [];
+    final List<FlSpot> sSpots = [];
+    final List<FlSpot> oSpots = [];
+    final List<FlSpot> nSpots = [];
+
+    for (int i = 0; i < labels.length; i++) {
+      final dataList = i < datasets.length ? datasets[i]['data'] : [];
+      final p = _parse(dataList.length > 0 ? dataList[0] : 0);
+      final s = _parse(dataList.length > 1 ? dataList[1] : 0);
+      final o = _parse(dataList.length > 2 ? dataList[2] : 0);
+      final n = _parse(dataList.length > 3 ? dataList[3] : 0);
+
+      pSpots.add(FlSpot(i.toDouble(), p));
+      sSpots.add(FlSpot(i.toDouble(), s));
+      oSpots.add(FlSpot(i.toDouble(), o));
+      nSpots.add(FlSpot(i.toDouble(), n));
+
+      final dayMax = [p, s, o, n].reduce((a, b) => a > b ? a : b);
+      if (dayMax > maxY) maxY = dayMax;
+    }
+    maxY = (maxY * 1.2).ceilToDouble();
+
+    // Only show a line series if it has at least one non-zero value
+    final bool showS = sSpots.any((s) => s.y > 0);
+    final bool showO = oSpots.any((s) => s.y > 0);
+    final bool showN = nSpots.any((s) => s.y > 0);
+
+    // 48px per point + 60 left margin + 40 right padding so last dot is never clipped
+    final double chartWidth = labels.length * 48.0 + 100.0;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              _legendItem('Priority', _accent),
+              if (showS) _legendItem('Standard', _indigo),
+              if (showO) _legendItem('Opt-in', _amber),
+              if (showN) _legendItem('Non-Billable', _emerald),
+            ],
+          ),
+        ),
+        Container(
+          height: 240,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _border),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              // extra right padding so the last label + dot is fully visible
+              padding: const EdgeInsets.only(right: 16),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+                child: SizedBox(
+                  width: chartWidth < 300 ? 300 : chartWidth,
+                  child: LineChart(
+                    LineChartData(
+                      maxY: maxY,
+                      minX: 0,
+                      maxX: (labels.length - 1).toDouble(),
+                      lineTouchData: LineTouchData(
+                        enabled: true,
+                        handleBuiltInTouches: true,
+                        touchCallback: (FlTouchEvent event, touchResponse) {
+                          if (event is FlTapDownEvent &&
+                              touchResponse != null &&
+                              touchResponse.lineBarSpots != null &&
+                              touchResponse.lineBarSpots!.isNotEmpty) {
+                            final index =
+                                touchResponse.lineBarSpots!.first.x.toInt();
+                            _showDetailDialog(context, index);
+                          }
+                        },
+                        touchTooltipData: LineTouchTooltipData(
+                          tooltipBgColor: _inkDark.withOpacity(0.9),
+                          getTooltipItems: (touchedSpots) {
+                            return touchedSpots.map((s) {
+                              return LineTooltipItem(
+                                '${s.y.toStringAsFixed(2)} GB',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              );
+                            }).toList();
+                          },
+                        ),
+                      ),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        getDrawingHorizontalLine:
+                            (v) => FlLine(
+                              color: _border.withOpacity(0.5),
+                              strokeWidth: 1,
+                            ),
+                      ),
+                      titlesData: FlTitlesData(
+                        show: true,
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            interval: 1,
+                            getTitlesWidget: (value, meta) {
+                              final i = value.toInt();
+                              if (i < 0 || i >= labels.length) {
+                                return const SizedBox.shrink();
+                              }
+                              String label = labels[i];
+                              try {
+                                final dt = DateTime.parse(
+                                  label.contains('T')
+                                      ? label.split('T').first
+                                      : label.split(' ').first,
+                                );
+                                label = '${dt.month}/${dt.day}';
+                              } catch (_) {}
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(
+                                    color: _inkLight,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 36,
+                            getTitlesWidget:
+                                (v, m) => Text(
+                                  '${v.toInt()}',
+                                  style: const TextStyle(
+                                    color: _inkLight,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                          ),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        _lineData(pSpots, _accent),
+                        if (showS) _lineData(sSpots, _indigo),
+                        if (showO) _lineData(oSpots, _amber),
+                        if (showN) _lineData(nSpots, _emerald),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.touch_app_rounded, size: 12, color: _inkLight),
+            SizedBox(width: 4),
+            Text(
+              'Tap points for details',
+              style: TextStyle(
+                fontSize: 10,
+                color: _inkLight,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  LineChartBarData _lineData(List<FlSpot> spots, Color color) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      color: color,
+      barWidth: 3,
+      isStrokeCapRound: true,
+      dotData: const FlDotData(show: true),
+      belowBarData: BarAreaData(show: true, color: color.withOpacity(0.05)),
+    );
+  }
+
+  Widget _legendItem(String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            color: _inkMid,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1550,44 +1937,66 @@ class _UserBillingDataCard extends StatelessWidget {
 // Shared small widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _MiniStat extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  const _MiniStat({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+class _SurfaceCard extends StatelessWidget {
+  final Widget child;
+  const _SurfaceCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: _surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: _border),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.04),
+          blurRadius: 14,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: child,
+  );
+}
+
+class _HDivider extends StatelessWidget {
+  const _HDivider();
+
+  @override
+  Widget build(BuildContext context) => Container(height: 1, color: _divider);
+}
+
+class _StatusBadge extends StatelessWidget {
+  final bool active;
+  const _StatusBadge({required this.active});
 
   @override
   Widget build(BuildContext context) {
+    final color = active ? _activeGreen : _inactiveRed;
+    final bg = active ? const Color(0xFFECFDF5) : const Color(0xFFFFF1F0);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.18)),
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.5), width: 1.2),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: color,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.2,
-            ),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(width: 5),
           Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
+            active ? 'ACTIVE' : 'INACTIVE',
+            style: TextStyle(
+              fontSize: 10.5,
               fontWeight: FontWeight.w800,
-              color: _inkDark,
+              color: color,
+              letterSpacing: 0.5,
             ),
           ),
         ],
@@ -1596,19 +2005,47 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
+class _InfoRow extends StatelessWidget {
   final String label;
-  const _SectionLabel({required this.label});
+  final String value;
+  const _InfoRow({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) => Text(
-    label,
-    style: const TextStyle(
-      fontSize: 10,
-      fontWeight: FontWeight.w800,
-      color: _inkLight,
-      letterSpacing: 1.4,
-    ),
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: const TextStyle(fontSize: 12, color: _inkLight)),
+      Text(
+        value,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: _inkDark,
+        ),
+      ),
+    ],
+  );
+}
+
+class _UsageRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _UsageRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: const TextStyle(fontSize: 12.5, color: _inkMid)),
+      Text(
+        value,
+        style: const TextStyle(
+          fontSize: 12.5,
+          color: _inkDark,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
   );
 }
 
@@ -1682,83 +2119,6 @@ class _DecorCircle extends StatelessWidget {
       border: Border.all(color: color, width: 1.5),
     ),
   );
-}
-
-class _PulseDot extends StatefulWidget {
-  final Color color;
-  final bool active;
-  const _PulseDot({required this.color, required this.active});
-
-  @override
-  State<_PulseDot> createState() => _PulseDotState();
-}
-
-class _PulseDotState extends State<_PulseDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _scale;
-  late Animation<double> _opacity;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    );
-    _scale = Tween<double>(
-      begin: 1.0,
-      end: 2.0,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    _opacity = Tween<double>(
-      begin: 0.6,
-      end: 0.0,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    if (widget.active) _ctrl.repeat();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 20,
-      height: 20,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (widget.active)
-            AnimatedBuilder(
-              animation: _ctrl,
-              builder:
-                  (_, __) => Transform.scale(
-                    scale: _scale.value,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: widget.color.withOpacity(_opacity.value),
-                      ),
-                    ),
-                  ),
-            ),
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: widget.color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

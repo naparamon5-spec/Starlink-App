@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import '../ticket/ticket_screen.dart'
     show TicketScreen, EndUserTicketDetailsScreen;
 import '../profile/profile_screen.dart';
@@ -192,21 +195,68 @@ class _HomeScreenState extends State<HomeScreen> {
     return fromMap(res['raw']) ?? 0;
   }
 
+  // ── Helper ───────────────────────────────────────────────────────────────
+
+  http.Client get _httpClient {
+    final httpClient = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15)
+      ..badCertificateCallback = (cert, host, port) => true;
+    return IOClient(httpClient);
+  }
+
   // ── Profile load (for welcome card only) ──────────────────────────────────
 
   Future<void> _loadUserProfile() async {
     try {
+      // 1. Fetch from basic endpoint
       final meRes = await ApiService.getCurrentUserProfile();
+      Map<String, dynamic> merged = {};
       if (meRes['status'] == 'success' && meRes['data'] != null) {
-        final user = Map<String, dynamic>.from(meRes['data'] as Map);
-        if (mounted) setState(() => _userProfile = user);
+        merged.addAll(Map<String, dynamic>.from(meRes['data'] as Map));
+      }
+
+      // 2. Fetch from profile endpoint (contains position)
+      try {
+        final token = await ApiService.getValidAccessToken();
+        if (token != null && token.isNotEmpty) {
+          final uri = Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/');
+          final res = await _httpClient.get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          ).timeout(const Duration(seconds: 15));
+
+          if (res.statusCode == 200) {
+            final decoded = json.decode(res.body);
+            if (decoded is Map<String, dynamic>) {
+              final extraData = (decoded['data'] as Map<String, dynamic>?) ?? decoded;
+              merged.addAll(extraData);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[HomeScreen] Supplemental profile data error: $e');
+      }
+
+      if (merged.isNotEmpty) {
+        if (mounted) setState(() => _userProfile = merged);
         try {
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('userProfile', json.encode(user));
+          await prefs.setString('userProfile', json.encode(merged));
         } catch (_) {}
       }
     } catch (e) {
       debugPrint('[HomeScreen] _loadUserProfile error: $e');
+      // Fallback to SharedPreferences if API fails
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final profileStr = prefs.getString('userProfile');
+        if (profileStr != null) {
+          setState(() => _userProfile = Map<String, dynamic>.from(json.decode(profileStr)));
+        }
+      } catch (_) {}
     }
   }
 
@@ -622,7 +672,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildWelcomeCard() {
     final name = _displayName();
     final first = _firstName();
-    final role = _userProfile?['role']?.toString() ?? 'User';
+    final profile = _userProfile ?? {};
+    final position =
+        profile['position']?.toString() ??
+        profile['job_title']?.toString() ??
+        'User';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -641,144 +695,71 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.5),
-                    width: 2,
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    _initials(name),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withOpacity(0.5),
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                _initials(name),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Welcome back,',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.75),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      first,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  role.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
-          Consumer<NotificationProvider>(
-            builder: (context, provider, _) {
-              final count = provider.unreadCount;
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 11,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome back,',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.75),
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 2),
+                Text(
+                  first,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: -0.4,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.notifications_outlined,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        count == 0
-                            ? 'No new notifications'
-                            : 'You have $count new notification${count == 1 ? '' : 's'}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap:
-                          () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const NotificationsPage(),
-                            ),
-                          ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'View All',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              position.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+            ),
           ),
         ],
       ),

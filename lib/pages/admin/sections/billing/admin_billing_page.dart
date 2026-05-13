@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'dart:async';
 import '../../../../services/api_service.dart';
 import 'admin_billing_details_page.dart';
@@ -314,7 +315,9 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
   String _formatAmount(dynamic raw) {
     if (raw == null || raw.toString().isEmpty) return '0.00';
     final d = double.tryParse(raw.toString());
-    return d != null ? d.toStringAsFixed(2) : raw.toString();
+    if (d == null) return raw.toString();
+    // Format to 2 decimal places with comma separators for thousands
+    return NumberFormat('#,##0.00').format(d);
   }
 
   String _formatAmountShort(double v) {
@@ -600,10 +603,10 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
                       ),
                     ),
                     Text(
-                      '₱${_formatAmountShort(totalAmount)}',
+                      '₱${_formatAmount(totalAmount)}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: 20,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.8,
                         height: 1,
@@ -617,13 +620,13 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
                 children: [
                   _HeroChip(
                     label: 'Collected',
-                    value: '₱${_formatAmountShort(totalPaid)}',
+                    value: '₱${_formatAmount(totalPaid)}',
                     color: const Color(0xFF42BE65),
                   ),
                   const SizedBox(height: 4),
                   _HeroChip(
                     label: 'Outstanding',
-                    value: '₱${_formatAmountShort(outstanding)}',
+                    value: '₱${_formatAmount(outstanding)}',
                     color: const Color(0xFFFFB3B8),
                   ),
                 ],
@@ -991,26 +994,6 @@ class _BillingCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              isPaid ? 'PAID' : 'OPEN',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                color: statusColor,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 3),
@@ -1059,29 +1042,31 @@ class _BillingCard extends StatelessWidget {
                               ),
                             ],
                           ),
-                          const SizedBox(width: 16),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Paid',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: _inkTertiary,
-                                  fontWeight: FontWeight.w500,
+                          if ((double.tryParse((b['paid_amount'] ?? b['paidAmount']).toString()) ?? 0.0) > 0) ...[
+                            const SizedBox(width: 16),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Paid',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: _inkTertiary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                '₱${formatAmount(b['paid_amount'] ?? b['paidAmount'])}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                  color: isPaid ? _success : _primary,
-                                  letterSpacing: -0.3,
+                                Text(
+                                  '₱${formatAmount(b['paid_amount'] ?? b['paidAmount'])}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: isPaid ? _success : _primary,
+                                    letterSpacing: -0.3,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
+                          ],
                           const Spacer(),
                           if (uploadedBy.isNotEmpty)
                             Text(

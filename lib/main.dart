@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:app_links/app_links.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart'; // 👈 add this
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'pages/login_screen.dart';
 import 'pages/reset_password.dart';
@@ -20,6 +21,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -69,6 +71,7 @@ Widget _getScreenForRole(String role, {int userId = 0}) {
 Future<Widget> _resolveInitialHomeForLaunch() async {
   if (kIsWeb) {
     final uri = Uri.base;
+    // if (uri.host == 'startlink-sandbox-api.ardentnetworks.com.ph' &&
     if (uri.host == 'sandbox.ardentnetworks.com.ph' &&
         uri.path == '/reset-password') {
       final token = uri.queryParameters['token'];
@@ -89,7 +92,8 @@ Future<Widget> _resolveInitialHomeForLaunch() async {
   }
 
   final profileResponse = await ApiService.getCurrentUserProfile();
-  if (profileResponse['status'] == 'success' && profileResponse['data'] != null) {
+  if (profileResponse['status'] == 'success' &&
+      profileResponse['data'] != null) {
     final userData = profileResponse['data'];
     final userId =
         (userData['id'] is int)
@@ -115,17 +119,42 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final _appLinks = AppLinks();
+  DateTime? _lastPausedTime;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (!kIsWeb) {
       _handleIncomingLinks();
     }
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _lastPausedTime = DateTime.now();
+    } else if (state == AppLifecycleState.resumed) {
+      if (_lastPausedTime != null) {
+        final duration = DateTime.now().difference(_lastPausedTime!);
+        // Logout if app was in background for > 5 minutes
+        if (duration.inMinutes >= 5) {
+          ApiService.clearTokens();
+        }
+      }
+      _lastPausedTime = null;
+    }
+  }
+
+  // ... (rest of class)
   void _handleIncomingLinks() {
     // App opened from CLOSED state via the email link
     _appLinks.getInitialLink().then((uri) {
@@ -140,6 +169,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _navigateFromLink(Uri uri) {
+    // if (uri.host == 'startlink-sandbox-api.ardentnetworks.com.ph' &&
     if (uri.host == 'sandbox.ardentnetworks.com.ph' &&
         uri.path == '/reset-password') {
       final token = uri.queryParameters['token'];

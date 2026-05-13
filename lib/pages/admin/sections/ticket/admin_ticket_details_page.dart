@@ -53,7 +53,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   String _formatDate(String? raw) {
     if (raw == null || raw.isEmpty || raw == 'null') return '—';
     try {
-      final dt = DateTime.parse(raw);
+      final dt = DateTime.parse(raw).toUtc().add(const Duration(hours: 8));
       const months = [
         'Jan',
         'Feb',
@@ -947,6 +947,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     final ticketType = _str(t['ticket_type'] ?? t['type'] ?? t['category']);
     final description = _str(t['description'] ?? t['body'] ?? t['content']);
     final createdBy = _str(t['created_by'] ?? t['createdBy'] ?? t['creator']);
+    final email = _str(t['email'] ?? t['created_by_email']);
     // final assignedTo = _str(t['assigned_to'] ?? t['assignedTo'] ?? t['agent']);
     // final contact = _str(t['contact'] ?? t['contact_name']);
     final subscription = _str(
@@ -1069,15 +1070,11 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               children: [
                 _KVRow(label: 'Created By', value: createdBy),
                 const SizedBox(height: 8),
-                // _KVRow(label: 'Assigned To', value: assignedTo),
-                // const SizedBox(height: 8),
-                // _KVRow(label: 'Contact', value: contact),
-                // const SizedBox(height: 8),
+                _KVRow(label: 'Email', value: email),
+                const SizedBox(height: 8),
                 _KVRow(label: 'Subscription', value: subscription),
                 const SizedBox(height: 8),
                 _KVRow(label: 'Created At', value: createdAt),
-                const SizedBox(height: 8),
-                _KVRow(label: 'Last Updated', value: updatedAt),
               ],
             ),
           ),
@@ -1185,11 +1182,28 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                         : '—';
                 final name = _str(
                   att is Map
-                      ? (att['name'] ?? att['filename'] ?? att['file_name'])
+                      ? (att['original_name'] ??
+                          att['name'] ??
+                          att['filename'] ??
+                          att['file_name'])
                       : att,
                 );
-                final size =
-                    att is Map ? _str(att['size'] ?? att['file_size']) : '—';
+                String size = '—';
+                if (att is Map && att['size'] != null) {
+                  try {
+                    final bytes = double.parse(att['size'].toString());
+                    size = '${(bytes / 1024).toStringAsFixed(1)} KB';
+                  } catch (_) {
+                    size = _str(att['size']);
+                  }
+                } else if (att is Map && att['file_size'] != null) {
+                  try {
+                    final bytes = double.parse(att['file_size'].toString());
+                    size = '${(bytes / 1024).toStringAsFixed(1)} KB';
+                  } catch (_) {
+                    size = _str(att['file_size']);
+                  }
+                }
                 final type =
                     att is Map
                         ? _str(

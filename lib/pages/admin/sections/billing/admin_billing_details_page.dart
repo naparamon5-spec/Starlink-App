@@ -230,6 +230,13 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
     final balance = amount - paid;
     final isPaid = balance <= 0;
 
+    // Only show the button if there has been payment made OR if there is a balance to pay.
+    // Wait, user said "show only if there's been payment made except if both 0". 
+    // And "remove that if no payment made yet". 
+    // So if paid == 0, hide button entirely. 
+    // If paid > 0, show button (disabled if isPaid).
+    if (paid <= 0) return const SizedBox.shrink();
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -253,10 +260,8 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
         child: ElevatedButton.icon(
           onPressed: isPaid ? null : _showMakePaymentSheet,
           style: ElevatedButton.styleFrom(
-            backgroundColor: _brandRed,
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: const Color(0xFFE8ECF0),
-            disabledForegroundColor: const Color(0xFF8A96A3),
+            backgroundColor: isPaid ? const Color(0xFFE8ECF0) : _brandRed,
+            foregroundColor: isPaid ? const Color(0xFF8A96A3) : Colors.white,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
@@ -688,10 +693,12 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
             icon: Icons.account_balance_wallet_outlined,
             iconColor: const Color(0xFF10B981),
             label: 'Payment Summary',
-            trailing: _StatusBadge(
-              label: isPaid ? 'PAID' : 'OUTSTANDING',
-              color: isPaid ? const Color(0xFF10B981) : _brandRed,
-            ),
+            trailing: (paid > 0)
+                ? _StatusBadge(
+                    label: isPaid ? 'PAID' : 'PARTIAL',
+                    color: isPaid ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                  )
+                : null,
           ),
           const _HDivider(),
           Padding(
@@ -739,12 +746,14 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                   bold: true,
                   color: const Color(0xFF000000),
                 ),
-                const SizedBox(height: 8),
-                _AmountRow(
-                  label: 'Amount Paid',
-                  value: '₱${_formatAmount(paid)}',
-                  color: const Color(0xFF10B981),
-                ),
+                if (paid > 0) ...[
+                  const SizedBox(height: 8),
+                  _AmountRow(
+                    label: 'Amount Paid',
+                    value: '₱${_formatAmount(paid)}',
+                    color: const Color(0xFF10B981),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 _AmountRow(
                   label: isPaid ? 'Overpayment' : 'Outstanding Balance',

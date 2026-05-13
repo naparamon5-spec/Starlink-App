@@ -44,6 +44,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   // Read-only fields from API
   String? _position;
+  String? _role;
   bool? _isActive;
 
   // The user ID resolved from the API (not from prefs)
@@ -124,7 +125,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       final token = await ApiService.getValidAccessToken();
       if (token != null && token.isNotEmpty) {
         final uri = Uri.parse(
-          'https://starlink-api.ardentnetworks.com.ph/api/v1/users/my/profile/',
+          '${ApiService.baseUrl}/v1/users/my/profile/',
         );
         final res = await _httpClient
             .get(
@@ -173,6 +174,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
           _str(merged, 'position') ??
           _str(merged, 'job_title') ??
           _str(merged, 'designation');
+
+      // Role: check role field
+      _role = _str(merged, 'role');
 
       // Inactive flag from the profile endpoint
       _isActive = _resolveActive(merged);
@@ -598,81 +602,55 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   );
 
   Widget _avatar() => Center(
-    child: Stack(
-      children: [
-        GestureDetector(
-          onTap: _showImageOptions,
-          child: Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: _primaryDark.withOpacity(0.35),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-              image:
-                  _getProfileImage() != null
-                      ? DecorationImage(
-                        image: _getProfileImage()!,
-                        fit: BoxFit.cover,
-                      )
-                      : null,
-            ),
-            child:
-                _getProfileImage() == null
-                    ? Center(
-                      child:
-                          _isImageLoading
-                              ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
-                              : Text(
-                                _initials,
-                                style: const TextStyle(
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                    )
-                    : null,
-          ),
+    child: Container(
+      width: 88,
+      height: 88,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        Positioned(
-          right: -2,
-          bottom: -2,
-          child: Container(
-            decoration: BoxDecoration(
-              color: _surface,
-              shape: BoxShape.circle,
-              border: Border.all(color: _border, width: 2),
-            ),
-            // child: IconButton(
-            //   icon: const Icon(Icons.camera_alt, size: 16, color: _primary),
-            //   onPressed: _isImageLoading ? null : _showImageOptions,
-            //   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            //   padding: const EdgeInsets.all(6),
-            // ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: _primaryDark.withOpacity(0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
-        ),
-      ],
+        ],
+        image:
+            _getProfileImage() != null
+                ? DecorationImage(
+                  image: _getProfileImage()!,
+                  fit: BoxFit.cover,
+                )
+                : null,
+      ),
+      child:
+          _getProfileImage() == null
+              ? Center(
+                child:
+                    _isImageLoading
+                        ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                          ),
+                        )
+                        : Text(
+                          _initials,
+                          style: const TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+              )
+              : null,
     ),
   );
 
@@ -682,6 +660,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   Widget build(BuildContext context) {
     final positionDisplay =
         (_position != null && _position!.isNotEmpty) ? _position! : '—';
+    final roleDisplay =
+        (_role != null && _role!.isNotEmpty) ? _role! : '—';
 
     final String statusLabel;
     final Color statusColor;
@@ -821,17 +801,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                 children: [
                                   // Avatar
                                   _avatar(),
-                                  const SizedBox(height: 8),
-                                  const Center(
-                                    child: Text(
-                                      'Tap to change photo',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: _inkTertiary,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ),
                                   const SizedBox(height: 28),
 
                                   // ── Personal Information ──────────────────
@@ -885,6 +854,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                   _card(
                                     child: Column(
                                       children: [
+                                        _infoRow(
+                                          icon: Icons.badge_outlined,
+                                          label: 'Role',
+                                          value: roleDisplay,
+                                        ),
+                                        const SizedBox(height: 12),
                                         _infoRow(
                                           icon: Icons.work_outline_rounded,
                                           label: 'Position',

@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import '../../../components/notification_badge.dart';
 import '../../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,6 +55,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   String? _userFirstName;
   String? _userEmail;
   String? _userRole;
+  String? _userPosition;
   bool _isLoading = true;
   int? _userId;
 
@@ -83,8 +87,19 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     super.dispose();
   }
 
+  // ── Supplemental data fetcher ──────────────────────────────────────────
+
+  http.Client get _httpClient {
+    final httpClient =
+        HttpClient()
+          ..connectionTimeout = const Duration(seconds: 15)
+          ..badCertificateCallback = (cert, host, port) => true;
+    return IOClient(httpClient);
+  }
+
   Future<void> _loadUserData() async {
     try {
+      // 1. Fetch from basic endpoint
       final profileResponse = await ApiService.getMe();
 
       if (profileResponse['status'] != 'success' ||
@@ -94,7 +109,40 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         );
       }
 
-      final userData = profileResponse['data'] as Map<String, dynamic>;
+      final Map<String, dynamic> merged = Map<String, dynamic>.from(
+        profileResponse['data'] as Map<String, dynamic>,
+      );
+
+      // 2. Fetch from supplemental profile endpoint (contains position)
+      try {
+        final token = await ApiService.getValidAccessToken();
+        if (token != null && token.isNotEmpty) {
+          final uri = Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/');
+          final res = await _httpClient
+              .get(
+                uri,
+                headers: {
+                  'Accept': 'application/json',
+                  'Authorization': 'Bearer $token',
+                },
+              )
+              .timeout(const Duration(seconds: 15));
+
+          if (res.statusCode == 200) {
+            final decoded = json.decode(res.body);
+            if (decoded is Map<String, dynamic>) {
+              final extraData =
+                  (decoded['data'] as Map<String, dynamic>?) ?? decoded;
+              merged.addAll(extraData);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[CustomerHome] Supplemental profile data error: $e');
+      }
+
+      final userData = merged;
+      debugPrint('[CustomerHome] Merged userData: $userData');
 
       final idRaw = userData['id'];
       final int? parsedId =
@@ -121,6 +169,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         _userFirstName = userData['first_name']?.toString() ?? _userName;
         _userEmail = userData['email']?.toString();
         _userRole = userData['role']?.toString();
+        _userPosition =
+            userData['position']?.toString() ??
+            userData['role']?.toString() ??
+            userData['job_title']?.toString() ??
+            'Customer';
         _isLoading = false;
       });
 
@@ -442,32 +495,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         preferredSize: const Size.fromHeight(1),
         child: Container(height: 1, color: _border),
       ),
-      actions: [
-        if (_selectedIndex == 0)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            // child: NotificationBadge(
-            //   badgeColor: _primary,
-            //   textColor: Colors.white,
-            //   badgeSize: 18,
-            //   fontSize: 9,
-            //   child: IconButton(
-            //     icon: const Icon(
-            //       Icons.notifications_outlined,
-            //       color: _ink,
-            //       size: 22,
-            //     ),
-            //     onPressed:
-            //         () => Navigator.push(
-            //           context,
-            //           MaterialPageRoute(
-            //             builder: (_) => const CustomerNotificationScreen(),
-            //           ),
-            //         ),
-            //   ),
-            // ),
-          ),
-      ],
+      actions: [],
     );
   }
 
@@ -546,6 +574,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   // ── Welcome Card ───────────────────────────────────────────────────────────
 
   Widget _buildWelcomeCard() {
+    final userData = {}; // In a real app we might store the raw map, let's keep it simple as we have the variables.
+    final position = _userPosition ?? 'Customer';
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -563,145 +594,71 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.5),
-                    width: 2,
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    _initials(_userFirstName ?? _userName),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withOpacity(0.5),
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                _initials(_userFirstName ?? _userName),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Welcome back,',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.75),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _userFirstName ?? _userName ?? 'User',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  (_userRole ?? 'Customer').toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
-          Consumer<NotificationProvider>(
-            builder: (context, provider, _) {
-              final count = provider.unreadCount;
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 11,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome back,',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.75),
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 2),
+                Text(
+                  _userFirstName ?? _userName ?? 'User',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: -0.4,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.notifications_outlined,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        count == 0
-                            ? 'No new notifications'
-                            : 'You have $count new notification${count == 1 ? '' : 's'}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap:
-                          () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (_) => const CustomerNotificationScreen(),
-                            ),
-                          ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'View All',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              position.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+            ),
           ),
         ],
       ),

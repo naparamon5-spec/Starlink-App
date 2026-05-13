@@ -358,7 +358,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
     final c = _company ?? {};
     return _SectionCard(
       icon: Icons.business_rounded,
-      iconColor: _primary,
+      iconColor: _inkTertiary,
       title: 'Company',
       trailing: const _StatusBadge(label: 'Active', color: _success),
       child: Column(
@@ -376,22 +376,16 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
   Widget _buildSubscriptionsCard() {
     return _SectionCard(
       icon: Icons.router_rounded,
-      iconColor: _purple,
+      iconColor: _inkTertiary,
       title: 'Subscriptions',
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _CountBadge(count: _subscriptions.length, color: _purple),
+          _CountBadge(count: _subscriptions.length, color: _inkTertiary),
           const SizedBox(width: 8),
-          IconButton(
-            icon: Icon(
-              _isEditingSubscriptions
-                  ? Icons.check_circle_outline_rounded
-                  : Icons.edit_outlined,
-              size: 18,
-              color: _purple,
-            ),
-            onPressed: () {
+          // ── Edit / Done button ──
+          GestureDetector(
+            onTap: () {
               setState(() {
                 if (!_isEditingSubscriptions) {
                   _stagedSubscriptions = List.from(_subscriptions);
@@ -402,6 +396,21 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                 _isEditingSubscriptions = !_isEditingSubscriptions;
               });
             },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _ink,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _isEditingSubscriptions ? 'Done' : 'Edit',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -409,21 +418,34 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
         children: [
           if (_isEditingSubscriptions) ...[
             const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _showSubscriptionPicker,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _purple,
-                  side: BorderSide(color: _purple.withOpacity(0.5)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+            // ── Add Subscription button ──
+            Center(
+              child: GestureDetector(
+                onTap: _showSubscriptionPicker,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
                   ),
-                ),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text(
-                  'Add Subscription',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                  decoration: BoxDecoration(
+                    color: _ink,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add, size: 13, color: Colors.white),
+                      SizedBox(width: 4),
+                      Text(
+                        'Add Subscription',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -537,27 +559,6 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                                                           ? _success
                                                           : _primaryDark,
                                                 ),
-                                                const SizedBox(width: 6),
-                                                if (sln != '—')
-                                                  Container(
-                                                    width: 24,
-                                                    height: 24,
-                                                    decoration: BoxDecoration(
-                                                      color: _purple.withOpacity(
-                                                        0.08,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            6,
-                                                          ),
-                                                    ),
-                                                    child: const Icon(
-                                                      Icons
-                                                          .chevron_right_rounded,
-                                                      size: 16,
-                                                      color: _purple,
-                                                    ),
-                                                  ),
                                               ],
                                             ),
                                         ],
@@ -584,48 +585,68 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                               ),
                             ],
                           );
-                        }).toList(),
+                        })
+                        .toList(),
               ),
           if (_isEditingSubscriptions) ...[
             const SizedBox(height: 12),
+            // ── Cancel / Save row — compact inline pills, aligned right ──
             Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _isEditingSubscriptions = false;
-                        _stagedSubscriptions = null;
-                      });
-                    },
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isEditingSubscriptions = false;
+                      _stagedSubscriptions = null;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _ink),
+                    ),
                     child: const Text(
                       'Cancel',
-                      style: TextStyle(color: _inkSecondary),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _ink,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _subscriptions = List.from(_stagedSubscriptions!);
-                        _isEditingSubscriptions = false;
-                        _stagedSubscriptions = null;
-                      });
-                      _showSnack('Subscriptions updated locally.', _success);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _success,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _subscriptions = List.from(_stagedSubscriptions!);
+                      _isEditingSubscriptions = false;
+                      _stagedSubscriptions = null;
+                    });
+                    _showSnack('Subscriptions updated locally.', _success);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _ink,
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Text(
                       'Save',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
@@ -653,7 +674,9 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
           allSubs.map((s) {
             final m = Map<String, dynamic>.from(s);
             return {
-              'label': _str(m['nickname'] ?? m['serviceLineNumber'] ?? m['sln']),
+              'label': _str(
+                m['nickname'] ?? m['serviceLineNumber'] ?? m['sln'],
+              ),
               'value': m,
             };
           }).toList();
@@ -697,12 +720,12 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
   Widget _buildUsersCard() {
     return _SectionCard(
       icon: Icons.people_outline_rounded,
-      iconColor: _success,
+      iconColor: _inkTertiary,
       title: 'Users',
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _CountBadge(count: _users.length, color: _success),
+          _CountBadge(count: _users.length, color: _inkTertiary),
           const SizedBox(width: 8),
           GestureDetector(
             onTap: _showAddUserSheet,
@@ -716,7 +739,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.add, size: 13, color: Colors.white),
-                  const SizedBox(width: 4),
+                  SizedBox(width: 4),
                   Text(
                     'Add User',
                     style: TextStyle(
@@ -858,18 +881,17 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  // Chevron — indicates row is tappable
                                   Container(
                                     width: 24,
                                     height: 24,
                                     decoration: BoxDecoration(
-                                      color: _success.withOpacity(0.08),
+                                      color: _surfaceSubtle,
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: const Icon(
                                       Icons.chevron_right_rounded,
                                       size: 16,
-                                      color: _success,
+                                      color: _inkTertiary,
                                     ),
                                   ),
                                 ],
@@ -1163,7 +1185,7 @@ class _PickerSheetState extends State<_PickerSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
+      height: MediaQuery.of(context).size.height * 0.75,
       decoration: const BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -1175,11 +1197,11 @@ class _PickerSheetState extends State<_PickerSheet> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: _border,
+              color: _border.withOpacity(0.5),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
@@ -1187,41 +1209,56 @@ class _PickerSheetState extends State<_PickerSheet> {
                 Text(
                   widget.title,
                   style: const TextStyle(
-                    fontSize: 17,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     color: _ink,
-                    letterSpacing: -0.4,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded, color: _inkSecondary),
+                InkWell(
+                  onTap: () => Navigator.pop(context),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: _surfaceSubtle,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 20,
+                      color: _inkSecondary,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
             child: Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
                 color: _surfaceSubtle,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _border),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.search_rounded, color: _inkTertiary, size: 18),
-                  const SizedBox(width: 10),
+                  const Icon(
+                    Icons.search_rounded,
+                    color: _inkTertiary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                       controller: _searchCtrl,
                       onChanged: _onSearch,
                       style: const TextStyle(fontSize: 14, color: _ink),
                       decoration: const InputDecoration(
-                        hintText: 'Search…',
+                        hintText: 'Search subscriptions...',
                         hintStyle: TextStyle(color: _inkTertiary, fontSize: 14),
                         border: InputBorder.none,
                       ),
@@ -1241,25 +1278,40 @@ class _PickerSheetState extends State<_PickerSheet> {
                       ),
                     )
                     : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       itemCount: _filtered.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder:
+                          (_, __) =>
+                              const Divider(height: 1, color: _surfaceSubtle),
                       itemBuilder: (context, i) {
                         final item = _filtered[i];
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            item['label'] ?? '',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: _ink,
-                            ),
-                          ),
+                        return InkWell(
                           onTap: () {
                             widget.onSelect(item['value']);
                             Navigator.pop(context);
                           },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item['label'] ?? '',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: _ink,
+                                    ),
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.add_circle_outline_rounded,
+                                  size: 20,
+                                  color: _primary,
+                                ),
+                              ],
+                            ),
+                          ),
                         );
                       },
                     ),

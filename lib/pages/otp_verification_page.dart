@@ -15,6 +15,8 @@ const _inkTertiary = Color(0xFFA8A8A8);
 const _surface = Color(0xFFFFFFFF);
 const _surfaceSubtle = Color(0xFFF4F4F4);
 const _border = Color(0xFFE0E0E0);
+const _success = Color(0xFF16A34A);
+const _successDark = Color(0xFF14532D);
 
 class OtpVerificationPage extends StatefulWidget {
   final String email;
@@ -34,15 +36,19 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
   final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
 
   bool _isLoading = false;
-  String? _errorMessage;
+  bool _isResending = false;
+
+  // Banner state: null = hidden, true = success (green), false = error (red)
+  String? _bannerMessage;
+  bool _bannerIsSuccess = false;
 
   bool _canResend = false;
   int _resendSeconds = 30;
   Timer? _timer;
 
-  AnimationController? _errorAnimController;
-  Animation<double>? _errorFadeAnim;
-  Animation<Offset>? _errorSlideAnim;
+  AnimationController? _bannerAnimController;
+  Animation<double>? _bannerFadeAnim;
+  Animation<Offset>? _bannerSlideAnim;
 
   String get _otp => _controllers.map((c) => c.text).join();
 
@@ -50,39 +56,52 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
   void initState() {
     super.initState();
     _startResendTimer();
-    _errorAnimController = AnimationController(
+    _bannerAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _errorFadeAnim = CurvedAnimation(
-      parent: _errorAnimController!,
+    _bannerFadeAnim = CurvedAnimation(
+      parent: _bannerAnimController!,
       curve: Curves.easeOut,
     );
-    _errorSlideAnim = Tween<Offset>(
+    _bannerSlideAnim = Tween<Offset>(
       begin: const Offset(0, -0.3),
       end: Offset.zero,
     ).animate(
-      CurvedAnimation(parent: _errorAnimController!, curve: Curves.easeOut),
+      CurvedAnimation(parent: _bannerAnimController!, curve: Curves.easeOut),
     );
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _errorAnimController?.dispose();
+    _bannerTimer?.cancel();
+    _bannerAnimController?.dispose();
     for (var c in _controllers) c.dispose();
     for (var f in _focusNodes) f.dispose();
     super.dispose();
   }
 
   void _startResendTimer() {
+    // Cancel any existing timer first
+    _timer?.cancel();
+    _timer = null;
+
     setState(() {
       _canResend = false;
       _resendSeconds = 30;
     });
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_resendSeconds == 0) {
-        setState(() => _canResend = true);
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendSeconds <= 1) {
+        setState(() {
+          _resendSeconds = 0;
+          _canResend = true;
+        });
         timer.cancel();
       } else {
         setState(() => _resendSeconds--);
@@ -90,50 +109,71 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
     });
   }
 
-  void _setError(String message) {
+  Timer? _bannerTimer;
+
+  void _showBanner(String message, {required bool isSuccess}) {
     if (!mounted) return;
-    setState(() => _errorMessage = message);
-    _errorAnimController?.forward(from: 0);
+    _bannerTimer?.cancel();
+    setState(() {
+      _bannerMessage = message;
+      _bannerIsSuccess = isSuccess;
+    });
+    _bannerAnimController?.forward(from: 0);
+    _bannerTimer = Timer(const Duration(seconds: 5), _clearBanner);
   }
 
-  void _clearError() {
+  void _clearBanner() {
     if (!mounted) return;
-    setState(() => _errorMessage = null);
-    _errorAnimController?.reverse();
+    _bannerAnimController?.reverse().then((_) {
+      if (mounted) setState(() => _bannerMessage = null);
+    });
   }
 
   Future<void> _resendCode() async {
+    if (_isResending || !_canResend) return;
+
+    // FIX: Start the timer immediately when the button is tapped,
+    // before the API call completes, so the UI locks right away.
+    _startResendTimer();
+    setState(() => _isResending = true);
+
     try {
       final response = await ApiService.resendOtp({'email': widget.email});
-      if (response['status'] == 'success') {
-        _startResendTimer();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("OTP resent successfully"),
-            backgroundColor: _primaryDark,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
+      if (!mounted) return;
+
+      // API returns: { "StatusCode": 200, "message": "...", "data": {...} }
+      final dynamic rawCode = response['StatusCode'];
+      final int? statusCode =
+          rawCode is int ? rawCode : int.tryParse(rawCode?.toString() ?? '');
+      final String message =
+          (response['message'] as String?) ??
+          'OTP sent successfully to your email';
+
+      if (statusCode == 200) {
+        // Timer already started above — just show the green banner.
+        _showBanner(message, isSuccess: true);
       } else {
-        _setError(response['message'] ?? "Failed to resend OTP");
+        // Something went wrong — show red banner.
+        // Do NOT restart the timer; it is already running from the tap above.
+        _showBanner(message, isSuccess: false);
       }
     } catch (e) {
-      _setError("Error resending OTP: $e");
+      if (!mounted) return;
+      _showBanner('Error resending OTP: $e', isSuccess: false);
+    } finally {
+      if (mounted) setState(() => _isResending = false);
     }
   }
 
   Future<void> _verifyOtp() async {
     if (_otp.length != 4) {
-      _setError("Please enter the complete 4-digit code");
+      _showBanner('Please enter the complete 4-digit code', isSuccess: false);
       return;
     }
 
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      _bannerMessage = null;
     });
 
     try {
@@ -195,7 +235,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
               (route) => false,
             );
           } else {
-            _setError("Failed to get user ID");
+            _showBanner('Failed to get user ID', isSuccess: false);
           }
         } else {
           final user = data?['user'];
@@ -220,14 +260,14 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
               (route) => false,
             );
           } else {
-            _setError("Failed to load user profile");
+            _showBanner('Failed to load user profile', isSuccess: false);
           }
         }
       } else {
-        _setError("Invalid OTP. Please try again.");
+        _showBanner('Invalid OTP. Please try again.', isSuccess: false);
       }
     } catch (e) {
-      _setError("Verification failed: ${e.toString()}");
+      _showBanner('Verification failed: ${e.toString()}', isSuccess: false);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -285,14 +325,28 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
     );
   }
 
-  Widget _buildErrorBanner() {
-    return Container(
+  Widget _buildBanner() {
+    final isSuccess = _bannerIsSuccess;
+    final bgColor =
+        isSuccess ? _success.withOpacity(0.07) : _primary.withOpacity(0.05);
+    final borderColor =
+        isSuccess ? _success.withOpacity(0.30) : _primary.withOpacity(0.25);
+    final iconColor = isSuccess ? _success : _primary;
+    final iconBgColor =
+        isSuccess ? _success.withOpacity(0.12) : _primary.withOpacity(0.10);
+    final textColor = isSuccess ? _successDark : _primaryDark;
+    final icon =
+        isSuccess
+            ? Icons.check_circle_outline_rounded
+            : Icons.error_outline_rounded;
+
+    final banner = Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: _primary.withOpacity(0.05),
+        color: bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _primary.withOpacity(0.25), width: 1),
+        border: Border.all(color: borderColor, width: 1),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -301,21 +355,17 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              color: _primary.withOpacity(0.10),
+              color: iconBgColor,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.error_outline_rounded,
-              color: _primary,
-              size: 17,
-            ),
+            child: Icon(icon, color: iconColor, size: 17),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _errorMessage!,
-              style: const TextStyle(
-                color: _primaryDark,
+              _bannerMessage!,
+              style: TextStyle(
+                color: textColor,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 height: 1.4,
@@ -323,12 +373,12 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
             ),
           ),
           GestureDetector(
-            onTap: _clearError,
+            onTap: _clearBanner,
             child: Padding(
               padding: const EdgeInsets.only(left: 8),
               child: Icon(
                 Icons.close_rounded,
-                color: _primary.withOpacity(0.6),
+                color: iconColor.withOpacity(0.6),
                 size: 18,
               ),
             ),
@@ -336,6 +386,14 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
         ],
       ),
     );
+
+    if (_bannerFadeAnim != null && _bannerSlideAnim != null) {
+      return SlideTransition(
+        position: _bannerSlideAnim!,
+        child: FadeTransition(opacity: _bannerFadeAnim!, child: banner),
+      );
+    }
+    return banner;
   }
 
   @override
@@ -343,7 +401,6 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
     final size = MediaQuery.of(context).size;
     final topPad = MediaQuery.of(context).padding.top;
 
-    // Mask email for display: show first 2 chars + *** + domain
     final emailParts = widget.email.split('@');
     final maskedEmail =
         emailParts.length == 2
@@ -357,7 +414,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
         backgroundColor: _surface,
         body: Stack(
           children: [
-            // ── Fixed gradient header ─────────────────────────────────────
+            // ── Fixed gradient header
             Positioned(
               top: 0,
               left: 0,
@@ -365,7 +422,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
               child: _OtpHeader(height: size.height * 0.30, topPad: topPad),
             ),
 
-            // ── Scrollable content ────────────────────────────────────────
+            // ── Scrollable content
             Positioned.fill(
               child: SingleChildScrollView(
                 padding: EdgeInsets.only(top: size.height * 0.30),
@@ -377,7 +434,6 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Title
                       const Text(
                         'Enter verification code',
                         style: TextStyle(
@@ -413,23 +469,14 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
 
                       const SizedBox(height: 36),
 
-                      // OTP boxes — centered
+                      // OTP boxes
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: List.generate(4, _buildOtpBox),
                       ),
 
-                      // Error banner
-                      if (_errorMessage != null)
-                        _errorFadeAnim != null && _errorSlideAnim != null
-                            ? SlideTransition(
-                              position: _errorSlideAnim!,
-                              child: FadeTransition(
-                                opacity: _errorFadeAnim!,
-                                child: _buildErrorBanner(),
-                              ),
-                            )
-                            : _buildErrorBanner(),
+                      // Banner (success green / error red)
+                      if (_bannerMessage != null) _buildBanner(),
 
                       const SizedBox(height: 32),
 
@@ -474,7 +521,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
 
                       const SizedBox(height: 20),
 
-                      // Resend row — centered
+                      // Resend row — timer OR resend button
                       Center(
                         child:
                             _canResend
@@ -489,17 +536,31 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
                                       ),
                                     ),
                                     GestureDetector(
-                                      onTap: _resendCode,
-                                      child: const Text(
-                                        'Resend code',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: _primary,
-                                          decoration: TextDecoration.underline,
-                                          decorationColor: _primary,
-                                        ),
-                                      ),
+                                      onTap: _isResending ? null : _resendCode,
+                                      child:
+                                          _isResending
+                                              ? const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                        Color
+                                                      >(_primary),
+                                                ),
+                                              )
+                                              : const Text(
+                                                'Resend code',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _primary,
+                                                  decoration:
+                                                      TextDecoration.underline,
+                                                  decorationColor: _primary,
+                                                ),
+                                              ),
                                     ),
                                   ],
                                 )
@@ -528,7 +589,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
               ),
             ),
 
-            // ── Back button overlay on header ─────────────────────────────
+            // ── Back button overlay on header
             Positioned(
               top: topPad + 8,
               left: 8,
@@ -548,7 +609,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
   }
 }
 
-// ── Header widget — mirrors _TopHeader from login_screen.dart ─────────────────
+// ── Header widget ─────────────────────────────────────────────────────────────
 
 class _OtpHeader extends StatelessWidget {
   final double height;
@@ -573,7 +634,6 @@ class _OtpHeader extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Decorative circles — same as login
           Positioned(
             top: -30,
             right: -30,
@@ -598,7 +658,6 @@ class _OtpHeader extends StatelessWidget {
               ),
             ),
           ),
-          // Icon + label
           Padding(
             padding: EdgeInsets.only(top: topPad),
             child: Center(

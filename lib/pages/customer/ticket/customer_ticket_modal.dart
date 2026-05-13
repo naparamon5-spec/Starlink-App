@@ -84,8 +84,6 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
   String? _userRole;
 
   // ── HTTP client ───────────────────────────────────────────────────────────
-  static const _baseUrl = 'https://starlink-api.ardentnetworks.com.ph';
-
   http.Client get _client {
     final httpClient =
         HttpClient()
@@ -277,7 +275,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       try {
         final r = await _client
             .get(
-              Uri.parse('$_baseUrl/api/v1/subscriptions/end-user/$_euCode'),
+              Uri.parse('${ApiService.baseUrl}/v1/subscriptions/end-user/$_euCode'),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20));
@@ -291,7 +289,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
         final r = await _client
             .get(
               Uri.parse(
-                '$_baseUrl/api/v1/subscriptions/customer/$_customerCode',
+                '${ApiService.baseUrl}/v1/subscriptions/customer/$_customerCode',
               ),
               headers: headers,
             )
@@ -305,7 +303,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       final r = await _client
           .get(
             Uri.parse(
-              '$_baseUrl/api/v1/subscriptions/paginated?page=1&limit=500',
+              '${ApiService.baseUrl}/v1/subscriptions/paginated?page=1&limit=500',
             ),
             headers: headers,
           )
@@ -316,7 +314,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
 
     try {
       final r = await _client
-          .get(Uri.parse('$_baseUrl/api/v1/subscriptions/'), headers: headers)
+          .get(Uri.parse('${ApiService.baseUrl}/v1/subscriptions/'), headers: headers)
           .timeout(const Duration(seconds: 30));
       final list = _parseSubscriptionResponse(r);
       if (list.isNotEmpty) return list;
@@ -396,13 +394,13 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       final parallelResults = await Future.wait([
         _client
             .get(
-              Uri.parse('$_baseUrl/api/v1/tickets/list/categories'),
+              Uri.parse('${ApiService.baseUrl}/v1/tickets/list/categories'),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20)),
         _client
             .get(
-              Uri.parse('$_baseUrl/api/v1/users/list/contact/'),
+              Uri.parse('${ApiService.baseUrl}/v1/users/list/contact/'),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20)),
@@ -895,7 +893,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
 
       final response = await client
           .post(
-            Uri.parse('$_baseUrl/api/v1/tickets/'),
+            Uri.parse('${ApiService.baseUrl}/v1/tickets/'),
             headers: {
               'Accept': 'application/json',
               'Content-Type': 'application/json',
@@ -1116,9 +1114,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
   }
 
   String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '${bytes}B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+    return '${(bytes / 1024).toStringAsFixed(1)}KB';
   }
 
   IconData _iconForMime(String mime) {
@@ -1311,7 +1307,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          f['name'] as String,
+                          f['original_name'] ?? f['name'] as String,
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,

@@ -89,9 +89,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
         return;
       }
 
-      final uri = Uri.parse(
-        'https://starlink-api.ardentnetworks.com.ph/api/v1/users/my/profile/',
-      );
+      final uri = Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/');
       final response = await _httpClient
           .get(
             uri,
@@ -171,13 +169,6 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
       );
       Navigator.pop(context);
     }
-  }
-
-  void _changePassword() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminChangePasswordPage()),
-    );
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -479,12 +470,12 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
                 runSpacing: 6,
                 children: [
                   if (_profileData?['role'] != null)
-                    _chip(
-                      'Role',
-                      _capitalize(_profileData!['role'].toString()),
-                    ),
-                  if (_profileData?['com_eu_code'] != null)
-                    _chip('Code', _profileData!['com_eu_code'].toString()),
+                    // _chip(
+                    //   'Role',
+                    //   _capitalize(_profileData!['role'].toString()),
+                    // ),
+                    if (_profileData?['com_eu_code'] != null)
+                      _chip('Code', _profileData!['com_eu_code'].toString()),
                 ],
               ),
             ),
@@ -549,60 +540,6 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
             ),
 
             const SizedBox(height: 22),
-
-            _sectionTitle('SECURITY'),
-            _card(
-              child: Column(
-                children: [
-                  // SwitchListTile(
-                  //   value: _twoFactorEnabled,
-                  //   activeThumbColor: _primary,
-                  //   title: const Text(
-                  //     'Two-Factor Authentication',
-                  //     style: TextStyle(
-                  //       fontSize: 14,
-                  //       fontWeight: FontWeight.w600,
-                  //       color: _ink,
-                  //     ),
-                  //   ),
-                  //   subtitle: const Text(
-                  //     'Add extra security to your account',
-                  //     style: TextStyle(fontSize: 12, color: _inkSecondary),
-                  //   ),
-                  //   onChanged: (v) => setState(() => _twoFactorEnabled = v),
-                  // ),
-                  // Divider(color: _border, height: 1),
-                  ListTile(
-                    leading: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: _primary.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.lock_outline,
-                        color: _primary,
-                        size: 18,
-                      ),
-                    ),
-                    title: const Text(
-                      'Change Password',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: _ink,
-                      ),
-                    ),
-                    trailing: const Icon(
-                      Icons.chevron_right,
-                      color: _inkTertiary,
-                    ),
-                    onTap: _changePassword,
-                  ),
-                ],
-              ),
-            ),
 
             const SizedBox(height: 22),
 

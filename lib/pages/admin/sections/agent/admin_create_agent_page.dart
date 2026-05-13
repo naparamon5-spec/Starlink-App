@@ -124,10 +124,7 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
 
     try {
       final token = await ApiService.getValidAccessToken();
-      final uri = Uri(
-        scheme: 'https',
-        host: 'starlink-api.ardentnetworks.com.ph',
-        path: '/api/external/list/customer',
+      final uri = Uri.parse('${ApiService.baseUrl}/external/list/customer').replace(
         queryParameters: {
           'limit': '$_pageSize',
           'page': '$page',

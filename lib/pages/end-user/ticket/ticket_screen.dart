@@ -202,58 +202,48 @@ class _TicketScreenState extends State<TicketScreen> {
       );
 
       final loaded =
-          allTickets.map((ticket) {
-            String createdAt = ticket['created_at'] ?? 'N/A';
-            DateTime? parsed;
-            try {
-              if (createdAt != 'N/A') {
-                parsed = DateTime.parse(createdAt);
-                createdAt =
-                    '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')} '
-                    '${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}';
-              }
-            } catch (_) {}
+      allTickets.map((ticket) {
+      final rawDate = ticket['created_at']?.toString();
+      final createdAt = _formatDate(rawDate);
 
-            final contactId = ticket['contact']?.toString() ?? '';
-            final rawStatus =
-                (ticket['status'] ?? 'open').toString().toLowerCase().trim();
-            String displayStatus;
-            switch (rawStatus) {
-              case 'open':
-                displayStatus = 'OPEN';
-                break;
-              case 'in_progress':
-              case 'in progress':
-              case 'inprogress':
-                displayStatus = 'IN PROGRESS';
-                break;
-              case 'resolved':
-                displayStatus = 'RESOLVED';
-                break;
-              case 'closed':
-              case 'close':
-                displayStatus = 'CLOSED';
-                break;
-              default:
-                displayStatus = rawStatus.toUpperCase();
-            }
+      final contactId = ticket['contact']?.toString() ?? '';
+      final rawStatus =
+          (ticket['status'] ?? 'open').toString().toLowerCase().trim();
+      String displayStatus;
+      switch (rawStatus) {
+        case 'open':
+          displayStatus = 'OPEN';
+          break;
+        case 'in_progress':
+        case 'in progress':
+        case 'inprogress':
+          displayStatus = 'IN PROGRESS';
+          break;
+        case 'resolved':
+          displayStatus = 'RESOLVED';
+          break;
+        case 'closed':
+        case 'close':
+          displayStatus = 'CLOSED';
+          break;
+        default:
+          displayStatus = rawStatus.toUpperCase();
+      }
 
-            return {
-              'id': ticket['id'],
-              'type': ticket['ticket_type'] ?? ticket['type'] ?? 'N/A',
-              'contact': agentMap[contactId] ?? '',
-              'contact_id': ticket['contact'],
-              'subscription': ticket['subscription_id'] ?? '',
-              'description': ticket['description'] ?? '',
-              'attachments': ticket['attachments'] ?? [],
-              'status': displayStatus,
-              'created_at': createdAt,
-              'created_at_raw': parsed,
-              'user_id': ticket['user_id'],
-              'full_data': ticket,
-            };
-          }).toList();
-
+      return {
+        'id': ticket['id'],
+        'type': ticket['ticket_type'] ?? ticket['type'] ?? 'N/A',
+        'contact': ticket['created_by'] ?? '',
+        'subject': ticket['subject'] ?? '',
+        'description': ticket['description'] ?? '',
+        'attachments': ticket['attachments'] ?? [],
+        'status': displayStatus,
+        'created_at': createdAt,
+        'created_at_raw': rawDate,
+        'user_id': ticket['user_id'],
+        'full_data': ticket,
+      };
+      }).toList();
       if (!mounted) return;
       setState(() {
         _tickets = loaded;
@@ -363,11 +353,35 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
-  String _formatDate(String dateStr) {
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return 'N/A';
     try {
-      final d = DateTime.parse(dateStr);
-      return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} '
-          '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+      // Parse as UTC then add 8 hours for Manila Time (UTC+8)
+      final utcDate = DateTime.parse(dateStr).toUtc();
+      final manilaDate = utcDate.add(const Duration(hours: 8));
+
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+
+      int hour = manilaDate.hour;
+      int h = hour % 12;
+      if (h == 0) h = 12;
+      final m = manilaDate.minute.toString().padLeft(2, '0');
+      final period = hour >= 12 ? 'PM' : 'AM';
+
+      return '${months[manilaDate.month - 1]} ${manilaDate.day.toString().padLeft(2, '0')}, ${manilaDate.year}  $h:$m $period';
     } catch (_) {
       return dateStr;
     }
@@ -413,7 +427,7 @@ class _TicketScreenState extends State<TicketScreen> {
     final String description =
         ticket['description']?.toString() ?? 'No description';
     final String contact = ticket['contact']?.toString() ?? '—';
-    final String subscription = ticket['subscription']?.toString() ?? '—';
+    final String subject = ticket['subject']?.toString() ?? '—';
     final String status = ticket['status']?.toString() ?? 'OPEN';
     final String ticketId = ticket['id']?.toString() ?? '';
     final Color statusColor = _statusColorFromLabel(status);
@@ -520,57 +534,54 @@ class _TicketScreenState extends State<TicketScreen> {
                     Container(height: 1, color: _border),
                     const SizedBox(height: 10),
                     // ── Meta ───────────────────────────────────────────
-                    Row(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: _MetaField(
-                            label: 'Contact',
-                            value: contact.isNotEmpty ? contact : '—',
-                            query: query,
-                          ),
+                        const Text(
+                          'Subject',
+                          style: TextStyle(fontSize: 11, color: _inkTertiary),
                         ),
-                        Expanded(
-                          child: _MetaField(
-                            label: 'Subscription',
-                            value: subscription.isNotEmpty ? subscription : '—',
-                            query: query,
+                        const SizedBox(height: 2),
+                        _HighlightText(
+                          text: subject,
+                          query: query,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _ink,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _HighlightText(
-                      text: description,
+                    _MetaField(
+                      label: 'Requester',
+                      value: contact.isNotEmpty ? contact : '—',
                       query: query,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: _inkSecondary,
-                        height: 1.4,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
                     // ── Footer ─────────────────────────────────────────
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: const [
-                        Text(
-                          'View details',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: _primary,
-                          ),
-                        ),
-                        SizedBox(width: 2),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          color: _primary,
-                          size: 14,
-                        ),
-                      ],
-                    ),
+                    // Row(
+                    //   mainAxisAlignment: MainAxisAlignment.end,
+                    //   children: const [
+                    //     Text(
+                    //       'View details',
+                    //       style: TextStyle(
+                    //         fontSize: 11,
+                    //         fontWeight: FontWeight.w700,
+                    //         color: _primary,
+                    //       ),
+                    //     ),
+                    //     SizedBox(width: 2),
+                    //     Icon(
+                    //       Icons.chevron_right_rounded,
+                    //       color: _primary,
+                    //       size: 14,
+                    //     ),
+                    //   ],
+                    // ),
                   ],
                 ),
               ),
@@ -1074,7 +1085,7 @@ class _EndUserTicketDetailsScreenState
   String _timeAgo(String? raw) {
     if (raw == null || raw.isEmpty || raw == 'null') return '';
     try {
-      final dt = DateTime.parse(raw).toLocal();
+      final dt = DateTime.parse(raw).toUtc().toLocal();
       final diff = DateTime.now().difference(dt);
       if (diff.inSeconds < 60) return 'just now';
       if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
@@ -1086,10 +1097,13 @@ class _EndUserTicketDetailsScreenState
     }
   }
 
-  String _formatDate(String? raw) {
-    if (raw == null || raw.isEmpty || raw == 'null') return '—';
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return 'N/A';
     try {
-      final dt = DateTime.parse(raw).toLocal();
+      // Parse as UTC then add 8 hours for Manila Time (UTC+8)
+      final utcDate = DateTime.parse(dateStr).toUtc();
+      final manilaDate = utcDate.add(const Duration(hours: 8));
+
       const months = [
         'Jan',
         'Feb',
@@ -1104,12 +1118,16 @@ class _EndUserTicketDetailsScreenState
         'Nov',
         'Dec',
       ];
-      final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-      final m = dt.minute.toString().padLeft(2, '0');
-      final period = dt.hour >= 12 ? 'PM' : 'AM';
-      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}  $h:$m $period';
+
+      int hour = manilaDate.hour;
+      int h = hour % 12;
+      if (h == 0) h = 12;
+      final m = manilaDate.minute.toString().padLeft(2, '0');
+      final period = hour >= 12 ? 'PM' : 'AM';
+
+      return '${months[manilaDate.month - 1]} ${manilaDate.day.toString().padLeft(2, '0')}, ${manilaDate.year}  $h:$m $period';
     } catch (_) {
-      return raw;
+      return dateStr;
     }
   }
 
@@ -1330,13 +1348,7 @@ class _EndUserTicketDetailsScreenState
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh_rounded, color: _primary, size: 20),
-            onPressed: _isFetchingDetails ? null : _loadTicketDetails,
-            tooltip: 'Refresh',
-          ),
-        ],
+        actions: const [],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: _detailBorder),
@@ -1448,6 +1460,11 @@ class _EndUserTicketDetailsScreenState
                         _KVRow(
                           label: 'Created At',
                           value: _formatDate(createdAt),
+                        ),
+                        const SizedBox(height: 8),
+                        _KVRow(
+                          label: 'Email',
+                          value: data['created_by_email']?.toString() ?? 'N/A',
                         ),
                       ],
                     ),

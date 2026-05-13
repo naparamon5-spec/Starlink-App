@@ -226,12 +226,24 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   String _formatDate(String? dateStr) {
-    if (dateStr == null) return 'N/A';
+    if (dateStr == null || dateStr.isEmpty || dateStr == 'null') return 'N/A';
     try {
-      final date = DateTime.parse(dateStr);
-      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} '
-          '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } catch (e) {
+      final utcDate = DateTime.parse(dateStr).toUtc();
+      final manilaDate = utcDate.add(const Duration(hours: 8));
+
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      ];
+      
+      int hour = manilaDate.hour;
+      int h = hour % 12;
+      if (h == 0) h = 12;
+      final m = manilaDate.minute.toString().padLeft(2, '0');
+      final period = hour >= 12 ? 'PM' : 'AM';
+      
+      return '${months[manilaDate.month - 1]} ${manilaDate.day.toString().padLeft(2, '0')}, ${manilaDate.year}  $h:$m $period';
+    } catch (_) {
       return dateStr;
     }
   }
@@ -663,14 +675,19 @@ class _TicketScreenState extends State<TicketScreen> {
                               const SizedBox(width: 24),
                               Expanded(
                                 child: _buildDetailItem(
-                                  'Subscription',
-                                  getNickname(
-                                    _subscriptions,
-                                    fullData['subscription']?.toString(),
-                                  ),
+                                  'Created At',
+                                  fullData['created_at']?.toString() ?? 'N/A',
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDetailItem(
+                            'Subscription',
+                            getNickname(
+                              _subscriptions,
+                              fullData['subscription']?.toString(),
+                            ),
                           ),
                           const SizedBox(height: 16),
                           Row(
@@ -732,8 +749,9 @@ class _TicketScreenState extends State<TicketScreen> {
                               const SizedBox(width: 24),
                               Expanded(
                                 child: _buildDetailItem(
-                                  'Created At',
-                                  fullData['created_at']?.toString() ?? 'N/A',
+                                  'Email',
+                                  fullData['created_by_email']?.toString() ??
+                                      'Not Available',
                                 ),
                               ),
                             ],
@@ -763,142 +781,198 @@ class _TicketScreenState extends State<TicketScreen> {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Comments',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF133343),
-                                  ),
+
+                          // ── Activity Timeline (Card) ───────────────────────────
+                          Builder(
+                            builder: (_) {
+                              final raw = fullData['timeline'];
+                              final items = raw is List ? raw : const [];
+                              if (items.isEmpty) return const SizedBox.shrink();
+
+                              return Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey[300]!),
                                 ),
-                              ),
-                              if (isInProgress && ticketId.isNotEmpty)
-                                InkWell(
-                                  onTap:
-                                      () => _showAddCommentComposer(
-                                        context,
-                                        ticketId,
-                                      ),
-                                  borderRadius: BorderRadius.circular(999),
-                                  child: Ink(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFF133343,
-                                      ).withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(999),
-                                      border: Border.all(
-                                        color: const Color(
-                                          0xFF133343,
-                                        ).withOpacity(0.14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Activity Timeline',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF133343),
                                       ),
                                     ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.add_comment_outlined,
-                                          size: 18,
+                                    const SizedBox(height: 10),
+                                    ...items.map((e) {
+                                      if (e is! Map) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      final actionRaw = e['action']?.toString() ?? '';
+                                      final action =
+                                          actionRaw.trim().isEmpty ? 'UPDATE' : actionRaw;
+                                      final by = e['user_name']?.toString() ??
+                                          e['name']?.toString() ??
+                                          '—';
+                                      final dateRaw =
+                                          (e['created_at'] ?? e['date'])
+                                              ?.toString();
+                                      final details =
+                                          e['new_value']?.toString() ??
+                                              e['message']?.toString() ??
+                                              '';
+
+                                      return Container(
+                                        width: double.infinity,
+                                        margin: const EdgeInsets.only(bottom: 10),
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[50],
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: Colors.grey[300]!,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    action.replaceAll(
+                                                      '_',
+                                                      ' ',
+                                                    ).toUpperCase(),
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Color(0xFF133343),
+                                                    ),
+                                                  ),
+                                                ),
+                                                Text(
+                                                  _formatDate(dateRaw),
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey[600],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              by,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[700],
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            if (details.trim().isNotEmpty) ...[
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                details.trim(),
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          // ── Comments (Card) ───────────────────────────────────
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey[300]!),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'Comments',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
                                           color: Color(0xFF133343),
                                         ),
-                                        SizedBox(width: 6),
-                                        Text(
-                                          'Comment',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 12,
-                                            letterSpacing: 0.2,
-                                            color: Color(0xFF133343),
+                                      ),
+                                    ),
+                                    if (isInProgress && ticketId.isNotEmpty)
+                                      InkWell(
+                                        onTap:
+                                            () => _showAddCommentComposer(
+                                              context,
+                                              ticketId,
+                                            ),
+                                        borderRadius: BorderRadius.circular(999),
+                                        child: Ink(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(
+                                              0xFF133343,
+                                            ).withOpacity(0.08),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                            border: Border.all(
+                                              color: const Color(
+                                                0xFF133343,
+                                              ).withOpacity(0.14),
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.add_comment_outlined,
+                                                size: 18,
+                                                color: Color(0xFF133343),
+                                              ),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                'Comment',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 12,
+                                                  letterSpacing: 0.2,
+                                                  color: Color(0xFF133343),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  ),
+                                      ),
+                                  ],
                                 ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          if (ticketId.isEmpty)
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey[300]!),
-                              ),
-                              child: const Text(
-                                'Ticket ID not available.',
-                                style: TextStyle(fontSize: 14),
-                              ),
-                            )
-                          else
-                            FutureBuilder<Map<String, dynamic>>(
-                              future: ApiService.getTicketComments(ticketId),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[50],
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: Colors.grey[300]!,
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                        SizedBox(width: 10),
-                                        Text('Loading comments...'),
-                                      ],
-                                    ),
-                                  );
-                                }
-
-                                if (snapshot.hasError) {
-                                  return Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[50],
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: Colors.grey[300]!,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      'Failed to load comments: ${snapshot.error}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                  );
-                                }
-
-                                final res = snapshot.data ?? {};
-                                final ok = res['status'] == 'success';
-                                final data = ok ? res['data'] : null;
-                                final list =
-                                    data is List
-                                        ? data
-                                        : (data is Map ? data['data'] : null);
-                                final items = (list is List) ? list : const [];
-
-                                if (items.isEmpty) {
-                                  return Container(
+                                const SizedBox(height: 10),
+                                if (ticketId.isEmpty)
+                                  Container(
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
@@ -909,80 +983,163 @@ class _TicketScreenState extends State<TicketScreen> {
                                       ),
                                     ),
                                     child: const Text(
-                                      'No comments yet.',
+                                      'Ticket ID not available.',
                                       style: TextStyle(fontSize: 14),
                                     ),
-                                  );
-                                }
-
-                                return Column(
-                                  children:
-                                      items.map((e) {
-                                        if (e is! Map)
-                                          return const SizedBox.shrink();
-                                        final name =
-                                            e['name']?.toString() ?? '—';
-                                        final dateRaw = e['date']?.toString();
-                                        final comment =
-                                            e['comment']?.toString() ?? '';
+                                  )
+                                else
+                                  FutureBuilder<Map<String, dynamic>>(
+                                    future: ApiService.getTicketComments(ticketId),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState ==
+                                          ConnectionState.waiting) {
                                         return Container(
                                           width: double.infinity,
-                                          margin: const EdgeInsets.only(
-                                            bottom: 10,
-                                          ),
-                                          padding: const EdgeInsets.all(14),
+                                          padding: const EdgeInsets.all(16),
                                           decoration: BoxDecoration(
                                             color: Colors.grey[50],
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
                                             border: Border.all(
                                               color: Colors.grey[300]!,
                                             ),
                                           ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                          child: const Row(
                                             children: [
-                                              Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      name,
-                                                      style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: Color(
-                                                          0xFF133343,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    _formatDate(dateRaw),
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.grey[600],
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 8),
-                                              Text(
-                                                comment.trim().isEmpty
-                                                    ? '—'
-                                                    : comment.trim(),
-                                                style: const TextStyle(
-                                                  fontSize: 14,
+                                              SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
                                                 ),
                                               ),
+                                              SizedBox(width: 10),
+                                              Text('Loading comments...'),
                                             ],
                                           ),
                                         );
-                                      }).toList(),
-                                );
-                              },
+                                      }
+
+                                      if (snapshot.hasError) {
+                                        return Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[50],
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: Colors.grey[300]!,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'Failed to load comments: ${snapshot.error}',
+                                            style: const TextStyle(fontSize: 14),
+                                          ),
+                                        );
+                                      }
+
+                                      final res = snapshot.data ?? {};
+                                      final ok = res['status'] == 'success';
+                                      final data = ok ? res['data'] : null;
+                                      final list =
+                                          data is List
+                                              ? data
+                                              : (data is Map ? data['data'] : null);
+                                      final items =
+                                          (list is List) ? list : const [];
+
+                                      if (items.isEmpty) {
+                                        return Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[50],
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: Colors.grey[300]!,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'No comments yet.',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        );
+                                      }
+
+                                      return Column(
+                                        children:
+                                            items.map((e) {
+                                              if (e is! Map) {
+                                                return const SizedBox.shrink();
+                                              }
+                                              final name =
+                                                  e['name']?.toString() ?? '—';
+                                              final dateRaw =
+                                                  e['date']?.toString();
+                                              final comment =
+                                                  e['comment']?.toString() ?? '';
+                                              return Container(
+                                                width: double.infinity,
+                                                margin: const EdgeInsets.only(
+                                                  bottom: 10,
+                                                ),
+                                                padding: const EdgeInsets.all(14),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey[50],
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                  border: Border.all(
+                                                    color: Colors.grey[300]!,
+                                                  ),
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: Text(
+                                                            name,
+                                                            style: const TextStyle(
+                                                              fontWeight:
+                                                                  FontWeight.bold,
+                                                              color: Color(
+                                                                0xFF133343,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          _formatDate(dateRaw),
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Colors.grey[600],
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Text(
+                                                      comment.trim().isEmpty
+                                                          ? '—'
+                                                          : comment.trim(),
+                                                      style: const TextStyle(
+                                                        fontSize: 14,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
+                                      );
+                                    },
+                                  ),
+                              ],
                             ),
+                          ),
                           if (fullData['attachments'] != null &&
                               fullData['attachments'].toString().isNotEmpty &&
                               fullData['attachments'].toString() != '[]') ...[
@@ -1554,17 +1711,14 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     debugPrint('TicketDetailsScreen _ticket: $_ticket');
+    final fullData = _ticket['full_data'] as Map<String, dynamic>;
     final status = _ticket['status']?.toString().toUpperCase() ?? 'N/A';
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'Ticket Details',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: 0.5),
         ),
         centerTitle: true,
         elevation: 0,
@@ -1587,7 +1741,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _ticket['type']?.toString() ?? 'N/A',
+                          fullData['type']?.toString() ?? 'N/A',
                           style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -1596,20 +1750,14 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Created: ${_ticket['created_at']?.toString() ?? 'N/A'}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
+                          'Created: ${fullData['created_at']?.toString() ?? 'N/A'}',
+                          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                         ),
                       ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: _getStatusColor(status).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
@@ -1617,10 +1765,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                     ),
                     child: Text(
                       status,
-                      style: TextStyle(
-                        color: _getStatusColor(status),
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -1628,9 +1773,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
               const SizedBox(height: 32),
               Card(
                 elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
@@ -1638,50 +1781,16 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                     children: [
                       const Text(
                         'Ticket Information',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF133343),
-                        ),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF133343)),
                       ),
                       const SizedBox(height: 24),
-                      _buildDetailItem(
-                        'Contact',
-                        _ticket['full_data']?['contact_name']?.toString() ??
-                            'Not Assigned',
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDetailItem(
-                        'Subscription',
-                        getNickname(
-                          _subscriptions,
-                          _ticket['subscription']?.toString(),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Description',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF133343),
-                        ),
-                      ),
+                      _buildDetailItem('Subject', fullData['subject']?.toString() ?? 'No subject'),
                       const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey[300]!),
-                        ),
-                        child: Text(
-                          _ticket['description']?.toString() ??
-                              'No description',
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
+                      _buildDetailItem('Ticket Type', fullData['ticket_type']?.toString() ?? fullData['type']?.toString() ?? 'N/A'),
+                      const SizedBox(height: 8),
+                      _buildDetailItem('Description', fullData['description']?.toString() ?? 'No description'),
+                      const SizedBox(height: 8),
+                      _buildDetailItem('Email', fullData['created_by_email']?.toString() ?? 'Not Available'),
                     ],
                   ),
                 ),

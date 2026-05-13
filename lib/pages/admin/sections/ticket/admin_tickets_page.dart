@@ -24,6 +24,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   bool _loading = false;
   bool _fetchingMore = false;
   String? _error;
+  String? _role;
 
   int _totalItems = 0;
   int _totalPages = 1;
@@ -50,7 +51,19 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
       if (!_tabController.indexIsChanging) setState(() {});
     });
     _loadFirstPage();
+    _loadUserRole();
     _scrollController.addListener(_onScroll);
+  }
+
+  Future<void> _loadUserRole() async {
+    final me = await ApiService.getMe();
+    if (me['status'] == 'success') {
+      final data = me['data'] is Map ? (me['data'] as Map) : {};
+      final r = (data['role'] ?? data['user_role'] ?? data['type'] ?? '')
+          .toString()
+          .toLowerCase();
+      if (mounted) setState(() => _role = r);
+    }
   }
 
   @override
@@ -284,7 +297,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   String _formatDate(String? raw) {
     if (raw == null || raw.isEmpty) return '—';
     try {
-      final dt = DateTime.parse(raw);
+      final dt = DateTime.parse(raw).toUtc().add(const Duration(hours: 8));
       const m = [
         'Jan',
         'Feb',
@@ -332,19 +345,30 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   Widget build(BuildContext context) {
     final filtered = _filteredTickets;
 
+    if (_role == null) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: _primary),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: _surface,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openCreateTicket,
-        backgroundColor: _primary,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        icon: const Icon(Icons.add_rounded, size: 20),
-        label: const Text(
-          'Create Ticket',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-        ),
-      ),
+      floatingActionButton:
+          _role == 'agent'
+              ? null
+              : FloatingActionButton.extended(
+                onPressed: _openCreateTicket,
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+                elevation: 4,
+                icon: const Icon(Icons.add_rounded, size: 20),
+                label: const Text(
+                  'Create Ticket',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+              ),
       body: Column(
         children: [
           // Stats banner
@@ -878,7 +902,7 @@ class _TicketCard extends StatelessWidget {
   String get _id => (ticket['id'] ?? '-').toString();
   String get _status => (ticket['status'] ?? '').toString();
   String get _requester =>
-      (ticket['requester'] ?? ticket['created_by'] ?? '—').toString();
+      (ticket['created_by'] ?? ticket['requester'] ?? '—').toString();
   String get _ticketType => (ticket['ticket_type'] ?? '').toString();
 
   @override

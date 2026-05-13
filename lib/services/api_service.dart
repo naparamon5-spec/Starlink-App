@@ -3,11 +3,15 @@ import 'dart:io' show HttpClient, X509Certificate;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../config/ssl_config.dart';
+import '../main.dart';
 
 class ApiService {
-  static String get baseUrl => 'https://starlink-api.ardentnetworks.com.ph/api';
+  static String get baseUrl =>
+      '${dotenv.env['API_BASE_URL'] /* ?? 'https://starlink-api.ardentnetworks.com.ph/api' */}';
   static bool _isRefreshingToken = false;
 
   static http.Client get _client {
@@ -425,6 +429,35 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('accessToken');
     await prefs.remove('refreshToken');
+  }
+
+  static void showSessionExpiredDialog() {
+    final context = navigatorKey.currentContext;
+    if (context == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Session Expired'),
+            content: const Text(
+              'Your session has expired. Please login again.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    '/',
+                    (route) => false,
+                  );
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
   }
 
   static Future<Map<String, dynamic>> refreshToken() async {
@@ -1563,7 +1596,10 @@ class ApiService {
     final id = ticketId.trim();
     final status = newStatus.trim();
     if (id.isEmpty || status.isEmpty) {
-      return {'status': 'error', 'message': 'Ticket ID and status are required.'};
+      return {
+        'status': 'error',
+        'message': 'Ticket ID and status are required.',
+      };
     }
 
     // Prefer v1 API (authenticated). Backend implementations vary; try common
@@ -1777,8 +1813,9 @@ class ApiService {
   }
 
   // Alias for clarity in UI code: "activities" are ticket comments/timeline.
-  static Future<Map<String, dynamic>> getTicketComments(String ticketId) async =>
-      getTicketActivities(ticketId);
+  static Future<Map<String, dynamic>> getTicketComments(
+    String ticketId,
+  ) async => getTicketActivities(ticketId);
 
   // ─── Add ticket comment (Activities) ──────────────────────────────────────
   static Future<Map<String, dynamic>> addTicketComment(
@@ -1788,7 +1825,10 @@ class ApiService {
     final id = ticketId.trim();
     final text = comment.trim();
     if (id.isEmpty || text.isEmpty) {
-      return {'status': 'error', 'message': 'Ticket ID and comment are required.'};
+      return {
+        'status': 'error',
+        'message': 'Ticket ID and comment are required.',
+      };
     }
 
     // Try common backend shapes. We keep this resilient because deployments
@@ -1838,10 +1878,7 @@ class ApiService {
     }
 
     return lastError ??
-        {
-          'status': 'error',
-          'message': 'Failed to add comment.',
-        };
+        {'status': 'error', 'message': 'Failed to add comment.'};
   }
 
   static Future<Map<String, dynamic>> getTicketAttachments(
@@ -2129,7 +2166,8 @@ class ApiService {
   static Future<Map<String, dynamic>> refreshStarlinkServiceLine(
     String serviceLineNumber,
   ) async {
-    final result = await _authorizedGetJson(
+    final result = await _authorizedWrite(
+      'POST',
       '/v1/starlink/refresh/$serviceLineNumber',
     );
     if (result['status'] != 'success') return Map<String, dynamic>.from(result);
@@ -2490,6 +2528,8 @@ class ApiService {
       }
     } finally {
       await clearTokens();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
     }
     return {'status': 'success', 'message': 'Logged out successfully.'};
   }

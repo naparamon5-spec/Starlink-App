@@ -152,6 +152,9 @@ class _LoginScreenState extends State<LoginScreen>
               (userData['id'] is int)
                   ? userData['id'] as int
                   : int.tryParse(userData['id']?.toString() ?? '') ?? 0;
+          
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('user_id', userId);
 
           if (!mounted) return;
           Navigator.pushReplacement(
@@ -170,6 +173,10 @@ class _LoginScreenState extends State<LoginScreen>
               (userData['id'] is int)
                   ? userData['id'] as int
                   : int.tryParse(userData['id']?.toString() ?? '') ?? 0;
+          
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('user_id', userId);
+
           if (!mounted) return;
           Navigator.pushReplacement(
             context,

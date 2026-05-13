@@ -1,5 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../../../services/api_service.dart';
+
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const _bg = Color(0xFFF6F7F9);
+const _surface = Color(0xFFFFFFFF);
+const _accent = Color(0xFFEB1E23);
+const _accentBlue = Color(0xFF1A6FE8);
+const _inkDark = Color(0xFF0D1B2A);
+const _inkMid = Color(0xFF4A5568);
+const _inkLight = Color(0xFF9AA5B4);
+const _border = Color(0xFFEBEEF2);
+const _divider = Color(0xFFF0F4F8);
+const _amber = Color(0xFFF59E0B);
+const _emerald = Color(0xFF10B981);
+const _indigo = Color(0xFF6366F1);
 
 class AdminSubscriptionDetailsPage extends StatefulWidget {
   final String serviceLineNumber;
@@ -23,9 +38,11 @@ class _AdminSubscriptionDetailsPageState
 
   Map<String, dynamic>? _subscriptionData;
   Map<String, dynamic>? _billingData;
+  Map<String, dynamic>? _billingStatus;
 
   String? _subscriptionError;
   String? _billingError;
+  String? _billingStatusError;
 
   String? _cycleStart;
   String? _cycleEnd;
@@ -33,9 +50,7 @@ class _AdminSubscriptionDetailsPageState
   List<_BillingPeriod> _billingPeriods = [];
   _BillingPeriod? _selectedPeriod;
 
-  // ── Brand colors ───────────────────────────────────────────────────────────
   static const _brandRed = Color(0xFFEB1E23);
-  static const _brandDark = Color(0xFF760F12);
 
   @override
   void initState() {
@@ -49,16 +64,6 @@ class _AdminSubscriptionDetailsPageState
       (v == null || v.toString() == 'null' || v.toString().isEmpty)
           ? '—'
           : v.toString();
-
-  String _dateOnly(String? raw) {
-    if (raw == null || raw.isEmpty || raw == 'null') return '—';
-    if (raw == '0000-00-00') return '—';
-    try {
-      if (raw.contains('T')) return raw.split('T').first;
-      if (raw.contains(' ')) return raw.split(' ').first;
-    } catch (_) {}
-    return raw;
-  }
 
   String? _pickDate(Map<String, dynamic> m, List<String> keys) {
     for (final k in keys) {
@@ -75,6 +80,39 @@ class _AdminSubscriptionDetailsPageState
   String _gbStr(dynamic v) {
     final d = _parseGb(v);
     return d == 0 ? '0 GB' : '${d.toStringAsFixed(2)} GB';
+  }
+
+  /// FIX 1 — Convert "2026-04-20" → "April 2026"
+  String _toMonthYear(String? raw) {
+    if (raw == null || raw.isEmpty || raw == 'null') return '—';
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    try {
+      final clean =
+          raw.contains('T') ? raw.split('T').first : raw.split(' ').first;
+      final dt = DateTime.parse('${clean}T00:00:00');
+      return '${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  String _periodLabel(_BillingPeriod p) {
+    final s = _toMonthYear(p.startDate);
+    final e = _toMonthYear(p.endDate);
+    return s == e ? s : '$s - $e';
   }
 
   // ── load ───────────────────────────────────────────────────────────────────
@@ -94,8 +132,7 @@ class _AdminSubscriptionDetailsPageState
     });
 
     final sln = widget.serviceLineNumber.trim();
-
-    ApiService.refreshStarlinkServiceLine(sln).catchError((_) {});
+    ApiService.refreshStarlinkServiceLine(sln).catchError((_) => {});
 
     Map<String, dynamic>? subResult;
     String? subErr;
@@ -122,25 +159,6 @@ class _AdminSubscriptionDetailsPageState
     final List<_BillingPeriod> periods = [];
 
     if (subResult != null) {
-      final bc = subResult['billingCycle'];
-      if (bc is Map) {
-        final bcm = Map<String, dynamic>.from(bc);
-        startDate = _pickDate(bcm, ['startDate', 'start_date', 'start']);
-        endDate = _pickDate(bcm, ['endDate', 'end_date', 'end']);
-      }
-      startDate ??= _pickDate(subResult, [
-        'startDate',
-        'start_date',
-        'cycleStart',
-        'billingStart',
-      ]);
-      endDate ??= _pickDate(subResult, [
-        'endDate',
-        'end_date',
-        'cycleEnd',
-        'billingEnd',
-      ]);
-
       final dd = subResult['dd'];
       if (dd is List) {
         for (final item in dd) {
@@ -154,8 +172,29 @@ class _AdminSubscriptionDetailsPageState
           }
         }
       }
-      if (periods.isEmpty && startDate != null && endDate != null) {
-        periods.add(_BillingPeriod(startDate: startDate, endDate: endDate));
+
+      if (periods.isEmpty) {
+        final bc = subResult['billingCycle'];
+        if (bc is Map) {
+          final bcm = Map<String, dynamic>.from(bc);
+          startDate = _pickDate(bcm, ['startDate', 'start_date', 'start']);
+          endDate = _pickDate(bcm, ['endDate', 'end_date', 'end']);
+        }
+        startDate ??= _pickDate(subResult, [
+          'startDate',
+          'start_date',
+          'cycleStart',
+          'billingStart',
+        ]);
+        endDate ??= _pickDate(subResult, [
+          'endDate',
+          'end_date',
+          'cycleEnd',
+          'billingEnd',
+        ]);
+        if (startDate != null && endDate != null) {
+          periods.add(_BillingPeriod(startDate: startDate, endDate: endDate));
+        }
       }
     }
 
@@ -189,12 +228,32 @@ class _AdminSubscriptionDetailsPageState
       billingErr = 'No billing dates available';
     }
 
+    Map<String, dynamic>? statusResult;
+    String? statusErr;
+    try {
+      // Assuming a GET request to the endpoint that returns the requested JSON
+      final res = await ApiService.getSubscriptionByServiceLineNumber(sln);
+      if (res['status'] == 'success') {
+        final d = res['data'];
+        statusResult =
+            d is Map
+                ? Map<String, dynamic>.from(d)
+                : <String, dynamic>{'raw': d};
+      } else {
+        statusErr = res['message']?.toString() ?? 'Status fetch failed';
+      }
+    } catch (e) {
+      statusErr = e.toString();
+    }
+
     if (!mounted) return;
     setState(() {
       _subscriptionData = subResult;
       _subscriptionError = subErr;
       _billingData = billingResult;
       _billingError = billingErr;
+      _billingStatus = statusResult;
+      _billingStatusError = statusErr;
       _cycleStart = useStart;
       _cycleEnd = useEnd;
       _billingPeriods = periods;
@@ -213,7 +272,9 @@ class _AdminSubscriptionDetailsPageState
     if (current != null && current != 'null' && current.isNotEmpty) {
       try {
         final clean =
-            current.contains('T') ? current.split('T').first : current.split(' ').first;
+            current.contains('T')
+                ? current.split('T').first
+                : current.split(' ').first;
         initial = DateTime.parse('${clean}T00:00:00');
       } catch (_) {}
     }
@@ -246,7 +307,9 @@ class _AdminSubscriptionDetailsPageState
           ),
           backgroundColor: _brandRed,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     }
@@ -299,25 +362,14 @@ class _AdminSubscriptionDetailsPageState
         foregroundColor: const Color(0xFF000000),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.title,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF000000),
-              ),
-            ),
-          ],
+        title: Text(
+          widget.title,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF000000),
+          ),
         ),
-        // actions: [
-        //   IconButton(
-        //     icon: Icon(Icons.refresh_rounded, color: _brandRed),
-        //     onPressed: _loading ? null : _load,
-        //   ),
-        // ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: const Color(0xFFE8ECF0)),
@@ -415,7 +467,6 @@ class _AdminSubscriptionDetailsPageState
             brandRed: _brandRed,
           ),
           const SizedBox(height: 14),
-
           if (_subscriptionError != null)
             _ErrorCard(message: 'Subscription: $_subscriptionError')
           else
@@ -423,22 +474,20 @@ class _AdminSubscriptionDetailsPageState
               data: _subscriptionData,
               onDateTap: _changeEndDate,
             ),
-
           const SizedBox(height: 14),
-
           _BillingCard(
             billingData: _billingData,
             billingError: _billingError,
-            cycleStart: _cycleStart,
-            cycleEnd: _cycleEnd,
             periods: _billingPeriods,
             selectedPeriod: _selectedPeriod,
             onPeriodChanged: (p) {
               setState(() => _selectedPeriod = p);
               _loadBillingForPeriod(p);
             },
+            periodLabel: _periodLabel,
+            gbStr: _gbStr,
+            parseGb: _parseGb,
           ),
-
           const SizedBox(height: 24),
         ],
       ),
@@ -541,9 +590,8 @@ class _SubscriptionCard extends StatelessWidget {
           : v.toString();
 
   String _formatDate(String? raw) {
-    if (raw == null || raw.isEmpty || raw == 'null' || raw == '0000-00-00') {
-      return 'Invalid date';
-    }
+    if (raw == null || raw.isEmpty || raw == 'null' || raw == '0000-00-00')
+      return 'No end date';
     try {
       final clean =
           raw.contains('T') ? raw.split('T').first : raw.split(' ').first;
@@ -584,24 +632,42 @@ class _SubscriptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = _isActive;
-    final consumed = _parseGb(
-      data?['consumedAmountGB'] ?? data?['consumed_amount_gb'],
+    final bc = data?['billingCycle'];
+    final Map<String, dynamic>? billing =
+        bc is Map ? Map<String, dynamic>.from(bc) : null;
+
+    // FIX: Current Plan Usage = totalPriorityGB from billing cycle
+    final totalPriorityGB = _parseGb(
+      billing?['totalPriorityGB'] ?? billing?['total_priority_gb'],
     );
-    final usageLimit = _parseGb(
-      data?['usageLimitGB'] ?? data?['usage_limit_gb'],
+    final dataplanGb = _parseGb(data?['dataplan']);
+
+    // FIX: Current Monthly Data = dataplan, TopUp = sum of serviceTopUp
+    final serviceTopUps = data?['serviceTopUp'] as List?;
+    double topup = 0;
+    if (serviceTopUps != null) {
+      for (final item in serviceTopUps) {
+        if (item is Map) {
+          topup += _parseGb(item['amountGB'] ?? item['amount_gb']);
+        }
+      }
+    }
+
+    final usageLimitGb = _parseGb(
+      billing?['usageLimitGB'] ??
+          billing?['usage_limit_gb'] ??
+          data?['usageLimitGB'] ??
+          data?['usage_limit_gb'],
     );
-    final monthly = _parseGb(
-      data?['totalPriorityGB'] ??
-          data?['total_priority_gb'] ??
-          data?['currentMonthlyData'],
-    );
-    final topup = _parseGb(
-      data?['totalStandardGB'] ??
-          data?['total_standard_gb'] ??
-          data?['topUpData'],
-    );
+    final effectiveLimit = usageLimitGb > 0 ? usageLimitGb : dataplanGb;
+
+    // total = priority + topup (based on user request)
+    final totalUsed = totalPriorityGB + topup;
+
+    // FIX 2 — cap bar at 1.0; show red + warning label when over limit
     final progress =
-        usageLimit > 0 ? (consumed / usageLimit).clamp(0.0, 1.0) : 0.0;
+        effectiveLimit > 0 ? (totalUsed / effectiveLimit).clamp(0.0, 1.0) : 0.0;
+    final isOverLimit = effectiveLimit > 0 && totalUsed > effectiveLimit;
 
     final rtm = data?['routerTerminalMap'];
     final hardware =
@@ -613,6 +679,7 @@ class _SubscriptionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header ────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Row(
@@ -632,14 +699,13 @@ class _SubscriptionCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        _str(data?['nickname']),
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF000000),
-                        ),
-                      ),
-                    ],
+                       _str(data?['nickname']),
+                       style: const TextStyle(
+                         fontSize: 15,
+                         fontWeight: FontWeight.w700,
+                         color: Color(0xFF000000),
+                       ),
+                      ),                    ],
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -659,40 +725,63 @@ class _SubscriptionCard extends StatelessWidget {
           const SizedBox(height: 14),
           const _HDivider(),
 
-          // Hardware Info Section
+          // ── Hardware ──────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
               children: [
-                _InfoRow(
-                  label: 'Starlink ID',
-                  value: _str(
-                    hardware?['starlink_id'] ??
-                        hardware?['starlinkId'] ??
-                        data?['starlink_id'] ??
-                        data?['starlinkId'],
+                if (_str(
+                      hardware?['starlink_id'] ??
+                          hardware?['starlinkId'] ??
+                          data?['starlink_id'] ??
+                          data?['starlinkId'],
+                    ) !=
+                    '—') ...[
+                  _InfoRow(
+                    label: 'Starlink ID',
+                    value: _str(
+                      hardware?['starlink_id'] ??
+                          hardware?['starlinkId'] ??
+                          data?['starlink_id'] ??
+                          data?['starlinkId'],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                _InfoRow(
-                  label: 'Serial Number',
-                  value: _str(
-                    hardware?['serial_number'] ??
-                        hardware?['serialNumber'] ??
-                        data?['serial_number'] ??
-                        data?['serialNumber'],
+                  const SizedBox(height: 10),
+                ],
+                if (_str(
+                      hardware?['serial_number'] ??
+                          hardware?['serialNumber'] ??
+                          data?['serial_number'] ??
+                          data?['serialNumber'],
+                    ) !=
+                    '—') ...[
+                  _InfoRow(
+                    label: 'Serial Number',
+                    value: _str(
+                      hardware?['serial_number'] ??
+                          hardware?['serialNumber'] ??
+                          data?['serial_number'] ??
+                          data?['serialNumber'],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                _InfoRow(
-                  label: 'Kit Number',
-                  value: _str(
-                    hardware?['kit_number'] ??
-                        hardware?['kitNumber'] ??
-                        data?['kit_number'] ??
-                        data?['kitNumber'],
+                  const SizedBox(height: 10),
+                ],
+                if (_str(
+                      hardware?['kit_number'] ??
+                          hardware?['kitNumber'] ??
+                          data?['kit_number'] ??
+                          data?['kitNumber'],
+                    ) !=
+                    '—')
+                  _InfoRow(
+                    label: 'Kit Number',
+                    value: _str(
+                      hardware?['kit_number'] ??
+                          hardware?['kitNumber'] ??
+                          data?['kit_number'] ??
+                          data?['kitNumber'],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -700,6 +789,7 @@ class _SubscriptionCard extends StatelessWidget {
           const SizedBox(height: 14),
           const _HDivider(),
 
+          // ── End date ──────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
@@ -762,9 +852,11 @@ class _SubscriptionCard extends StatelessWidget {
           const SizedBox(height: 16),
           const _HDivider(),
 
+          // ── FIX 2: Usage section ──────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -778,28 +870,54 @@ class _SubscriptionCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${_gbStr(consumed)} / ${_gbStr(usageLimit)}',
-                      style: const TextStyle(
+                      '${_gbStr(totalUsed)} / ${_gbStr(effectiveLimit)}',
+                      style: TextStyle(
                         fontSize: 12.5,
-                        color: Color(0xFF000000),
+                        // Red when over the plan limit
+                        color:
+                            isOverLimit
+                                ? const Color(0xFFEF4444)
+                                : const Color(0xFF000000),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
+                // Over-limit warning badge
+                if (isOverLimit) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: const [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 13,
+                        color: Color(0xFFEF4444),
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Data limit exceeded',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFEF4444),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 8),
+                // Bar never overflows — clamped to 1.0
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: progress,
                     backgroundColor: const Color(0xFFE8ECF0),
-                    // Data-viz: red when >90%, amber >70%, blue otherwise (keep as-is)
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      progress > 0.9
-                          ? const Color(0xFFEF4444)
+                      isOverLimit
+                          ? const Color(0xFFEF4444) // red  when exceeded
                           : progress > 0.7
-                          ? const Color(0xFFF59E0B)
-                          : const Color(0xFF0F62FE),
+                          ? const Color(0xFFF59E0B) // amber when >70%
+                          : const Color(0xFF0F62FE), // blue otherwise
                     ),
                     minHeight: 6,
                   ),
@@ -807,7 +925,7 @@ class _SubscriptionCard extends StatelessWidget {
                 const SizedBox(height: 14),
                 _UsageRow(
                   label: 'Current monthly data',
-                  value: _gbStr(monthly),
+                  value: _gbStr(dataplanGb),
                 ),
                 const SizedBox(height: 8),
                 _UsageRow(label: 'Top-Up data', value: _gbStr(topup)),
@@ -818,6 +936,7 @@ class _SubscriptionCard extends StatelessWidget {
           const SizedBox(height: 16),
           const _HDivider(),
 
+          // ── Address ───────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
             child: Column(
@@ -865,107 +984,72 @@ class _SubscriptionCard extends StatelessWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _InfoRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: Color(0xFF8A96A3)),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF000000),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Billing Card
+// Billing Card (Aligned with End User UI)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _BillingCard extends StatelessWidget {
   final Map<String, dynamic>? billingData;
   final String? billingError;
-  final String? cycleStart;
-  final String? cycleEnd;
   final List<_BillingPeriod> periods;
   final _BillingPeriod? selectedPeriod;
   final ValueChanged<_BillingPeriod> onPeriodChanged;
+  final String Function(_BillingPeriod) periodLabel;
+  final String Function(dynamic) gbStr;
+  final double Function(dynamic) parseGb;
 
   const _BillingCard({
     required this.billingData,
     required this.billingError,
-    required this.cycleStart,
-    required this.cycleEnd,
     required this.periods,
     required this.selectedPeriod,
     required this.onPeriodChanged,
+    required this.periodLabel,
+    required this.gbStr,
+    required this.parseGb,
   });
-
-  double _parseGb(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0.0;
-
-  String _gbStr(dynamic v) {
-    final d = _parseGb(v);
-    return d == 0 ? '0 GB' : '${d.toStringAsFixed(2)} GB';
-  }
-
-  String _periodLabel(_BillingPeriod p) {
-    try {
-      final s = DateTime.parse(
-        p.startDate.contains('T') ? p.startDate : '${p.startDate}T00:00:00',
-      );
-      final e = DateTime.parse(
-        p.endDate.contains('T') ? p.endDate : '${p.endDate}T00:00:00',
-      );
-      const months = [
-        'January',
-        'February',
-        'March',
-        'April',
-        'May',
-        'June',
-        'July',
-        'August',
-        'September',
-        'October',
-        'November',
-        'December',
-      ];
-      return '${months[s.month - 1]} ${s.year} – ${months[e.month - 1]} ${e.year}';
-    } catch (_) {
-      return '${p.startDate} – ${p.endDate}';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final consumed = _parseGb(billingData?['consumedAmountGB']);
-    final limit = _parseGb(billingData?['usageLimitGB']);
-    final priority = _parseGb(billingData?['totalPriorityGB']);
-    final standard = _parseGb(billingData?['totalStandardGB']);
-    final overage = _parseGb(billingData?['overageGB']);
-    final progress =
-        limit > 0
-            ? (consumed / limit).clamp(0.0, 1.0)
-            : (consumed > 0 ? 1.0 : 0.0);
+    final priority = parseGb(
+      billingData?['totalPriorityGB'] ?? billingData?['total_priority_gb'],
+    );
+    final standard = parseGb(
+      billingData?['totalStandardGB'] ?? billingData?['total_standard_gb'],
+    );
+    final optin = parseGb(
+      billingData?['totalOptInPriorityGB'] ??
+          billingData?['total_opt_in_priority_gb'],
+    );
+    final nonBillable = parseGb(
+      billingData?['totalNonBillableGB'] ??
+          billingData?['total_non_billable_gb'],
+    );
 
-    return _Card(
+    final dailyUsage = billingData?['dailyUsage'];
+    final List<dynamic> graphs =
+        (dailyUsage is Map) ? (dailyUsage['graphs'] as List? ?? []) : [];
+
+    double datasetsPriorityTotal = 0;
+    if (graphs.isNotEmpty) {
+      final g = graphs.first;
+      final dataMap = g['data'] as Map? ?? {};
+      final datasets = dataMap['datasets'] as List? ?? [];
+      for (final ds in datasets) {
+        if (ds is Map) {
+          final dList = ds['data'] as List? ?? [];
+          if (dList.isNotEmpty) {
+            datasetsPriorityTotal += parseGb(dList[0]);
+          }
+        }
+      }
+    }
+
+    return _SurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Period Dropdown ─────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Column(
@@ -975,13 +1059,100 @@ class _BillingCard extends StatelessWidget {
                   'Select billing period:',
                   style: TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF8A96A3),
+                    color: _inkLight,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 8),
-                if (periods.isEmpty)
-                  Container(
+                GestureDetector(
+                  onTap: () {
+                    if (periods.isEmpty) return;
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: _surface,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
+                      ),
+                      builder: (ctx) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: _border,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Select Billing Period',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: _inkDark,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxHeight:
+                                      MediaQuery.of(context).size.height * 0.4,
+                                ),
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  padding: EdgeInsets.zero,
+                                  itemCount: periods.length,
+                                  itemBuilder: (context, index) {
+                                    final p = periods[index];
+                                    final isSelected = p == selectedPeriod;
+                                    return ListTile(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 24,
+                                          ),
+                                      title: Text(
+                                        periodLabel(p),
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight:
+                                              isSelected
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w500,
+                                          color:
+                                              isSelected ? _accent : _inkDark,
+                                        ),
+                                      ),
+                                      trailing:
+                                          isSelected
+                                              ? const Icon(
+                                                Icons.check_circle_rounded,
+                                                color: _accent,
+                                                size: 20,
+                                              )
+                                              : null,
+                                      onTap: () {
+                                        onPeriodChanged(p);
+                                        Navigator.pop(ctx);
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 12,
@@ -989,50 +1160,30 @@ class _BillingCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: _border),
                     ),
-                    child: const Text(
-                      'No billing periods available',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF8A96A3)),
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<_BillingPeriod>(
-                        value: selectedPeriod,
-                        isExpanded: true,
-                        dropdownColor: Colors.white,
-                        icon: const Icon(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            selectedPeriod != null
+                                ? periodLabel(selectedPeriod!)
+                                : 'Select period',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _inkDark,
+                            ),
+                          ),
+                        ),
+                        const Icon(
                           Icons.keyboard_arrow_down_rounded,
-                          color: Color(0xFF8A96A3),
+                          color: _inkLight,
                         ),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF000000),
-                          fontWeight: FontWeight.w500,
-                        ),
-                        items:
-                            periods
-                                .map(
-                                  (p) => DropdownMenuItem(
-                                    value: p,
-                                    child: Text(_periodLabel(p)),
-                                  ),
-                                )
-                                .toList(),
-                        onChanged: (p) {
-                          if (p != null) onPeriodChanged(p);
-                        },
-                      ),
+                      ],
                     ),
                   ),
+                ),
               ],
             ),
           ),
@@ -1046,146 +1197,93 @@ class _BillingCard extends StatelessWidget {
               child: _ErrorCard(message: billingError!),
             )
           else if (billingData == null)
-            Padding(
-              padding: const EdgeInsets.all(36),
+            const Padding(
+              padding: EdgeInsets.all(36),
               child: Center(
                 child: CircularProgressIndicator(
-                  color: const Color(0xFFEB1E23),
+                  color: _accent,
                   strokeWidth: 2.5,
                 ),
               ),
             )
-          else ...[
+          else
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Updated Data Usage',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF8A96A3),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _gbStr(consumed),
-                    style: const TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF000000),
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: const Color(0xFFE8ECF0),
-                      // Data-viz: keep color gradient for usage level
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        progress > 0.9
-                            ? const Color(0xFFEF4444)
-                            : progress > 0.7
-                            ? const Color(0xFFF59E0B)
-                            : const Color(
-                              0xFFFC9FA5,
-                            ), // light brand red for healthy usage
-                      ),
-                      minHeight: 48,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
+                  // ── Updated Data Usage ──────────────────────────────
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      const Text(
+                        'Updated Data Usage',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _inkMid,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       Text(
-                        '${(progress * 100).toStringAsFixed(1)}% used',
+                        gbStr(datasetsPriorityTotal),
                         style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF8A96A3),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: _accent,
                         ),
                       ),
-                      if (limit > 0)
-                        Text(
-                          '${_gbStr(limit - consumed)} remaining',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF8A96A3),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+                  const _HDivider(),
+                  const SizedBox(height: 16),
+
+                  // ── Daily Usage Graph ──────────────────────────────
+                  const Text(
+                    'Daily Usage Trends',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _inkLight,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Builder(
+                    builder: (_) {
+                      if (graphs.isEmpty) {
+                        return Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _border),
                           ),
-                        ),
-                    ],
+                          child: const Center(
+                            child: Text(
+                              'No daily usage data available',
+                              style: TextStyle(fontSize: 13, color: _inkLight),
+                            ),
+                          ),
+                        );
+                      }
+                      final g = graphs.first;
+                      final dataMap = g['data'] as Map? ?? {};
+                      final labels =
+                          (dataMap['labels'] as List? ?? [])
+                              .map((e) => e.toString())
+                              .toList();
+                      final datasets = dataMap['datasets'] as List? ?? [];
+
+                      return _UsageUnifiedGraph(
+                        labels: labels,
+                        datasets: datasets,
+                      );
+                    },
                   ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 16),
-            const _HDivider(),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _StatBox(
-                          label: 'Priority Data',
-                          value: _gbStr(priority),
-                          color: const Color(
-                            0xFF0F62FE,
-                          ), // blue = data category
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _StatBox(
-                          label: 'Standard Data',
-                          value: _gbStr(standard),
-                          color: const Color(0xFF6366F1),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _StatBox(
-                          label: 'Usage Limit',
-                          value: _gbStr(limit),
-                          color: const Color(0xFF8A96A3),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _StatBox(
-                          label: 'Overage',
-                          value: _gbStr(overage),
-                          color:
-                              overage > 0
-                                  ? const Color(0xFFEF4444)
-                                  : const Color(0xFF10B981),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1193,7 +1291,548 @@ class _BillingCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared small widgets
+// Summary Grid
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SummaryGrid extends StatelessWidget {
+  final double priority;
+  final double standard;
+  final double optin;
+  final double nonBillable;
+  final String Function(dynamic) gbStr;
+
+  const _SummaryGrid({
+    required this.priority,
+    required this.standard,
+    required this.optin,
+    required this.nonBillable,
+    required this.gbStr,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            _SummaryItem(
+              label: 'Priority',
+              value: gbStr(priority),
+              color: _accent,
+            ),
+            const SizedBox(width: 12),
+            _SummaryItem(
+              label: 'Standard',
+              value: gbStr(standard),
+              color: _indigo,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _SummaryItem(label: 'Opt-in', value: gbStr(optin), color: _amber),
+            const SizedBox(width: 12),
+            _SummaryItem(
+              label: 'Non-Billable',
+              value: gbStr(nonBillable),
+              color: _emerald,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _SummaryItem({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.15)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: color,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unified Usage Graph — Scrollable fl_chart implementation
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _UsageUnifiedGraph extends StatelessWidget {
+  final List<String> labels;
+  final List<dynamic> datasets;
+
+  const _UsageUnifiedGraph({required this.labels, required this.datasets});
+
+  double _parse(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0.0;
+
+  String _formatDate(String date) {
+    try {
+      final clean =
+          date.contains('T') ? date.split('T').first : date.split(' ').first;
+      final dt = DateTime.parse('${clean}T00:00:00');
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+    } catch (_) {
+      return date;
+    }
+  }
+
+  void _showDetailDialog(BuildContext context, int index) {
+    if (index < 0 || index >= labels.length) return;
+
+    final date = labels[index];
+    final dataList = index < datasets.length ? datasets[index]['data'] : [];
+
+    final p = _parse(dataList.length > 0 ? dataList[0] : 0);
+    final s = _parse(dataList.length > 1 ? dataList[1] : 0);
+    final o = _parse(dataList.length > 2 ? dataList[2] : 0);
+    final n = _parse(dataList.length > 3 ? dataList[3] : 0);
+
+    final maxVal = [p, s, o, n].reduce((a, b) => a > b ? a : b);
+    final effectiveMax = maxVal == 0 ? 1.0 : maxVal;
+
+    showDialog(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: _surface,
+            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Usage Details',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: _inkDark,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(ctx),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: _inkLight,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatDate(date),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: _inkLight,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _dialogMetric('Priority', p, _accent, effectiveMax),
+                const SizedBox(height: 14),
+                _dialogMetric('Standard', s, _accentBlue, effectiveMax),
+                const SizedBox(height: 14),
+                _dialogMetric(
+                  'Opt-in Priority',
+                  o,
+                  _amber,
+                  effectiveMax,
+                ),
+                const SizedBox(height: 14),
+                _dialogMetric(
+                  'Non-Billable',
+                  n,
+                  _emerald,
+                  effectiveMax,
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: _HDivider(),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total Daily Usage',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _inkDark,
+                      ),
+                    ),
+                    Text(
+                      '${(p + s + o + n).toStringAsFixed(2)} GB',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: _accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _dialogMetric(String label, double value, Color color, double max) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: _inkMid,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Text(
+              '${value.toStringAsFixed(2)} GB',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: (value / max).clamp(0.0, 1.0),
+            backgroundColor: _border,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 8,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (labels.isEmpty) return const SizedBox.shrink();
+
+    double maxY = 1.0;
+    final List<FlSpot> pSpots = [];
+    final List<FlSpot> sSpots = [];
+    final List<FlSpot> oSpots = [];
+    final List<FlSpot> nSpots = [];
+
+    for (int i = 0; i < labels.length; i++) {
+      final dataList = i < datasets.length ? datasets[i]['data'] : [];
+      final p = _parse(dataList.length > 0 ? dataList[0] : 0);
+      final s = _parse(dataList.length > 1 ? dataList[1] : 0);
+      final o = _parse(dataList.length > 2 ? dataList[2] : 0);
+      final n = _parse(dataList.length > 3 ? dataList[3] : 0);
+
+      pSpots.add(FlSpot(i.toDouble(), p));
+      sSpots.add(FlSpot(i.toDouble(), s));
+      oSpots.add(FlSpot(i.toDouble(), o));
+      nSpots.add(FlSpot(i.toDouble(), n));
+
+      final dayMax = [p, s, o, n].reduce((a, b) => a > b ? a : b);
+      if (dayMax > maxY) maxY = dayMax;
+    }
+    maxY = (maxY * 1.2).ceilToDouble();
+
+    final bool showS = sSpots.any((s) => s.y > 0);
+    final bool showO = oSpots.any((s) => s.y > 0);
+    final bool showN = nSpots.any((s) => s.y > 0);
+
+    final double chartWidth = labels.length * 48.0 + 100.0;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              _legendItem('Priority', _accent),
+              if (showS) _legendItem('Standard', _accentBlue),
+              if (showO) _legendItem('Opt-in', _amber),
+              if (showN) _legendItem('Non-Billable', _emerald),
+            ],
+          ),
+        ),
+        Container(
+          height: 240,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _border),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(right: 16),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+                child: SizedBox(
+                  width: chartWidth < 300 ? 300 : chartWidth,
+                  child: LineChart(
+                    LineChartData(
+                      maxY: maxY,
+                      minX: 0,
+                      maxX: (labels.length - 1).toDouble(),
+                      lineTouchData: LineTouchData(
+                        enabled: true,
+                        handleBuiltInTouches: true,
+                        touchCallback: (FlTouchEvent event, touchResponse) {
+                          if (event is FlTapDownEvent &&
+                              touchResponse != null &&
+                              touchResponse.lineBarSpots != null &&
+                              touchResponse.lineBarSpots!.isNotEmpty) {
+                            final index =
+                                touchResponse.lineBarSpots!.first.x.toInt();
+                            _showDetailDialog(context, index);
+                          }
+                        },
+                        touchTooltipData: LineTouchTooltipData(
+                          tooltipBgColor: _inkDark.withOpacity(0.9),
+                          getTooltipItems: (touchedSpots) {
+                            return touchedSpots.map((s) {
+                              return LineTooltipItem(
+                                '${s.y.toStringAsFixed(2)} GB',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              );
+                            }).toList();
+                          },
+                        ),
+                      ),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        getDrawingHorizontalLine:
+                            (v) => FlLine(
+                              color: _border.withOpacity(0.5),
+                              strokeWidth: 1,
+                            ),
+                      ),
+                      titlesData: FlTitlesData(
+                        show: true,
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            interval: 1,
+                            getTitlesWidget: (value, meta) {
+                              final i = value.toInt();
+                              if (i < 0 || i >= labels.length) {
+                                return const SizedBox.shrink();
+                              }
+                              String label = labels[i];
+                              try {
+                                final dt = DateTime.parse(
+                                  label.contains('T')
+                                      ? label.split('T').first
+                                      : label.split(' ').first,
+                                );
+                                label = '${dt.month}/${dt.day}';
+                              } catch (_) {}
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(
+                                    color: _inkLight,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 36,
+                            getTitlesWidget:
+                                (v, m) => Text(
+                                  '${v.toInt()}',
+                                  style: const TextStyle(
+                                    color: _inkLight,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                          ),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        _lineData(pSpots, _accent),
+                        if (showS) _lineData(sSpots, _accentBlue),
+                        if (showO) _lineData(oSpots, _amber),
+                        if (showN) _lineData(nSpots, _emerald),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.touch_app_rounded, size: 12, color: _inkLight),
+            SizedBox(width: 4),
+            Text(
+              'Tap points for details',
+              style: TextStyle(
+                fontSize: 10,
+                color: _inkLight,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  LineChartBarData _lineData(List<FlSpot> spots, Color color) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      color: color,
+      barWidth: 3,
+      isStrokeCapRound: true,
+      dotData: const FlDotData(show: true),
+      belowBarData: BarAreaData(show: true, color: color.withOpacity(0.05)),
+    );
+  }
+
+  Widget _legendItem(String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            color: _inkMid,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SurfaceCard extends StatelessWidget {
+  final Widget child;
+  const _SurfaceCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: _surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: _border),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.04),
+          blurRadius: 14,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: child,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared detail widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _Card extends StatelessWidget {
@@ -1201,28 +1840,25 @@ class _Card extends StatelessWidget {
   const _Card({required this.child});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE8ECF0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0xFFE8ECF0)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.04),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
+        ),
+      ],
+    ),
+    child: child,
+  );
 }
 
 class _HDivider extends StatelessWidget {
   const _HDivider();
-
   @override
   Widget build(BuildContext context) =>
       Container(height: 1, color: const Color(0xFFF0F4F8));
@@ -1273,70 +1909,48 @@ class _UsageRow extends StatelessWidget {
   const _UsageRow({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12.5, color: Color(0xFF4A5568)),
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(fontSize: 12.5, color: Color(0xFF4A5568)),
+      ),
+      Text(
+        value,
+        style: const TextStyle(
+          fontSize: 12.5,
+          color: Color(0xFF000000),
+          fontWeight: FontWeight.w600,
         ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 12.5,
-            color: Color(0xFF000000),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }
 
-class _StatBox extends StatelessWidget {
+class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
-  final Color color;
-  const _StatBox({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: Color(0xFF8A96A3)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10.5,
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF000000),
-            ),
-          ),
-        ],
+      Text(
+        value,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF000000),
+        ),
       ),
-    );
-  }
+    ],
+  );
 }
 
 class _ErrorCard extends StatelessWidget {
@@ -1344,32 +1958,30 @@ class _ErrorCard extends StatelessWidget {
   const _ErrorCard({required this.message});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF1F0),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEB1E23).withOpacity(0.35)),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.warning_amber_rounded,
-            color: Color(0xFFEB1E23),
-            size: 18,
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFF1F0),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFEB1E23).withOpacity(0.35)),
+    ),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.warning_amber_rounded,
+          color: Color(0xFFEB1E23),
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(color: Color(0xFFEB1E23), fontSize: 12),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(color: Color(0xFFEB1E23), fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1390,3 +2002,4 @@ class _BillingPeriod {
   @override
   int get hashCode => Object.hash(startDate, endDate);
 }
+

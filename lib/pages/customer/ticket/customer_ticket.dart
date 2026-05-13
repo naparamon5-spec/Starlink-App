@@ -713,60 +713,58 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                     const SizedBox(height: 10),
 
                     // Meta
-                    Row(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: _MetaField(
-                            label: 'Contact',
-                            value: contact,
-                            query: query,
-                          ),
+                        _MetaField(
+                          label: 'Subscription',
+                          value: subscription,
+                          query: query,
                         ),
-                        Expanded(
-                          child: _MetaField(
-                            label: 'Subscription',
-                            value: subscription,
-                            query: query,
-                          ),
+                        const SizedBox(height: 8),
+                        _MetaField(
+                          label: 'Requester',
+                          value: contact,
+                          query: query,
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
 
                     // Description
-                    _HighlightText(
-                      text: description,
-                      query: query,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: _inkSecondary,
-                        height: 1.4,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    // _HighlightText(
+                    //   text: description,
+                    //   query: query,
+                    //   style: const TextStyle(
+                    //     fontSize: 12,
+                    //     color: _inkSecondary,
+                    //     height: 1.4,
+                    //   ),
+                    //   maxLines: 2,
+                    //   overflow: TextOverflow.ellipsis,
+                    // ),
                     const SizedBox(height: 8),
 
                     // Footer
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: const [
-                        Text(
-                          'View details',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: _primary,
-                          ),
-                        ),
-                        SizedBox(width: 2),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          color: _primary,
-                          size: 14,
-                        ),
-                      ],
-                    ),
+                    // Row(
+                    //   mainAxisAlignment: MainAxisAlignment.end,
+                    //   children: const [
+                    //     Text(
+                    //       'View details',
+                    //       style: TextStyle(
+                    //         fontSize: 11,
+                    //         fontWeight: FontWeight.w700,
+                    //         color: _primary,
+                    //       ),
+                    //     ),
+                    //     SizedBox(width: 2),
+                    //     Icon(
+                    //       Icons.chevron_right_rounded,
+                    //       color: _primary,
+                    //       size: 14,
+                    //     ),
+                    //   ],
+                    // ),
                   ],
                 ),
               ),
@@ -859,7 +857,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
       'id': raw['id'],
       'Status': displayStatus,
       'Ticket Type': ticketType,
-      'Contact': raw['requester'] ?? raw['created_by'] ?? 'N/A',
+      'Contact': raw['created_by'] ?? raw['requester'] ?? 'N/A',
       'Subscription': raw['subscription'] ?? raw['subject'] ?? 'N/A',
       'Description': raw['description'] ?? 'No description',
       'Created At': _formatDate(raw['created_at']),
@@ -885,7 +883,10 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   String _formatDate(String? dateStr) {
     if (dateStr == null) return 'N/A';
     try {
-      final date = DateTime.parse(dateStr).toLocal();
+      // Parse as UTC then add 8 hours for Manila Time (UTC+8)
+      final utcDate = DateTime.parse(dateStr).toUtc();
+      final manilaDate = utcDate.add(const Duration(hours: 8));
+
       const months = [
         'Jan',
         'Feb',
@@ -900,7 +901,12 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
         'Nov',
         'Dec',
       ];
-      return '${months[date.month - 1]} ${date.day.toString().padLeft(2, '0')}, ${date.year}';
+
+      final h = manilaDate.hour % 12 == 0 ? 12 : manilaDate.hour % 12;
+      final m = manilaDate.minute.toString().padLeft(2, '0');
+      final period = manilaDate.hour >= 12 ? 'PM' : 'AM';
+
+      return '${months[manilaDate.month - 1]} ${manilaDate.day.toString().padLeft(2, '0')}, ${manilaDate.year}  $h:$m $period';
     } catch (_) {
       return dateStr;
     }

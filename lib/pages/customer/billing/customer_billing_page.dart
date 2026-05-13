@@ -286,10 +286,7 @@ class _CustomerBillingPageState extends State<CustomerBillingPage> {
 
                           String status;
                           Color statusColor;
-                          if (amountVal == 0.0) {
-                            status = 'PENDING';
-                            statusColor = _warning;
-                          } else if (paidVal >= amountVal) {
+                          if (paidVal >= amountVal) {
                             status = 'PAID';
                             statusColor = _success;
                           } else if (paidVal > 0) {
@@ -412,12 +409,12 @@ class _BillingTile extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.08),
+                  color: _inkTertiary.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.receipt_long_outlined,
-                  color: statusColor,
+                  color: _inkTertiary,
                   size: 20,
                 ),
               ),
@@ -456,48 +453,27 @@ class _BillingTile extends StatelessWidget {
                           value: '₱${_fmt(amount)}',
                           color: _inkSecondary,
                         ),
-                        const SizedBox(width: 6),
-                        _AmountChip(
-                          label: 'Paid',
-                          value: '₱${_fmt(paidAmount)}',
-                          color: _success,
-                        ),
+                        if (double.tryParse(paidAmount) != null &&
+                            double.tryParse(paidAmount)! > 0) ...[
+                          const SizedBox(width: 6),
+                          _AmountChip(
+                            label: 'Paid',
+                            value: '₱${_fmt(paidAmount)}',
+                            color: _success,
+                          ),
+                        ],
                       ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: statusColor.withOpacity(0.2)),
-                    ),
-                    child: Text(
-                      status,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: statusColor,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: _inkTertiary,
-                    size: 16,
-                  ),
-                ],
+              const Center(
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  color: _inkTertiary,
+                  size: 20,
+                ),
               ),
             ],
           ),
@@ -535,7 +511,7 @@ class _AmountChip extends StatelessWidget {
         text: TextSpan(
           children: [
             TextSpan(
-              text: '$label: ',
+              text: '$label ',
               style: const TextStyle(
                 fontSize: 9,
                 color: _inkTertiary,

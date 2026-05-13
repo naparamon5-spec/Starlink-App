@@ -108,7 +108,7 @@ class EndUsersPage extends StatelessWidget {
                     ),
                     SizedBox(width: 6),
                     Text(
-                      'You can view end users and create tickets on their behalf.',
+                      'You can view end users information.',
                       style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
                     ),
                   ],
@@ -253,27 +253,27 @@ class UserCard extends StatelessWidget {
               ],
             ),
           ),
-          GestureDetector(
-            onTap: () {},
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: const Color(0xFF6366F1).withOpacity(0.3),
-                ),
-              ),
-              child: const Text(
-                '+ Ticket',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF6366F1),
-                ),
-              ),
-            ),
-          ),
+          // GestureDetector(
+          //   onTap: () {},
+          //   child: Container(
+          //     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          //     decoration: BoxDecoration(
+          //       color: const Color(0xFF6366F1).withOpacity(0.1),
+          //       borderRadius: BorderRadius.circular(10),
+          //       border: Border.all(
+          //         color: const Color(0xFF6366F1).withOpacity(0.3),
+          //       ),
+          //     ),
+          //     child: const Text(
+          //       '+ Ticket',
+          //       style: TextStyle(
+          //         fontSize: 11,
+          //         fontWeight: FontWeight.w700,
+          //         color: Color(0xFF6366F1),
+          //       ),
+          //     ),
+          //   ),
+          // ),
         ],
       ),
     );

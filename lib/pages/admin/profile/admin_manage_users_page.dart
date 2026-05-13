@@ -369,58 +369,58 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
                           physics: const AlwaysScrollableScrollPhysics(),
                           slivers: [
                             // Stat Pills
-                            SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  20,
-                                  20,
-                                  0,
-                                ),
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Row(
-                                    children: [
-                                      _StatPill(
-                                        icon:
-                                            Icons.admin_panel_settings_outlined,
-                                        label: 'Admins',
-                                        value: '${_count('admin')}',
-                                        color: _primary,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      _StatPill(
-                                        icon: Icons.support_agent_outlined,
-                                        label: 'Agents',
-                                        value: '${_count('agent')}',
-                                        color: _warning,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      _StatPill(
-                                        icon: Icons.business_outlined,
-                                        label: 'Customers',
-                                        value: '${_count('customer')}',
-                                        color: _info,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      _StatPill(
-                                        icon: Icons.person_outline,
-                                        label: 'End Users',
-                                        value: '${_count('end_user')}',
-                                        color: _success,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      _StatPill(
-                                        icon: Icons.receipt_long_outlined,
-                                        label: 'Billers',
-                                        value: '${_count('biller')}',
-                                        color: _purple,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
+                            // SliverToBoxAdapter(
+                            //   child: Padding(
+                            //     padding: const EdgeInsets.fromLTRB(
+                            //       20,
+                            //       20,
+                            //       20,
+                            //       0,
+                            //     ),
+                            //     child: SingleChildScrollView(
+                            //       scrollDirection: Axis.horizontal,
+                            //       child: Row(
+                            //         children: [
+                            //           _StatPill(
+                            //             icon:
+                            //                 Icons.admin_panel_settings_outlined,
+                            //             label: 'Admins',
+                            //             value: '${_count('admin')}',
+                            //             color: _primary,
+                            //           ),
+                            //           const SizedBox(width: 10),
+                            //           _StatPill(
+                            //             icon: Icons.support_agent_outlined,
+                            //             label: 'Agents',
+                            //             value: '${_count('agent')}',
+                            //             color: _warning,
+                            //           ),
+                            //           const SizedBox(width: 10),
+                            //           _StatPill(
+                            //             icon: Icons.business_outlined,
+                            //             label: 'Customers',
+                            //             value: '${_count('customer')}',
+                            //             color: _info,
+                            //           ),
+                            //           const SizedBox(width: 10),
+                            //           _StatPill(
+                            //             icon: Icons.person_outline,
+                            //             label: 'End Users',
+                            //             value: '${_count('end_user')}',
+                            //             color: _success,
+                            //           ),
+                            //           const SizedBox(width: 10),
+                            //           _StatPill(
+                            //             icon: Icons.receipt_long_outlined,
+                            //             label: 'Billers',
+                            //             value: '${_count('biller')}',
+                            //             color: _purple,
+                            //           ),
+                            //         ],
+                            //       ),
+                            //     ),
+                            //   ),
+                            // ),
 
                             // Search
                             SliverToBoxAdapter(
@@ -907,11 +907,11 @@ class _UserCard extends StatelessWidget {
               // Action buttons
               Column(
                 children: [
-                  _iconBtn(
-                    Icons.chevron_right_rounded,
-                    _inkSecondary,
-                    onViewDetail,
-                  ),
+                  // _iconBtn(
+                  //   Icons.chevron_right_rounded,
+                  //   _inkSecondary,
+                  //   onViewDetail,
+                  // ),
                   const SizedBox(height: 6),
                   _iconBtn(
                     Icons.delete_outline,
@@ -1173,7 +1173,9 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
       } else if (widget.prefilledRole == 'customer') {
         _selectedRoleLabel = 'Customer';
       } else {
-        _selectedRoleLabel = widget.prefilledRole![0].toUpperCase() + widget.prefilledRole!.substring(1);
+        _selectedRoleLabel =
+            widget.prefilledRole![0].toUpperCase() +
+            widget.prefilledRole!.substring(1);
       }
     }
     _selectedCompanyValue = widget.prefilledCompanyCode;
