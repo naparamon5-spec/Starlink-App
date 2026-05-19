@@ -143,7 +143,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _checkAppVersion() async {
-    final versionInfo = await VersionService().checkVersion();
+    final versionInfo = await AppVersionService().checkVersion();
     if (mounted) {
       setState(() {
         _versionInfo = versionInfo;
