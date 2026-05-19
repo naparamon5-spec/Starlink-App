@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:app_links/app_links.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart'; // 👈 add this
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:starlink_app/components/force_update_dialog.dart';
+import 'package:starlink_app/services/version_service.dart';
 
 import 'pages/login_screen.dart';
 import 'pages/reset_password.dart';
@@ -122,13 +124,40 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final _appLinks = AppLinks();
   DateTime? _lastPausedTime;
+  bool _isCheckingVersion = true;
+  Map<String, dynamic>? _versionInfo;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Schedule the version gate to run after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAppVersion();
+    });
+
     if (!kIsWeb) {
       _handleIncomingLinks();
+    }
+  }
+
+  Future<void> _checkAppVersion() async {
+    final versionInfo = await VersionService().checkVersion();
+    if (mounted) {
+      setState(() {
+        _versionInfo = versionInfo;
+        _isCheckingVersion = false;
+      });
+      if (versionInfo['isOutdated'] == true &&
+          versionInfo['isMandatory'] == true) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (_) => ForceUpdateDialog(downloadUrl: versionInfo['downloadUrl']),
+        );
+      }
     }
   }
 
@@ -154,7 +183,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  // ... (rest of class)
   void _handleIncomingLinks() {
     // App opened from CLOSED state via the email link
     _appLinks.getInitialLink().then((uri) {
@@ -169,7 +197,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _navigateFromLink(Uri uri) {
-    // if (uri.host == 'startlink-sandbox-api.ardentnetworks.com.ph' &&
     if (uri.host == 'sandbox.ardentnetworks.com.ph' &&
         uri.path == '/reset-password') {
       final token = uri.queryParameters['token'];
