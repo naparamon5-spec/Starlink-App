@@ -1,6 +1,6 @@
 {
-    "name": "starlink_app",
-    "short_name": "starlink_app",
+    "name": "Starlink Dashboard",
+    "short_name": "Starlink Dashboard",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
