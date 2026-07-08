@@ -542,6 +542,13 @@ class ApiService {
     if (token != null && token.isNotEmpty) return token;
     final result = await refreshToken();
     if (result['status'] == 'success') return result['accessToken'];
+    
+    // Auto-logout
+    await clearTokens();
+    final context = navigatorKey.currentContext;
+    if (context != null) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    }
     return null;
   }
 
