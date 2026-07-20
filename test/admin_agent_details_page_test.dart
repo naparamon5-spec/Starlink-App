@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:starlink_app/pages/admin/sections/agent/admin_agent_details_page.dart';
+import 'package:starlink_app/features/admin/sections/agent/admin_agent_details_page.dart';
 
 void main() {
   testWidgets('AdminAgentDetailsPage subscription buttons styling', (WidgetTester tester) async {

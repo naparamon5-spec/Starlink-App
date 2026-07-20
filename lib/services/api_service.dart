@@ -1,13 +1,13 @@
 import 'dart:convert';
-import 'dart:io' show HttpClient, X509Certificate;
+import 'dart:io' show HttpClient;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import '../config/ssl_config.dart';
-import '../main.dart';
+import 'package:starlink_app/core/config/ssl_config.dart';
+import 'package:starlink_app/main.dart';
 
 class ApiService {
   static String get baseUrl =>

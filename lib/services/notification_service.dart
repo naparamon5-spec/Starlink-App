@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'dart:io' show Platform, HttpClient, X509Certificate;
+import 'dart:io' show HttpClient;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
-import 'api_service.dart';
+import 'package:starlink_app/services/api_service.dart';
 
 class NotificationService {
   static const String _notificationsKey = 'app_notifications';
@@ -47,7 +47,7 @@ class NotificationService {
       await prefs.setStringList(_notificationsKey, notifications);
       await _updateUnreadCount();
     } catch (e) {
-      print('Error creating notification: $e');
+      debugPrint('Error creating notification: $e');
     }
   }
 
@@ -107,7 +107,7 @@ class NotificationService {
         };
       }).toList();
     } catch (e) {
-      print('Error getting notifications: $e');
+      debugPrint('Error getting notifications: $e');
       return [];
     }
   }
@@ -137,7 +137,7 @@ class NotificationService {
       await prefs.setStringList(_notificationsKey, notifications);
       await _updateUnreadCount();
     } catch (e) {
-      print('Error marking notification as read: $e');
+      debugPrint('Error marking notification as read: $e');
     }
   }
 
@@ -156,7 +156,7 @@ class NotificationService {
       await prefs.setStringList(_notificationsKey, notifications);
       await _updateUnreadCount();
     } catch (e) {
-      print('Error marking all notifications as read: $e');
+      debugPrint('Error marking all notifications as read: $e');
     }
   }
 
@@ -180,7 +180,7 @@ class NotificationService {
       await prefs.setStringList(_notificationsKey, notifications);
       await _updateUnreadCount();
     } catch (e) {
-      print('Error deleting notification: $e');
+      debugPrint('Error deleting notification: $e');
     }
   }
 
@@ -191,7 +191,7 @@ class NotificationService {
       await prefs.remove(_notificationsKey);
       await prefs.remove(_unreadCountKey);
     } catch (e) {
-      print('Error clearing notifications: $e');
+      debugPrint('Error clearing notifications: $e');
     }
   }
 
@@ -224,7 +224,7 @@ class NotificationService {
           }).length;
       return unreadCount;
     } catch (e) {
-      print('Error getting unread count from backend: $e');
+      debugPrint('Error getting unread count from backend: $e');
       return 0;
     }
   }
@@ -238,7 +238,7 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_unreadCountKey, unreadCount);
     } catch (e) {
-      print('Error updating unread count: $e');
+      debugPrint('Error updating unread count: $e');
     }
   }
 
@@ -366,7 +366,7 @@ class NotificationService {
             throw Exception(data['message'] ?? 'Failed to fetch notifications');
           }
         } catch (e) {
-          print('Response body: ${response.body}');
+          debugPrint('Response body: ${response.body}');
           if (response.body.contains('<!doctype html>')) {
             throw Exception(
               'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
@@ -380,7 +380,7 @@ class NotificationService {
         );
       }
     } catch (e) {
-      print('Error in getCustomerNotifications: $e');
+      debugPrint('Error in getCustomerNotifications: $e');
       return [];
     }
   }
@@ -414,7 +414,7 @@ class NotificationService {
             throw Exception(data['message'] ?? 'Failed to create notification');
           }
         } catch (e) {
-          print('Response body: ${response.body}');
+          debugPrint('Response body: ${response.body}');
           if (response.body.contains('<!doctype html>')) {
             throw Exception(
               'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
@@ -428,7 +428,7 @@ class NotificationService {
         );
       }
     } catch (e) {
-      print('Error in createCustomerNotification: $e');
+      debugPrint('Error in createCustomerNotification: $e');
       throw Exception('Failed to create notification: $e');
     }
   }
@@ -460,7 +460,7 @@ class NotificationService {
             throw Exception(data['message'] ?? 'Failed to mark as read');
           }
         } catch (e) {
-          print('Response body: ${response.body}');
+          debugPrint('Response body: ${response.body}');
           if (response.body.contains('<!doctype html>')) {
             throw Exception(
               'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
@@ -474,7 +474,7 @@ class NotificationService {
         );
       }
     } catch (e) {
-      print('Error in markCustomerNotificationRead: $e');
+      debugPrint('Error in markCustomerNotificationRead: $e');
       throw Exception('Failed to mark notification as read: $e');
     }
   }
@@ -506,7 +506,7 @@ class NotificationService {
             throw Exception(data['message'] ?? 'Failed to mark as unread');
           }
         } catch (e) {
-          print('Response body: ${response.body}');
+          debugPrint('Response body: ${response.body}');
           if (response.body.contains('<!doctype html>')) {
             throw Exception(
               'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
@@ -520,7 +520,7 @@ class NotificationService {
         );
       }
     } catch (e) {
-      print('Error in markCustomerNotificationUnread: $e');
+      debugPrint('Error in markCustomerNotificationUnread: $e');
       throw Exception('Failed to mark notification as unread: $e');
     }
   }
@@ -552,7 +552,7 @@ class NotificationService {
             throw Exception(data['message'] ?? 'Failed to delete notification');
           }
         } catch (e) {
-          print('Response body: ${response.body}');
+          debugPrint('Response body: ${response.body}');
           if (response.body.contains('<!doctype html>')) {
             throw Exception(
               'Server returned HTML instead of JSON. Check if the API endpoint is accessible.',
@@ -566,7 +566,7 @@ class NotificationService {
         );
       }
     } catch (e) {
-      print('Error in deleteCustomerNotification: $e');
+      debugPrint('Error in deleteCustomerNotification: $e');
       throw Exception('Failed to delete notification: $e');
     }
   }

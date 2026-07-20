@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:starlink_app/config/app_env.dart';
+import 'package:starlink_app/core/config/app_env.dart';
 
 // ---------------------------------------------------------------------------
 // AppVersionInfo

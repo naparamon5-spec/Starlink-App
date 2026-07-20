@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/notification_service.dart';
+import 'package:starlink_app/services/notification_service.dart';
 
 class NotificationProvider extends ChangeNotifier {
   int _unreadCount = 0;

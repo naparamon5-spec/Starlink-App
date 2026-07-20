@@ -3,20 +3,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:app_links/app_links.dart';
-import 'package:onesignal_flutter/onesignal_flutter.dart'; // 👈 add this
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:starlink_app/components/force_update_dialog.dart';
+import 'package:starlink_app/shared/widgets/force_update_dialog.dart';
 import 'package:starlink_app/services/version_service.dart';
 
-import 'pages/login_screen.dart';
-import 'pages/reset_password.dart';
-import 'pages/customer/home/customer_home_screen.dart';
-import 'pages/admin/admin_home_screen.dart';
-import 'pages/end-user/home/home_screen.dart';
-import 'services/api_service.dart';
-import 'providers/notification_provider.dart';
-import 'config/ssl_config.dart'
-    if (dart.library.html) 'config/ssl_config_stub.dart'
+import 'package:starlink_app/features/auth/login_screen.dart';
+import 'package:starlink_app/features/auth/reset_password.dart';
+import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
+import 'package:starlink_app/features/admin/admin_home_screen.dart';
+import 'package:starlink_app/features/end_user/home/home_screen.dart';
+import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/providers/notification_provider.dart';
+import 'package:starlink_app/core/config/ssl_config.dart'
+    if (dart.library.html) 'package:starlink_app/core/config/ssl_config_stub.dart'
     as ssl_config;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -33,13 +32,6 @@ void main() async {
 
   if (!kIsWeb) {
     ssl_config.setupSSLConfig();
-  }
-
-  // 👇 OneSignal setup (only on mobile, not web)
-  if (!kIsWeb) {
-    OneSignal.Debug.setLogLevel(OSLogLevel.verbose); // remove in production
-    OneSignal.initialize("Ye5a4e262-1dd1-413e-a3a7-3c4ec50f3164");
-    OneSignal.Notifications.requestPermission(false);
   }
 
   final initialHome = await _resolveInitialHomeForLaunch();
@@ -124,8 +116,6 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final _appLinks = AppLinks();
   DateTime? _lastPausedTime;
-  bool _isCheckingVersion = true;
-  Map<String, dynamic>? _versionInfo;
 
   @override
   void initState() {
@@ -144,20 +134,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _checkAppVersion() async {
     final versionInfo = await AppVersionService().checkVersion();
-    if (mounted) {
-      setState(() {
-        _versionInfo = versionInfo;
-        _isCheckingVersion = false;
-      });
-      if (versionInfo['isOutdated'] == true &&
-          versionInfo['isMandatory'] == true) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder:
-              (_) => ForceUpdateDialog(downloadUrl: versionInfo['downloadUrl']),
-        );
-      }
+    if (!mounted) return;
+    if (versionInfo['isOutdated'] == true &&
+        versionInfo['isMandatory'] == true) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder:
+            (_) => ForceUpdateDialog(downloadUrl: versionInfo['downloadUrl']),
+      );
     }
   }
 
