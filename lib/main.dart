@@ -133,17 +133,33 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _checkAppVersion() async {
-    final versionInfo = await AppVersionService().checkVersion();
-    if (!mounted) return;
-    if (versionInfo['isOutdated'] == true &&
-        versionInfo['isMandatory'] == true) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder:
-            (_) => ForceUpdateDialog(downloadUrl: versionInfo['downloadUrl']),
-      );
+    final service = AppVersionService();
+    final Map<String, dynamic> versionInfo;
+    try {
+      versionInfo = await service.checkVersion();
+    } finally {
+      service.dispose();
     }
+    if (!mounted) return;
+
+    final downloadUrl = versionInfo['downloadUrl'] as String?;
+    if (versionInfo['isOutdated'] != true ||
+        versionInfo['isMandatory'] != true ||
+        downloadUrl == null ||
+        downloadUrl.isEmpty) {
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (_) => ForceUpdateDialog(
+            downloadUrl: downloadUrl,
+            currentVersion: versionInfo['currentVersion'] as String?,
+            latestVersion: versionInfo['latestVersion'] as String?,
+          ),
+    );
   }
 
   @override

@@ -53,11 +53,12 @@ class AppComparableVersion implements Comparable<AppComparableVersion> {
 
     // Strip any +build suffix before splitting.
     final coreParts = normalized.split('+').first.split('.');
-    if (coreParts.length < 3) return null;
+    if (coreParts.isEmpty) return null;
 
+    // Tolerate "2", "2.0" and "2.0.0" — missing segments default to 0.
     final major = int.tryParse(coreParts[0]);
-    final minor = int.tryParse(coreParts[1]);
-    final patch = int.tryParse(coreParts[2]);
+    final minor = coreParts.length > 1 ? int.tryParse(coreParts[1]) : 0;
+    final patch = coreParts.length > 2 ? int.tryParse(coreParts[2]) : 0;
     if (major == null || minor == null || patch == null) return null;
 
     return AppComparableVersion(major: major, minor: minor, patch: patch);
@@ -98,8 +99,32 @@ class AppVersionService {
 
   final http.Client _client;
 
+  /// Value of `application` in the `mobile_versioning` table for this app.
+  static const String applicationName = 'Starlink';
+
   static Uri get _versionEndpoint =>
-      Uri.parse('${AppEnv.apiBaseUrl}/app/version');
+      Uri.parse('${AppEnv.apiBaseUrl}/mobile-version/');
+
+  /// Picks this app's row out of the `mobile-version` payload, which is a list
+  /// of `{ id, application, version, url }` rows — one per mobile app.
+  static Map? _rowForThisApp(dynamic decoded) {
+    // Unwrap common envelopes: `{ data: [...] }`, `{ results: [...] }`.
+    dynamic body = decoded;
+    if (body is Map) {
+      body = body['data'] ?? body['results'] ?? body;
+    }
+
+    if (body is Map) return body; // already a single row
+
+    if (body is List) {
+      for (final row in body) {
+        if (row is! Map) continue;
+        final app = row['application']?.toString().trim().toLowerCase();
+        if (app == applicationName.toLowerCase()) return row;
+      }
+    }
+    return null;
+  }
 
   Future<AppVersionInfo?> fetchLatestVersion({
     Uri? endpoint,
@@ -112,13 +137,12 @@ class AppVersionService {
       if (res.statusCode < 200 || res.statusCode >= 300) return null;
 
       final dynamic decoded = res.body.isNotEmpty ? jsonDecode(res.body) : null;
-      if (decoded is! Map) return null;
-
-      // Support both wrapped `{ data: {...} }` and flat payloads.
-      final payload = decoded['data'] is Map ? decoded['data'] : decoded;
+      final payload = _rowForThisApp(decoded);
+      if (payload == null) return null;
 
       final latestStr =
-          (payload['latest_version'] ??
+          (payload['version'] ??
+                  payload['latest_version'] ??
                   payload['latestVersion'] ??
                   payload['mobile_version'] ??
                   payload['mobileVersion'])
@@ -126,38 +150,47 @@ class AppVersionService {
               .trim();
 
       final urlStr =
-          (payload['download_url'] ??
+          (payload['url'] ??
+                  payload['download_url'] ??
                   payload['downloadUrl'] ??
                   payload['mobile_url'] ??
-                  payload['mobileUrl'] ??
-                  payload['url'])
+                  payload['mobileUrl'])
               ?.toString()
               .trim();
 
-      if (latestStr == null || latestStr.isEmpty) return null;
-      if (urlStr == null || urlStr.isEmpty) return null;
+      // `version` is nullable in the table — no version published means
+      // there is nothing to compare against, so never gate the user.
+      if (latestStr == null || latestStr.isEmpty || latestStr == 'null') {
+        return null;
+      }
+      if (urlStr == null || urlStr.isEmpty || urlStr == 'null') return null;
 
       final latest = AppComparableVersion.tryParse(latestStr);
       if (latest == null) return null;
 
       final url = Uri.tryParse(urlStr);
-      if (url == null) return null;
-
-      final isMandatory =
-          payload['is_mandatory'] ??
-          payload['isMandatory'] ??
-          payload['mandatory'] ??
-          false;
+      if (url == null || !url.hasScheme) return null;
 
       return AppVersionInfo(
         latestVersion: latest,
         downloadUrl: url,
-        isMandatory: isMandatory as bool,
+        // The table carries no "optional update" flag: any published version
+        // newer than the installed one is a hard gate, same as eForward/ARM.
+        isMandatory: _asBool(
+          payload['is_mandatory'] ?? payload['isMandatory'] ?? true,
+        ),
       );
     } catch (e) {
       debugPrint('fetchLatestVersion failed: $e');
       return null;
     }
+  }
+
+  static bool _asBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final s = value?.toString().trim().toLowerCase();
+    return s == 'true' || s == '1' || s == 'yes';
   }
 
   Future<AppComparableVersion?> getInstalledVersion() async {
@@ -209,6 +242,8 @@ class AppVersionService {
       'isOutdated': current.isOutdated(remote.latestVersion),
       'downloadUrl': remote.downloadUrl.toString(),
       'isMandatory': remote.isMandatory,
+      'currentVersion': current.toString(),
+      'latestVersion': remote.latestVersion.toString(),
     };
   }
 
