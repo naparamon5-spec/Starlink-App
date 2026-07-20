@@ -1,6 +1,6 @@
 {
-    "name": "Starlink Dashboard",
-    "short_name": "Starlink Dashboard",
+    "name": "Ardent Starlink Dashboard",
+    "short_name": "Ardent Starlink Dashboard",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
