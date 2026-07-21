@@ -202,27 +202,42 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _handleIncomingLinks() {
-    // App opened from CLOSED state via the email link
+    // App opened from a CLOSED state via the link.
     _appLinks.getInitialLink().then((uri) {
       if (uri != null) _navigateFromLink(uri);
     });
 
-    // App already open or in background
+    // App already open or in background.
     _appLinks.uriLinkStream.listen(
       (uri) => _navigateFromLink(uri),
       onError: (err) => debugPrint('Deep link error: $err'),
     );
   }
 
-  void _navigateFromLink(Uri uri) {
+  void _navigateFromLink(Uri uri, {int attempt = 0}) {
     if (!_isResetPasswordLink(uri)) return;
 
     final token = uri.queryParameters['token'];
     if (token == null || token.isEmpty) return;
 
+    // On a cold start (app launched by the link from a terminated state) the
+    // Navigator may not be attached yet when getInitialLink() resolves, so
+    // navigatorKey.currentState is still null and the push would be dropped.
+    // Retry briefly until the Navigator is ready.
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) {
+      if (attempt < 20) {
+        Future.delayed(
+          const Duration(milliseconds: 100),
+          () => _navigateFromLink(uri, attempt: attempt + 1),
+        );
+      }
+      return;
+    }
+
     // Same as eforward: reset the stack down to the first route (LoginScreen)
     // and show the reset screen on top, so Back returns to login.
-    navigatorKey.currentState?.pushAndRemoveUntil(
+    navigator.pushAndRemoveUntil(
       MaterialPageRoute(
         builder:
             (_) => ResetPasswordScreen(

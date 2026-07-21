@@ -37,8 +37,6 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<!-- Let the app_links package handle deep links via its stream instead of
-	     Flutter's built-in navigator deep linking (which needs named routes). -->
 	<key>FlutterDeepLinkingEnabled</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
