@@ -220,7 +220,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final token = uri.queryParameters['token'];
     if (token == null || token.isEmpty) return;
 
-    navigatorKey.currentState?.push(
+    // Same as eforward: reset the stack down to the first route (LoginScreen)
+    // and show the reset screen on top, so Back returns to login.
+    navigatorKey.currentState?.pushAndRemoveUntil(
       MaterialPageRoute(
         builder:
             (_) => ResetPasswordScreen(
@@ -229,6 +231,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               verificationCode: '',
             ),
       ),
+      (route) => route.isFirst,
     );
   }
 
