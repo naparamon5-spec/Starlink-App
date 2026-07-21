@@ -13,7 +13,6 @@ import 'package:http/io_client.dart';
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
 const _ink = Color(0xFF1A1A1A);
-const _inkSecondary = Color(0xFF6F6F6F);
 const _inkTertiary = Color(0xFFA8A8A8);
 const _surface = Color(0xFFFFFFFF);
 const _surfaceSubtle = Color(0xFFF7F7F7);
@@ -233,124 +232,24 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _handleLogout() async {
     HapticFeedback.mediumImpact();
-    final bool? shouldLogout = await showDialog<bool>(
-      context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: _primary.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.logout_rounded,
-                      color: _primary,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Log Out?',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: _ink,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Are you sure you want to log out of your account?',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: _inkSecondary,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          style: TextButton.styleFrom(
-                            backgroundColor: _surfaceSubtle,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                          ),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              color: _inkSecondary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _primary,
-                            foregroundColor: _surface,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                          ),
-                          child: const Text(
-                            'Log Out',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-
-    if (shouldLogout == true) {
-      try {
-        await ApiService.logout();
-        await _prefs.remove('user_id');
-        await _prefs.remove('userId');
-        await _prefs.remove('token');
-        await _prefs.remove('name');
-        await _prefs.remove('lastName');
-        await _prefs.remove('position');
-        await _prefs.remove('email');
-        await _prefs.remove('userProfile');
-        if (!mounted) return;
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (_) => false,
-        );
-      } catch (e) {
-        if (mounted) _showSnack('Error logging out: $e', isError: true);
-      }
+    try {
+      await ApiService.logout();
+      await _prefs.remove('user_id');
+      await _prefs.remove('userId');
+      await _prefs.remove('token');
+      await _prefs.remove('name');
+      await _prefs.remove('lastName');
+      await _prefs.remove('position');
+      await _prefs.remove('email');
+      await _prefs.remove('userProfile');
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    } catch (e) {
+      if (mounted) _showSnack('Error logging out: $e', isError: true);
     }
   }
 

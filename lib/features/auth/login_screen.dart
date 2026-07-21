@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:convert';
 import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
 import 'package:starlink_app/features/admin/admin_home_screen.dart';
@@ -473,28 +472,15 @@ class _LoginScreenState extends State<LoginScreen>
                                 borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                            child:
-                                _isLoading
-                                    ? const SizedBox(
-                                      height: 22,
-                                      width: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
-                                      ),
-                                    )
-                                    : const Text(
-                                      'Sign In',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                        letterSpacing: 0.3,
-                                      ),
-                                    ),
+                            child: const Text(
+                              'Sign In',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -503,6 +489,9 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
               ),
             ),
+
+            // ── Full-screen loading overlay ────────────────────────────────
+            if (_isLoading) const _LoadingOverlay(),
           ],
         ),
       ),
@@ -613,6 +602,38 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
+// ── Full-screen loading overlay ───────────────────────────────────────────────
+
+class _LoadingOverlay extends StatelessWidget {
+  const _LoadingOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.45),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const SizedBox(
+              height: 40,
+              width: 40,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(_primary),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Top gradient header ───────────────────────────────────────────────────────
 
 class _TopHeader extends StatelessWidget {
@@ -670,23 +691,10 @@ class _TopHeader extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: SvgPicture.asset(
-                      'assets/images/logo_full.svg',
-                      height: 40, // reduced from 52
-                      colorFilter: const ColorFilter.mode(
-                        Colors.white,
-                        BlendMode.srcIn,
-                      ),
-                    ),
+                  Image.asset(
+                    'assets/images/app_icon_white.png',
+                    height: 44,
+                    fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 10), // reduced from 18
                   Text(

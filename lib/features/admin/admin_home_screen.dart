@@ -1731,57 +1731,11 @@ class _SettingsSection extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder:
-                      (ctx) => AlertDialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        title: const Text(
-                          'Logout',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
-                        ),
-                        content: const Text(
-                          'Are you sure you want to logout?',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF6F6F6F),
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFEB1E23),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            child: const Text(
-                              'Logout',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ],
-                      ),
-                );
-                if (confirm == true && context.mounted) {
-                  await ApiService.logout();
-                  if (context.mounted) {
-                    Navigator.of(
-                      context,
-                    ).pushNamedAndRemoveUntil('/login', (route) => false);
-                  }
+                await ApiService.logout();
+                if (context.mounted) {
+                  Navigator.of(
+                    context,
+                  ).pushNamedAndRemoveUntil('/login', (route) => false);
                 }
               },
               style: ElevatedButton.styleFrom(

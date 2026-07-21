@@ -148,7 +148,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: _surface,
-        body: Column(
+        body: Stack(
+          children: [
+            Column(
           children: [
             // ── Gradient header (shorter than login) ──────────────────────
             Container(
@@ -422,27 +424,15 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child:
-                              _isLoading
-                                  ? const SizedBox(
-                                    height: 22,
-                                    width: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
-                                    ),
-                                  )
-                                  : const Text(
-                                    'Send Reset Link',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
+                          child: const Text(
+                            'Send Reset Link',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
                         ),
                       ),
 
@@ -481,6 +471,43 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               ),
             ),
           ],
+            ),
+
+            // ── Full-screen loading overlay ────────────────────────────────
+            if (_isLoading) const _LoadingOverlay(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Full-screen loading overlay ───────────────────────────────────────────────
+
+class _LoadingOverlay extends StatelessWidget {
+  const _LoadingOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.45),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const SizedBox(
+              height: 40,
+              width: 40,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(_primary),
+              ),
+            ),
+          ),
         ),
       ),
     );

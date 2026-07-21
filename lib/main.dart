@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/shared/widgets/force_update_dialog.dart';
 import 'package:starlink_app/services/version_service.dart';
 
@@ -204,7 +205,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _handleIncomingLinks() {
     // App opened from a CLOSED state via the link.
     _appLinks.getInitialLink().then((uri) {
-      if (uri != null) _navigateFromLink(uri);
+      if (uri != null) _navigateFromLink(uri, isInitial: true);
     });
 
     // App already open or in background.
@@ -214,11 +215,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 
-  void _navigateFromLink(Uri uri, {int attempt = 0}) {
+  Future<void> _navigateFromLink(
+    Uri uri, {
+    int attempt = 0,
+    bool isInitial = false,
+  }) async {
     if (!_isResetPasswordLink(uri)) return;
 
     final token = uri.queryParameters['token'];
     if (token == null || token.isEmpty) return;
+
+    // Android redelivers the launch intent on every cold start (e.g. relaunch
+    // from recents/launcher), so getInitialLink() keeps returning the same
+    // reset-password link and the app would reopen the reset screen forever.
+    // Handle each initial link only once; a genuinely new link carries a new
+    // token, so a real reset flow still works.
+    if (isInitial && attempt == 0) {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString('handledResetLink') == uri.toString()) return;
+      await prefs.setString('handledResetLink', uri.toString());
+    }
 
     // On a cold start (app launched by the link from a terminated state) the
     // Navigator may not be attached yet when getInitialLink() resolves, so
@@ -229,7 +245,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (attempt < 20) {
         Future.delayed(
           const Duration(milliseconds: 100),
-          () => _navigateFromLink(uri, attempt: attempt + 1),
+          () => _navigateFromLink(uri, attempt: attempt + 1, isInitial: isInitial),
         );
       }
       return;

@@ -332,130 +332,29 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   }
 
   Future<void> _handleLogout() async {
-    final bool? shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-          titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-          title: Column(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: _primary.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.logout_rounded,
-                  color: _primary,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Log out',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 20,
-                  color: _ink,
-                ),
-              ),
-            ],
-          ),
-          content: const Text(
-            'Are you sure you want to log out? You will need to sign in again to access your account.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: _inkSecondary, height: 1.5),
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            SizedBox(
-              width: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: _border),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: _inkSecondary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Log out',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldLogout == true) {
-      try {
-        await ApiService.logout();
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('user_id');
-        await prefs.remove('userId');
-        await prefs.remove('token');
-        await prefs.remove('userProfile');
-        await prefs.remove('email');
-        await prefs.remove('name');
-        if (!mounted) return;
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-          (_) => false,
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error logging out: ${e.toString()}'),
-            backgroundColor: _primary,
-          ),
-        );
-      }
+    try {
+      await ApiService.logout();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('user_id');
+      await prefs.remove('userId');
+      await prefs.remove('token');
+      await prefs.remove('userProfile');
+      await prefs.remove('email');
+      await prefs.remove('name');
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (_) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error logging out: ${e.toString()}'),
+          backgroundColor: _primary,
+        ),
+      );
     }
   }
 
