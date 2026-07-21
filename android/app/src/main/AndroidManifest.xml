@@ -8,9 +8,9 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
     
     <application
-        android:label="Ardent Starlink Dashboard"
+        android:label="Ardent Starlink"
         android:name="${applicationName}"
-        android:icon="@mipmap/logo_high_res"
+        android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
@@ -32,18 +32,34 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- 👇 ADD THIS: Deep link for reset password -->
+            <!-- 🔗 Deep link (App Link) for password reset -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="sandbox.ardentnetworks.com.ph"
+                    android:host="starlink.ardentnetworks.com.ph"
                     android:pathPrefix="/reset-password" />
             </intent-filter>
 
+            <!-- 🔗 Custom-scheme fallback: starlink://reset-password?token=xxx -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="starlink" />
+            </intent-filter>
+
         </activity>
+
+        <!-- Let the app_links package handle deep links via its stream.
+             Without this, Flutter's built-in deep linking routes the URL
+             through onGenerateRoute and fails with "No route defined". -->
+        <meta-data
+            android:name="flutter_deeplinking_enabled"
+            android:value="false" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

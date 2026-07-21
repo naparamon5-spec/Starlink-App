@@ -1,0 +1,14 @@
+# Copy this file to `android/key.properties` and fill in your release keystore
+# details. `android/key.properties` and the *.jks keystore are gitignored —
+# never commit them.
+#
+# Generate a keystore once with:
+#   keytool -genkey -v -keystore starlink-release.jks -keyalg RSA -keysize 2048 \
+#           -validity 10000 -alias starlink
+#
+# storeFile is resolved relative to android/app/ (or use an absolute path).
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=starlink
+storeFile=starlink-release.jks

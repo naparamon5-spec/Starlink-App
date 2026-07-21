@@ -1,4 +1,4 @@
-package com.example.starlink_app
+package com.ardentnetworks.starlink
 
 import android.content.ContentValues
 import android.net.Uri

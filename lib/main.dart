@@ -20,6 +20,25 @@ import 'package:starlink_app/core/config/ssl_config.dart'
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+/// Returns true when [uri] is a password-reset link, in any of the forms it can
+/// arrive as:
+///   - Universal / App Link: https://starlink.ardentnetworks.com.ph/reset-password?token=xxx
+///   - With a path prefix:    https://starlink.ardentnetworks.com.ph/auth/reset-password/?token=xxx
+///   - Custom scheme:         starlink://reset-password?token=xxx
+/// For the custom scheme, "reset-password" arrives as the host, not the path.
+/// We normalize away a trailing slash and match on the path segment ending with
+/// "reset-password" so it works regardless of leading path or trailing slash.
+bool _isResetPasswordLink(Uri uri) {
+  final path = uri.path;
+  final normalizedPath =
+      path.endsWith('/') && path.length > 1
+          ? path.substring(0, path.length - 1)
+          : path;
+  return normalizedPath == '/reset-password' ||
+      normalizedPath.endsWith('/reset-password') ||
+      uri.host == 'reset-password';
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
@@ -65,9 +84,7 @@ Widget _getScreenForRole(String role, {int userId = 0}) {
 Future<Widget> _resolveInitialHomeForLaunch() async {
   if (kIsWeb) {
     final uri = Uri.base;
-    // if (uri.host == 'startlink-sandbox-api.ardentnetworks.com.ph' &&
-    if (uri.host == 'sandbox.ardentnetworks.com.ph' &&
-        uri.path == '/reset-password') {
+    if (_isResetPasswordLink(uri)) {
       final token = uri.queryParameters['token'];
       if (token != null && token.isNotEmpty) {
         return ResetPasswordScreen(
@@ -198,29 +215,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _navigateFromLink(Uri uri) {
-    if (uri.host == 'sandbox.ardentnetworks.com.ph' &&
-        uri.path == '/reset-password') {
-      final token = uri.queryParameters['token'];
-      if (token != null && token.isNotEmpty) {
-        navigatorKey.currentState?.push(
-          MaterialPageRoute(
-            builder:
-                (_) => ResetPasswordScreen(
-                  token: token,
-                  email: '',
-                  verificationCode: '',
-                ),
-          ),
-        );
-      }
-    }
+    if (!_isResetPasswordLink(uri)) return;
+
+    final token = uri.queryParameters['token'];
+    if (token == null || token.isEmpty) return;
+
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder:
+            (_) => ResetPasswordScreen(
+              token: token,
+              email: '',
+              verificationCode: '',
+            ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: navigatorKey,
-      title: 'Ardent Starlink Dashboard',
+      title: 'Ardent Starlink',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(

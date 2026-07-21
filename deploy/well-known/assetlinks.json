@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ardentnetworks.starlink",
+      "sha256_cert_fingerprints": [
+        "A4:07:EE:1A:70:37:2D:DF:EE:D3:BC:44:B0:D2:71:C9:1A:ED:B3:12:A8:F0:B7:6B:CD:70:DD:AD:68:9B:58:79",
+        "2E:FF:EC:E5:B3:7C:0D:16:D9:DD:C0:31:E9:13:D3:64:18:C1:09:71:09:34:34:59:27:47:2A:2C:9B:1D:45:53"
+      ]
+    }
+  }
+]
