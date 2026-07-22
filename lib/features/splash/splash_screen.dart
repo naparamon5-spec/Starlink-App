@@ -148,7 +148,7 @@ class _SplashScreenState extends State<SplashScreen>
                             borderRadius: BorderRadius.circular(24),
                           ),
                           child: SvgPicture.asset(
-                            'assets/images/logo_full.svg',
+                            'assets/images/logo.svg',
                             height: 56,
                             colorFilter: const ColorFilter.mode(
                               Colors.white,

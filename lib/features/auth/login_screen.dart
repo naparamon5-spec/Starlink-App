@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:convert';
 import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
 import 'package:starlink_app/features/admin/admin_home_screen.dart';
@@ -691,10 +692,14 @@ class _TopHeader extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset(
-                    'assets/images/app_icon_white.png',
+                  SvgPicture.asset(
+                    'assets/images/logo_full.svg',
                     height: 44,
                     fit: BoxFit.contain,
+                    colorFilter: const ColorFilter.mode(
+                      Colors.white,
+                      BlendMode.srcIn,
+                    ),
                   ),
                   const SizedBox(height: 10), // reduced from 18
                   Text(
