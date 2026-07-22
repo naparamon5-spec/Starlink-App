@@ -430,7 +430,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                   children: [
                                     TextSpan(
-                                      text: 'User Agreement',
+                                      text: 'Terms of Service',
                                       style: const TextStyle(
                                         color: _primary,
                                         fontWeight: FontWeight.w600,

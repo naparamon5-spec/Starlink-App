@@ -1,4 +1,4 @@
-# Terms of Service / User Agreement
+# Terms of Service
 
 **Ardent Dashboard**
 
