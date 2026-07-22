@@ -39,12 +39,14 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>FlutterDeepLinkingEnabled</key>
 	<false/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>This app needs access to documents to pick files</string>
+	<string>Ardent Dashboard needs access to your files so you can attach documents to support tickets and upload billing files.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs access to photo library to pick images</string>
+	<string>Ardent Dashboard needs access to your photos so you can attach images to support tickets.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
