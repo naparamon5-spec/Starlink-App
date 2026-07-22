@@ -754,7 +754,7 @@ class _TopHeader extends StatelessWidget {
                 children: [
                   SvgPicture.asset(
                     'assets/images/logo_full.svg',
-                    height: 44,
+                    height: 64,
                     fit: BoxFit.contain,
                     colorFilter: const ColorFilter.mode(
                       Colors.white,
