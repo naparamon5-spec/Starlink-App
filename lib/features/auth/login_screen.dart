@@ -28,6 +28,8 @@ const _userAgreementUrl =
     'https://starlink.ardentnetworks.com.ph/terms';
 const _privacyPolicyUrl =
     'https://starlink.ardentnetworks.com.ph/privacy-policy';
+const _supportUrl =
+    'https://starlink.ardentnetworks.com.ph/support';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -58,6 +60,8 @@ class _LoginScreenState extends State<LoginScreen>
       TapGestureRecognizer()..onTap = () => _openUrl(_userAgreementUrl);
   late final TapGestureRecognizer _privacyPolicyTap =
       TapGestureRecognizer()..onTap = () => _openUrl(_privacyPolicyUrl);
+  late final TapGestureRecognizer _contactSupportTap =
+      TapGestureRecognizer()..onTap = () => _openUrl(_supportUrl);
 
   Future<void> _openUrl(String url) async {
     final uri = Uri.parse(url);
@@ -95,6 +99,7 @@ class _LoginScreenState extends State<LoginScreen>
     _errorAnimController?.dispose();
     _userAgreementTap.dispose();
     _privacyPolicyTap.dispose();
+    _contactSupportTap.dispose();
     super.dispose();
   }
 
@@ -509,6 +514,33 @@ class _LoginScreenState extends State<LoginScreen>
                                 color: Colors.white,
                                 letterSpacing: 0.3,
                               ),
+                            ),
+                          ),
+                        ),
+
+                        // Contact support
+                        const SizedBox(height: 16),
+                        Center(
+                          child: RichText(
+                            text: TextSpan(
+                              text: 'Need help? ',
+                              style: const TextStyle(
+                                color: _inkSecondary,
+                                fontSize: 13,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: 'Contact Support',
+                                  style: const TextStyle(
+                                    color: _primary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: _primary,
+                                  ),
+                                  recognizer: _contactSupportTap,
+                                ),
+                              ],
                             ),
                           ),
                         ),
