@@ -519,7 +519,7 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
 
                         // Contact support
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 28),
                         Center(
                           child: RichText(
                             text: TextSpan(
