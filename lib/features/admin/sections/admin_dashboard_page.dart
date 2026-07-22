@@ -120,7 +120,7 @@ class AdminUserGuidePage extends StatelessWidget {
     return _AdminScaffoldSection(
       title: 'User Guide',
       description:
-          'Read documentation and guides on how to use the Starlink admin portal.',
+          'Read documentation and guides on how to use the admin portal.',
       icon: Icons.menu_book_outlined,
     );
   }
