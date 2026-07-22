@@ -2,10 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Add internet permission -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Add storage permissions -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+    <!-- Legacy storage permissions, scoped to the OS versions that need them.
+         Android 10+ writes to the public Downloads folder without any permission,
+         so these do not apply on modern devices. MANAGE_EXTERNAL_STORAGE ("All
+         files access") is intentionally NOT declared — it is never used and would
+         trigger a Google Play policy rejection. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"/>
     
     <application
         android:label="Ardent Dashboard"

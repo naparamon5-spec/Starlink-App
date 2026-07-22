@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
 import 'package:starlink_app/features/admin/admin_home_screen.dart';
@@ -19,6 +21,13 @@ const _inkTertiary = Color(0xFFA8A8A8);
 const _surface = Color(0xFFFFFFFF);
 const _surfaceSubtle = Color(0xFFF4F4F4);
 const _border = Color(0xFFE0E0E0);
+
+// Legal links opened from the login consent row.
+// TODO(Ardent): confirm these public URLs point to the live pages before release.
+const _userAgreementUrl =
+    'https://starlink.ardentnetworks.com.ph/terms';
+const _privacyPolicyUrl =
+    'https://starlink.ardentnetworks.com.ph/privacy-policy';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -45,6 +54,21 @@ class _LoginScreenState extends State<LoginScreen>
   Animation<double>? _errorFadeAnim;
   Animation<Offset>? _errorSlideAnim;
 
+  late final TapGestureRecognizer _userAgreementTap =
+      TapGestureRecognizer()..onTap = () => _openUrl(_userAgreementUrl);
+  late final TapGestureRecognizer _privacyPolicyTap =
+      TapGestureRecognizer()..onTap = () => _openUrl(_privacyPolicyUrl);
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open $url')),
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +93,8 @@ class _LoginScreenState extends State<LoginScreen>
     _emailController.dispose();
     _passwordController.dispose();
     _errorAnimController?.dispose();
+    _userAgreementTap.dispose();
+    _privacyPolicyTap.dispose();
     super.dispose();
   }
 
@@ -396,31 +422,33 @@ class _LoginScreenState extends State<LoginScreen>
                               ),
                               const SizedBox(width: 9),
                               RichText(
-                                text: const TextSpan(
+                                text: TextSpan(
                                   text: 'I agree to the ',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     color: _inkSecondary,
                                     fontSize: 13,
                                   ),
                                   children: [
                                     TextSpan(
                                       text: 'User Agreement',
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         color: _primary,
                                         fontWeight: FontWeight.w600,
                                         decoration: TextDecoration.underline,
                                         decorationColor: _primary,
                                       ),
+                                      recognizer: _userAgreementTap,
                                     ),
-                                    TextSpan(text: ' and '),
+                                    const TextSpan(text: ' and '),
                                     TextSpan(
                                       text: 'Privacy Policy',
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         color: _primary,
                                         fontWeight: FontWeight.w600,
                                         decoration: TextDecoration.underline,
                                         decorationColor: _primary,
                                       ),
+                                      recognizer: _privacyPolicyTap,
                                     ),
                                   ],
                                 ),
