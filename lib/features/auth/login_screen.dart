@@ -25,7 +25,7 @@ const _border = Color(0xFFE0E0E0);
 // Legal links opened from the login consent row.
 // TODO(Ardent): confirm these public URLs point to the live pages before release.
 const _userAgreementUrl =
-    'https://starlink.ardentnetworks.com.ph/terms';
+    'https://starlink.ardentnetworks.com.ph/terms-of-service';
 const _privacyPolicyUrl =
     'https://starlink.ardentnetworks.com.ph/privacy-policy';
 const _supportUrl =
@@ -301,7 +301,7 @@ class _LoginScreenState extends State<LoginScreen>
                           keyboardType: TextInputType.emailAddress,
                           style: const TextStyle(fontSize: 14, color: _ink),
                           decoration: _inputDecoration(
-                            hint: 'you@example.com',
+                            hint: 'Enter your email',
                             prefixIcon: Icons.mail_outline_rounded,
                             errorText: _emailError,
                           ),
