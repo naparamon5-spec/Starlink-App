@@ -66,6 +66,16 @@ android {
             }
         }
     }
+
+    // Disable the SDK dependency metadata generator. It drives the
+    // :app:sdkReleaseDependencyData task, which intermittently fails the
+    // release build looking for a dependencies.pb that was never produced.
+    // We don't publish to Play with these signed metadata blobs, so turning
+    // it off is safe and avoids the flaky input-file-does-not-exist error.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
 }
 
 dependencies {
