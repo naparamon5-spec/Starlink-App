@@ -160,23 +160,44 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     if (!mounted) return;
 
+    final action = versionInfo['action'] as AppUpdateAction?;
     final downloadUrl = versionInfo['downloadUrl'] as String?;
-    if (versionInfo['isOutdated'] != true ||
-        versionInfo['isMandatory'] != true ||
+    if (action == null ||
+        action == AppUpdateAction.none ||
         downloadUrl == null ||
         downloadUrl.isEmpty) {
       return;
     }
 
-    showDialog(
+    // Two-tier gate: forced wall below min_version, dismissible soft prompt
+    // between min and latest. Falls back to the force dialog when the backend
+    // doesn't send min_version yet (preserves the legacy `is_mandatory` path).
+    if (action == AppUpdateAction.forced) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => ForceUpdateDialog(
+          downloadUrl: downloadUrl,
+          currentVersion: versionInfo['currentVersion'] as String?,
+          latestVersion: versionInfo['latestVersion'] as String?,
+        ),
+      );
+      return;
+    }
+
+    // Soft prompt — build AppVersionInfo + AppComparableVersion from the map
+    // so we can reuse the shared dialog.
+    final latestStr = versionInfo['latestVersion'] as String?;
+    final currentStr = versionInfo['currentVersion'] as String?;
+    final latestVer = latestStr == null ? null : AppComparableVersion.tryParse(latestStr);
+    final currentVer = currentStr == null ? null : AppComparableVersion.tryParse(currentStr);
+    final uri = Uri.tryParse(downloadUrl);
+    if (latestVer == null || currentVer == null || uri == null) return;
+
+    showSoftUpdateDialog(
       context: context,
-      barrierDismissible: false,
-      builder:
-          (_) => ForceUpdateDialog(
-            downloadUrl: downloadUrl,
-            currentVersion: versionInfo['currentVersion'] as String?,
-            latestVersion: versionInfo['latestVersion'] as String?,
-          ),
+      remote: AppVersionInfo(latestVersion: latestVer, downloadUrl: uri),
+      current: currentVer,
     );
   }
 

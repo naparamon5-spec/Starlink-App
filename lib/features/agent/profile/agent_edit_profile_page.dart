@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/app_version_label.dart';
 
 class AgentEditProfilePage extends StatefulWidget {
   const AgentEditProfilePage({super.key});
@@ -357,6 +358,10 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               ),
             ),
           ),
+
+          const SizedBox(height: 24),
+          const AppVersionLabel(color: Color(0xFF64748B)),
+          const SizedBox(height: 16),
         ],
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/app_version_label.dart';
 
 class BillerEditProfilePage extends StatefulWidget {
   const BillerEditProfilePage({super.key});
@@ -141,6 +142,10 @@ class _BillerEditProfilePageState extends State<BillerEditProfilePage> {
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
             ),
           ),
+
+          const SizedBox(height: 24),
+          const AppVersionLabel(color: Color(0xFF64748B)),
+          const SizedBox(height: 16),
         ],
       ),
     );

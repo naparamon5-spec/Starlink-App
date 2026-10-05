@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'dart:io';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/app_version_label.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -581,6 +582,10 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
                 ),
               ),
             ),
+
+            const SizedBox(height: 24),
+            const AppVersionLabel(),
+            const SizedBox(height: 16),
           ],
         ),
       ),

@@ -5,6 +5,7 @@ import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/end_user/profile/edit_profile.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 import 'package:starlink_app/features/end_user/profile/security_settings.dart';
+import 'package:starlink_app/shared/widgets/app_version_label.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -629,6 +630,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ),
                                 ],
                               ),
+
+                              const SizedBox(height: 24),
+
+                              // ── App version ───────────────────────────
+                              const AppVersionLabel(),
 
                               const SizedBox(height: 32),
                             ],

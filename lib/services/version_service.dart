@@ -19,12 +19,21 @@ class AppVersionInfo {
     required this.latestVersion,
     required this.downloadUrl,
     this.isMandatory = false,
+    this.minSupportedVersion,
   });
 
   final AppComparableVersion latestVersion;
   final Uri downloadUrl;
   final bool isMandatory;
+
+  /// Oldest version the backend still supports. Clients below this get a
+  /// blocking "update required" wall. Null → soft prompt only (plus the
+  /// legacy [isMandatory] flag still works for backward compat).
+  final AppComparableVersion? minSupportedVersion;
 }
+
+/// Launch-time decision for the version gate.
+enum AppUpdateAction { none, soft, forced }
 
 // ---------------------------------------------------------------------------
 // AppComparableVersion  (replaces AppVersion / app_version_comparer.dart)
@@ -171,6 +180,16 @@ class AppVersionService {
       final url = Uri.tryParse(urlStr);
       if (url == null || !url.hasScheme) return null;
 
+      // Optional "oldest supported" floor from the backend. When present and
+      // the installed version is below it, we show the blocking force wall.
+      // Older builds that don't send this just degrade to soft-prompt-only.
+      final minStr = (payload['min_version'] ??
+              payload['minVersion'] ??
+              payload['min_supported_version'] ??
+              payload['minSupportedVersion'])
+          ?.toString()
+          .trim();
+
       return AppVersionInfo(
         latestVersion: latest,
         downloadUrl: url,
@@ -179,6 +198,9 @@ class AppVersionService {
         isMandatory: _asBool(
           payload['is_mandatory'] ?? payload['isMandatory'] ?? true,
         ),
+        minSupportedVersion: (minStr == null || minStr.isEmpty || minStr == 'null')
+            ? null
+            : AppComparableVersion.tryParse(minStr),
       );
     } catch (e) {
       debugPrint('fetchLatestVersion failed: $e');
@@ -229,17 +251,38 @@ class AppVersionService {
     return launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
+  /// Classifies the installed version against the backend's min + latest.
+  /// Below [AppVersionInfo.minSupportedVersion] → forced wall.
+  /// Below [AppVersionInfo.latestVersion] (but at/above min) → soft prompt.
+  /// Otherwise → none.
+  static AppUpdateAction decideUpdate(
+    AppComparableVersion installed,
+    AppVersionInfo remote,
+  ) {
+    final min = remote.minSupportedVersion;
+    if (min != null && installed < min) return AppUpdateAction.forced;
+    // Backwards-compat: if the backend's old `is_mandatory` flag is set and
+    // we're below latest, treat as forced (preserves pre-min_version behavior).
+    if (remote.isMandatory && installed < remote.latestVersion) {
+      return AppUpdateAction.forced;
+    }
+    if (installed < remote.latestVersion) return AppUpdateAction.soft;
+    return AppUpdateAction.none;
+  }
+
   /// Convenience: run the full version check and return a result map
-  /// (same shape as the old VersionService.checkVersion).
+  /// (same shape as the old VersionService.checkVersion, plus `action`).
   Future<Map<String, dynamic>> checkVersion() async {
     final current = await getInstalledVersion();
-    if (current == null) return {'isOutdated': false};
+    if (current == null) return {'isOutdated': false, 'action': AppUpdateAction.none};
 
     final remote = await fetchLatestVersion();
-    if (remote == null) return {'isOutdated': false};
+    if (remote == null) return {'isOutdated': false, 'action': AppUpdateAction.none};
 
+    final action = decideUpdate(current, remote);
     return {
       'isOutdated': current.isOutdated(remote.latestVersion),
+      'action': action,
       'downloadUrl': remote.downloadUrl.toString(),
       'isMandatory': remote.isMandatory,
       'currentVersion': current.toString(),
@@ -255,6 +298,57 @@ class AppVersionService {
 // ---------------------------------------------------------------------------
 // ForceUpdateDialog  (replaces force_update_dialog.dart)
 // ---------------------------------------------------------------------------
+
+/// Dismissible "update available" prompt. Returns `true` if the user tapped
+/// "Update" (download link launched); `false` for Later or dismissal.
+Future<bool> showSoftUpdateDialog({
+  required BuildContext context,
+  required AppVersionInfo remote,
+  required AppComparableVersion current,
+}) async {
+  var updateInitiated = false;
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (dialogContext) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Update Available'),
+      content: Text(
+        'A newer version of the app is available (${remote.latestVersion}). '
+        'Update now for improvements and fixes.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Later'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final svc = AppVersionService();
+            try {
+              final ok = await svc.launchDownload(remote.downloadUrl);
+              if (!dialogContext.mounted) return;
+              if (ok) {
+                updateInitiated = true;
+                Navigator.of(dialogContext).pop();
+              } else {
+                ScaffoldMessenger.maybeOf(dialogContext)?.showSnackBar(
+                  const SnackBar(
+                    content: Text('Unable to open update link. Please try again.'),
+                  ),
+                );
+              }
+            } finally {
+              svc.dispose();
+            }
+          },
+          child: const Text('Update'),
+        ),
+      ],
+    ),
+  );
+  return updateInitiated;
+}
 
 Future<void> showForceUpdateDialog({
   required BuildContext context,

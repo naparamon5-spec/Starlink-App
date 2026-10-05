@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
@@ -47,6 +48,7 @@ class _LoginScreenState extends State<LoginScreen>
   String? _errorMessage;
   String? _emailError;
   String? _passwordError;
+  String _appVersion = '';
 
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -90,6 +92,21 @@ class _LoginScreenState extends State<LoginScreen>
     ).animate(
       CurvedAnimation(parent: _errorAnimController!, curve: Curves.easeOut),
     );
+    _loadAppVersion();
+  }
+
+  /// Reads the real version embedded in this build at runtime, so the label
+  /// always reflects the actually installed app rather than a hardcoded value.
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() {
+        _appVersion = 'Version ${info.version}';
+      });
+    } catch (_) {
+      // Leave the version label empty if platform metadata is unavailable.
+    }
   }
 
   @override
@@ -544,6 +561,22 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                           ),
                         ),
+
+                        // App version
+                        if (_appVersion.isNotEmpty) ...[
+                          const SizedBox(height: 40),
+                          Center(
+                            child: Text(
+                              _appVersion,
+                              style: const TextStyle(
+                                color: _inkTertiary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

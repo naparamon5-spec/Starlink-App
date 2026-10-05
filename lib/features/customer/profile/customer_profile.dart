@@ -8,6 +8,7 @@ import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/customer/profile/customer_edit_profile.dart';
 import 'package:starlink_app/features/customer/profile/customer_security_settings.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
+import 'package:starlink_app/shared/widgets/app_version_label.dart';
 
 // ── Design tokens (matching home screen) ────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -422,6 +423,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         _buildActionsCard(),
                         const SizedBox(height: 20),
                         _buildLogoutCard(),
+                        const SizedBox(height: 24),
+                        const AppVersionLabel(),
+                        const SizedBox(height: 24),
                       ]),
                     ),
                   ),
