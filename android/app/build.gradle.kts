@@ -67,6 +67,16 @@ android {
         }
     }
 
+    // Disable lintVital for release builds. On Windows the lint cache
+    // jars are frequently locked by another JVM (Android Studio / a
+    // leftover daemon), causing lintVitalAnalyzeRelease to fail with
+    // "The process cannot access the file because it is being used by
+    // another process". Flutter apps don't rely on this lint pass.
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     // Disable the SDK dependency metadata generator. It drives the
     // :app:sdkReleaseDependencyData task, which intermittently fails the
     // release build looking for a dependencies.pb that was never produced.
