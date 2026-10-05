@@ -43,8 +43,12 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Ardent Dashboard needs access to your camera so you can take photos to attach to support tickets.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>Ardent Dashboard needs access to your files so you can attach documents to support tickets and upload billing files.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Ardent Dashboard uses your location to help identify your service address when you submit support tickets.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Ardent Dashboard needs access to your photos so you can attach images to support tickets.</string>
 	<key>UIApplicationSceneManifest</key>
