@@ -111,8 +111,11 @@ class AppVersionService {
   /// Value of `application` in the `mobile_versioning` table for this app.
   static const String applicationName = 'Starlink';
 
-  static Uri get _versionEndpoint =>
-      Uri.parse('${AppEnv.apiBaseUrl}/mobile-version/');
+  // Without `platform` the backend defaults to android and hands iPhones the
+  // APK URL, which iOS can't open.
+  static Uri get _versionEndpoint => Uri.parse(
+      '${AppEnv.apiBaseUrl}/mobile-version/'
+      '?platform=${Platform.isIOS ? 'ios' : 'android'}');
 
   /// Picks this app's row out of the `mobile-version` payload, which is a list
   /// of `{ id, application, version, url }` rows — one per mobile app.

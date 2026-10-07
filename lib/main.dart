@@ -14,6 +14,7 @@ import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
 import 'package:starlink_app/features/admin/admin_home_screen.dart';
 import 'package:starlink_app/features/end_user/home/home_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/services/post_update_reset.dart';
 import 'package:starlink_app/providers/notification_provider.dart';
 import 'package:starlink_app/core/config/ssl_config.dart'
     if (dart.library.html) 'package:starlink_app/core/config/ssl_config_stub.dart'
@@ -53,6 +54,11 @@ void main() async {
   if (!kIsWeb) {
     ssl_config.setupSSLConfig();
   }
+
+  // Post-update sign-out: if the installed app version changed since the last
+  // launch, clear stored tokens so the user signs in again on the fresh
+  // build. Fails open — never blocks launch.
+  await PostUpdateReset.runIfVersionChanged();
 
   final initialHome = await _resolveInitialHomeForLaunch();
 
