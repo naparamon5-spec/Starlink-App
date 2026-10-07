@@ -140,6 +140,15 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final _appLinks = AppLinks();
   DateTime? _lastPausedTime;
+  // Version gate state. The check re-runs on resume (throttled to once a
+  // minute) so a version released while the app sat in memory still prompts
+  // without the user killing the app from multitask.
+  static const _versionRecheckInterval = Duration(minutes: 1);
+  DateTime? _lastVersionCheckAt;
+  bool _versionCheckInProgress = false;
+  bool _versionPromptVisible = false;
+  // Soft prompt shows at most once per launch; the forced dialog always returns.
+  bool _softShownThisLaunch = false;
 
   @override
   void initState() {
@@ -156,15 +165,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  void _recheckVersionOnResume() {
+    final last = _lastVersionCheckAt;
+    if (last == null || _versionCheckInProgress || _versionPromptVisible) {
+      return;
+    }
+    if (DateTime.now().difference(last) < _versionRecheckInterval) return;
+    _checkAppVersion();
+  }
+
   Future<void> _checkAppVersion() async {
+    if (_versionCheckInProgress || _versionPromptVisible) return;
+    _versionCheckInProgress = true;
     final service = AppVersionService();
     final Map<String, dynamic> versionInfo;
     try {
       versionInfo = await service.checkVersion();
     } finally {
+      _lastVersionCheckAt = DateTime.now();
+      _versionCheckInProgress = false;
       service.dispose();
     }
-    if (!mounted) return;
+    if (!mounted || _versionPromptVisible) return;
 
     final action = versionInfo['action'] as AppUpdateAction?;
     final downloadUrl = versionInfo['downloadUrl'] as String?;
@@ -179,17 +201,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // between min and latest. Falls back to the force dialog when the backend
     // doesn't send min_version yet (preserves the legacy `is_mandatory` path).
     if (action == AppUpdateAction.forced) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => ForceUpdateDialog(
-          downloadUrl: downloadUrl,
-          currentVersion: versionInfo['currentVersion'] as String?,
-          latestVersion: versionInfo['latestVersion'] as String?,
-        ),
-      );
+      _versionPromptVisible = true;
+      try {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => ForceUpdateDialog(
+            downloadUrl: downloadUrl,
+            currentVersion: versionInfo['currentVersion'] as String?,
+            latestVersion: versionInfo['latestVersion'] as String?,
+          ),
+        );
+      } finally {
+        _versionPromptVisible = false;
+      }
       return;
     }
+
+    if (_softShownThisLaunch) return;
 
     // Soft prompt — build AppVersionInfo + AppComparableVersion from the map
     // so we can reuse the shared dialog.
@@ -200,11 +229,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final uri = Uri.tryParse(downloadUrl);
     if (latestVer == null || currentVer == null || uri == null) return;
 
-    showSoftUpdateDialog(
-      context: context,
-      remote: AppVersionInfo(latestVersion: latestVer, downloadUrl: uri),
-      current: currentVer,
-    );
+    _softShownThisLaunch = true;
+    _versionPromptVisible = true;
+    try {
+      await showSoftUpdateDialog(
+        context: context,
+        remote: AppVersionInfo(latestVersion: latestVer, downloadUrl: uri),
+        current: currentVer,
+      );
+    } finally {
+      _versionPromptVisible = false;
+    }
   }
 
   @override
@@ -226,6 +261,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         }
       }
       _lastPausedTime = null;
+      _recheckVersionOnResume();
     }
   }
 
