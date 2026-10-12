@@ -15,6 +15,7 @@ import 'package:starlink_app/features/admin/profile/admin_manage_users_page.dart
 import 'package:starlink_app/features/admin/profile/admin_user_guide_page.dart';
 import 'package:starlink_app/features/admin/sections/agent/admin_create_agent_page.dart';
 import 'package:starlink_app/features/auth/change_password.dart';
+import 'package:starlink_app/features/auth/login_screen.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -115,7 +116,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       if (meRes['message']?.toString().contains('login') == true ||
           meRes['statusCode'] == 401) {
         // Redirect to login if session is expired
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
         return;
       }
       setState(() {
@@ -1733,9 +1737,10 @@ class _SettingsSection extends StatelessWidget {
               onPressed: () async {
                 await ApiService.logout();
                 if (context.mounted) {
-                  Navigator.of(
-                    context,
-                  ).pushNamedAndRemoveUntil('/login', (route) => false);
+                  Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(

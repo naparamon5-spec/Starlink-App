@@ -570,10 +570,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
   // ── Label / subtitle builders ──────────────────────────────────────────────
 
   String _ticketTypeLabel(Map<String, dynamic> item) =>
-      item['name']?.toString() ??
-      item['category']?.toString() ??
-      item['label']?.toString() ??
-      '—';
+      ApiService.ticketTypeLabel(item);
 
   String _ticketTypeSub(Map<String, dynamic> item) =>
       item['description']?.toString() ?? '';
@@ -708,10 +705,12 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
       }
 
       final ticketTypeValue =
-          _selectedTicketType!['id']?.toString() ??
-          _selectedTicketType!['name']?.toString() ??
-          _selectedTicketType!['category']?.toString() ??
-          '';
+          ApiService.ticketTypeValue(_selectedTicketType!);
+      if (ticketTypeValue.isEmpty) {
+        setState(() => _typeError = true);
+        _showError('Selected ticket type is invalid. Please re-select.');
+        return;
+      }
 
       final subscriptionId = _extractSubscriptionId(_selectedSubscription!);
       if (subscriptionId.isEmpty) {

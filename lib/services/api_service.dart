@@ -1292,11 +1292,16 @@ class ApiService {
   static Future<Map<String, dynamic>> getEndUserById(String euCode) async =>
       _getV1WithAuth('/v1/end-user/$euCode');
 
-  static Future<Map<String, dynamic>> createEndUser(
-    Map<String, dynamic> payload,
-  ) async {
+  /// POSTs [payload] to the first of [paths] that exists. A 404/405 without a
+  /// server message means the route itself is missing, so the next candidate
+  /// is tried; any other response is returned as-is.
+  static Future<Map<String, dynamic>> _authorizedPostFirst(
+    List<String> paths,
+    Map<String, dynamic> payload, {
+    required String successMessage,
+  }) async {
     try {
-      final accessToken = await getValidAccessToken();
+      String? accessToken = await getValidAccessToken();
       if (accessToken == null || accessToken.isEmpty) {
         return {
           'status': 'error',
@@ -1304,9 +1309,9 @@ class ApiService {
         };
       }
 
-      Future<http.Response> doRequest(String token) => _client
+      Future<http.Response> doRequest(String path, String token) => _client
           .post(
-            Uri.parse('$baseUrl/v1/end-user/create'),
+            Uri.parse('$baseUrl$path'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -1326,45 +1331,63 @@ class ApiService {
                 ),
           );
 
-      http.Response response = await doRequest(accessToken);
-      if (response.statusCode == 401) {
-        final r = await refreshToken();
-        if (r['status'] == 'success' && r['accessToken'] != null) {
-          response = await doRequest(r['accessToken'].toString());
-        } else {
-          await clearTokens();
-          return {
-            'status': 'error',
-            'message': 'Session expired. Please login again.',
-          };
+      Map<String, dynamic> result = {
+        'status': 'error',
+        'message': 'Server error: 404',
+      };
+      for (final path in paths) {
+        http.Response response = await doRequest(path, accessToken!);
+        if (response.statusCode == 401) {
+          final r = await refreshToken();
+          if (r['status'] == 'success' && r['accessToken'] != null) {
+            accessToken = r['accessToken'].toString();
+            response = await doRequest(path, accessToken);
+          } else {
+            await clearTokens();
+            return {
+              'status': 'error',
+              'message': 'Session expired. Please login again.',
+            };
+          }
         }
-      }
 
-      dynamic decoded;
-      try {
-        decoded = json.decode(response.body);
-      } catch (_) {
-        decoded = null;
-      }
+        dynamic decoded;
+        try {
+          decoded = json.decode(response.body);
+        } catch (_) {
+          decoded = null;
+        }
+        final serverMsg =
+            decoded is Map ? (decoded['message'] ?? decoded['Message']) : null;
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        if (decoded is Map<String, dynamic>) {
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          final status = decoded is Map ? decoded['status']?.toString() : null;
+          final ok =
+              status == null ||
+              status.toLowerCase() == 'success' ||
+              status == '200' ||
+              status == '201';
           return {
-            'status': decoded['status']?.toString() ?? 'success',
-            'message': decoded['message']?.toString() ?? 'End user created.',
-            'data': decoded['data'],
+            'status': ok ? 'success' : 'error',
+            'message': serverMsg?.toString() ?? successMessage,
+            'data': decoded is Map ? decoded['data'] : decoded,
             'raw': decoded,
           };
         }
-        return {'status': 'success', 'message': 'End user created.'};
-      }
 
-      String msg = 'Server error: ${response.statusCode}';
-      if (decoded is Map) {
-        final m = decoded['message'] ?? decoded['Message'];
-        if (m != null) msg = m.toString();
+        result = {
+          'status': 'error',
+          'message': serverMsg?.toString() ?? 'Server error: ${response.statusCode}',
+          'statusCode': response.statusCode,
+          'raw': decoded,
+        };
+        final routeMissing =
+            (response.statusCode == 404 || response.statusCode == 405) &&
+            serverMsg == null;
+        if (!routeMissing) return result;
+        debugPrint('⚠️ POST $path → ${response.statusCode}, trying next route');
       }
-      return {'status': 'error', 'message': msg, 'raw': decoded};
+      return result;
     } catch (e) {
       return {
         'status': 'error',
@@ -1372,6 +1395,24 @@ class ApiService {
       };
     }
   }
+
+  static Future<Map<String, dynamic>> createEndUser(
+    Map<String, dynamic> payload,
+  ) => _authorizedPostFirst(
+    const ['/v1/end-user/create', '/v1/end-user/', '/v1/end-user'],
+    payload,
+    successMessage: 'End user created.',
+  );
+
+  /// Registers an agent (customer) record so it shows up in
+  /// `/v1/customers/paginated`.
+  static Future<Map<String, dynamic>> createAgent(
+    Map<String, dynamic> payload,
+  ) => _authorizedPostFirst(
+    const ['/v1/customers/create', '/v1/customers/', '/v1/customers'],
+    payload,
+    successMessage: 'Agent created.',
+  );
 
   // FIX: was hitting legacy api.php — now uses v1 API
   static Future<Map<String, dynamic>> getEndUserByUserId(int userId) async =>
@@ -1474,6 +1515,31 @@ class ApiService {
       'data': data is Map ? Map<String, dynamic>.from(data) : data,
       'raw': result['raw'],
     };
+  }
+
+  // ─── Ticket type helpers ──────────────────────────────────────────────────
+  // /v1/tickets/list/categories may return {id,name}, {value,label} or
+  // {category}; empty strings must not win over a populated key, otherwise an
+  // empty ticket_type is posted and the server rejects it as unknown.
+  static String _firstNonEmpty(Map<String, dynamic> item, List<String> keys) {
+    for (final k in keys) {
+      final v = item[k]?.toString().trim() ?? '';
+      if (v.isNotEmpty && v != 'null') return v;
+    }
+    return '';
+  }
+
+  static String ticketTypeValue(Map<String, dynamic> item) => _firstNonEmpty(
+    item,
+    const ['id', 'value', 'ticket_type_id', 'name', 'category', 'label'],
+  );
+
+  static String ticketTypeLabel(Map<String, dynamic> item) {
+    final l = _firstNonEmpty(
+      item,
+      const ['name', 'label', 'category', 'ticket_type', 'value'],
+    );
+    return l.isEmpty ? '—' : l;
   }
 
   static Future<Map<String, dynamic>> createTicket(

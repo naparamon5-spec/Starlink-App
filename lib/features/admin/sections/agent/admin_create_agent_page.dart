@@ -212,14 +212,43 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
       return;
     }
     setState(() => _submitting = true);
-    // TODO: replace with real create-agent API call
-    await Future.delayed(const Duration(seconds: 1));
+
+    final failures = <String>[];
+    var created = 0;
+    for (final c in _selected.values) {
+      final code = c['value']?.toString() ?? '';
+      final name = c['label']?.toString() ?? '';
+      final res = await ApiService.createAgent({
+        ...c,
+        'customer_code': code,
+        'customer_name': name,
+        'code': code,
+        'name': name,
+      });
+      if (res['status'] == 'success') {
+        created++;
+      } else {
+        failures.add('$name: ${res['message'] ?? 'Failed'}');
+      }
+    }
+
     if (!mounted) return;
     setState(() => _submitting = false);
-    _showSnack(
-      '${_selected.length} agent${_selected.length > 1 ? 's' : ''} created successfully!',
-      isError: false,
-    );
+
+    if (failures.isNotEmpty) {
+      _showSnack(
+        created > 0
+            ? '$created created, ${failures.length} failed — ${failures.first}'
+            : failures.first,
+        isError: true,
+      );
+      if (created == 0) return;
+    } else {
+      _showSnack(
+        '$created agent${created > 1 ? 's' : ''} created successfully!',
+        isError: false,
+      );
+    }
     await Future.delayed(const Duration(milliseconds: 800));
     if (mounted) Navigator.of(context).pop(true);
   }

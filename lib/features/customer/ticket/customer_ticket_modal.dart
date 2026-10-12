@@ -858,10 +858,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       }
 
       final ticketTypeValue =
-          _selectedTicketType!['id']?.toString() ??
-          _selectedTicketType!['name']?.toString() ??
-          _selectedTicketType!['category']?.toString() ??
-          '';
+          ApiService.ticketTypeValue(_selectedTicketType!);
 
       final subscriptionId = _extractSubscriptionId(_selectedSubscription!);
       if (subscriptionId.isEmpty) {
@@ -1125,10 +1122,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
   // ── Label builders ────────────────────────────────────────────────────────
 
   String _ticketTypeLabel(Map<String, dynamic> item) =>
-      item['name']?.toString() ??
-      item['category']?.toString() ??
-      item['label']?.toString() ??
-      '—';
+      ApiService.ticketTypeLabel(item);
 
   String _ticketTypeSub(Map<String, dynamic> item) =>
       item['description']?.toString() ?? '';
