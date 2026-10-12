@@ -238,7 +238,17 @@ class _LoginScreenState extends State<LoginScreen>
           _setError('Failed to load user profile. Please try again.');
         }
       } else {
-        _setError('Invalid email or password.');
+        final msg = response['message']?.toString() ?? '';
+        final unreachable =
+            msg.contains('SocketException') ||
+            msg.contains('Failed host lookup') ||
+            msg.contains('TimeoutException') ||
+            msg.contains('HandshakeException');
+        _setError(
+          unreachable
+              ? 'Cannot reach the server. Check your connection and try again.'
+              : 'Invalid email or password.',
+        );
       }
     } catch (_) {
       _setError('Invalid email or password.');
