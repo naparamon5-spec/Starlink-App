@@ -1403,7 +1403,7 @@ class ApiService {
   static Future<Map<String, dynamic>> createEndUser(
     Map<String, dynamic> payload,
   ) => _authorizedPostFirst(
-    const ['/v1/end-user/create', '/v1/end-user/', '/v1/end-user'],
+    const ['/v1/end-user/'],
     payload,
     successMessage: 'End user created.',
   );
@@ -1413,7 +1413,7 @@ class ApiService {
   static Future<Map<String, dynamic>> createAgent(
     Map<String, dynamic> payload,
   ) => _authorizedPostFirst(
-    const ['/v1/customers/create', '/v1/customers/', '/v1/customers'],
+    const ['/v1/customers/'],
     payload,
     successMessage: 'Agent created.',
   );
@@ -1426,6 +1426,21 @@ class ApiService {
 
   static Future<Map<String, dynamic>> getCustomersListAll() async =>
       _authorizedGet('/v1/customers/list/all');
+
+  /// Customer directory from the external (ERP) database — companies that can
+  /// be onboarded. Not under /v1.
+  static Future<Map<String, dynamic>> getExternalCustomers({
+    int page = 1,
+    int limit = 20,
+    String search = '',
+  }) => _authorizedGet(
+    '/external/list/customer',
+    queryParameters: {
+      'page': '$page',
+      'limit': '$limit',
+      if (search.isNotEmpty) 'search': search,
+    },
+  );
 
   static Future<Map<String, dynamic>> getCustomersPaginated({
     int page = 1,

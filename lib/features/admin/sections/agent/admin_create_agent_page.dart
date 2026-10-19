@@ -36,7 +36,7 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
   bool _submitting = false;
   String? _loadError;
   String _lastQuery = '';
-  List<Map<String, dynamic>>? _allCustomers;
+  Set<String>? _existingCodes;
 
   // Multi-select
   final Map<String, Map<String, dynamic>> _selected = {};
@@ -121,68 +121,71 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
     }
 
     try {
-      // Load the full customer list once (same source as Manage Users), then
-      // filter client-side. The old /external/list/customer endpoint returned
-      // nothing for this role.
-      if (_allCustomers == null) {
-        final res = await ApiService.getCustomersListAll();
-        if (!mounted) return;
-        final ok =
-            res['status'] == 'success' ||
-            res['StatusCode'] == 200 ||
-            res['message'] == 'Success';
-        if (!ok) {
-          setState(() {
-            _loadError =
-                res['message']?.toString() ?? 'Failed to load companies';
-            _loadingFirst = false;
-            _loadingMore = false;
-          });
-          return;
-        }
-        final raw = res['data'];
-        _allCustomers =
-            (raw is List ? raw : const [])
-                .whereType<Map>()
-                .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-                .where(
-                  (e) =>
-                      (e['label']?.toString() ?? '').trim().isNotEmpty &&
-                      (e['value']?.toString() ?? '').trim().isNotEmpty,
-                )
-                // Normalise to strings — the API may send numeric values.
-                .map(
-                  (e) => <String, dynamic>{
-                    ...e,
-                    'label': e['label'].toString().trim(),
-                    'value': e['value'].toString().trim(),
-                  },
-                )
-                .toList();
+      // Companies already registered can't be created again (code is unique),
+      // so hide them from the external directory.
+      if (_existingCodes == null) {
+        final existing = await ApiService.getCustomersListAll();
+        final raw = existing['data'];
+        _existingCodes = {
+          for (final e in (raw is List ? raw : const []).whereType<Map>())
+            (e['value']?.toString() ?? '').trim(),
+        };
       }
 
-      final q = query.toLowerCase();
-      final newItems =
-          q.isEmpty
-              ? List<Map<String, dynamic>>.from(_allCustomers!)
-              : _allCustomers!
-                  .where(
-                    (e) =>
-                        e['label'].toString().toLowerCase().contains(q) ||
-                        e['value'].toString().toLowerCase().contains(q),
-                  )
-                  .toList();
-
+      final res = await ApiService.getExternalCustomers(
+        page: page,
+        limit: 30,
+        search: query,
+      );
       if (!mounted) return;
+      if (res['status'] != 'success') {
+        setState(() {
+          _loadError = res['message']?.toString() ?? 'Failed to load companies';
+          _loadingFirst = false;
+          _loadingMore = false;
+        });
+        return;
+      }
+      // Ignore a response for a search the user has already replaced.
+      if (query != _lastQuery) return;
+
+      final raw = res['data'];
+      final newItems =
+          (raw is List ? raw : const [])
+              .whereType<Map>()
+              .map(
+                (e) => <String, dynamic>{
+                  'label': (e['label']?.toString() ?? '').trim(),
+                  'value': (e['value']?.toString() ?? '').trim(),
+                },
+              )
+              .where(
+                (e) =>
+                    e['label']!.isNotEmpty &&
+                    e['value']!.isNotEmpty &&
+                    !_existingCodes!.contains(e['value']),
+              )
+              .toList();
+      final pagination = res['raw'] is Map ? res['raw']['pagination'] : null;
+      final totalPages =
+          pagination is Map
+              ? int.tryParse('${pagination['totalPages']}') ?? page
+              : page;
+
       setState(() {
         if (reset) _items.clear();
         _items.addAll(newItems);
-        _currentPage = 1;
-        _totalPages = 1;
+        _currentPage = page;
+        _totalPages = totalPages;
         _loadingFirst = false;
         _loadingMore = false;
         _loadError = null;
       });
+
+      // A page may be all already-registered companies; keep filling the list.
+      if (_items.length < 15 && page < totalPages) {
+        _fetchPage(page: page + 1, query: query);
+      }
 
       if (reset) {
         WidgetsBinding.instance.addPostFrameCallback(
