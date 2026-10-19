@@ -47,21 +47,35 @@ class _AdminCreateEndUserPageState extends State<AdminCreateEndUserPage> {
     try {
       final response = await ApiService.getCustomersListAll();
       if (!mounted) return;
-      if (response['StatusCode'] == 200 || response['message'] == 'Success') {
-        final raw = response['data'] as List<dynamic>? ?? [];
+      if (response['status'] == 'success' ||
+          response['StatusCode'] == 200 ||
+          response['message'] == 'Success') {
+        final raw = response['data'] is List ? response['data'] as List : [];
         final agents =
             raw
                 .whereType<Map>()
                 .map((e) => Map<String, dynamic>.from(e))
                 .where(
                   (e) =>
-                      (e['label'] as String? ?? '').trim().isNotEmpty &&
-                      (e['value'] as String? ?? '').trim().isNotEmpty,
+                      (e['label']?.toString() ?? '').trim().isNotEmpty &&
+                      (e['value']?.toString() ?? '').trim().isNotEmpty,
+                )
+                // Normalise to strings — the API may send numeric values.
+                .map(
+                  (e) => <String, dynamic>{
+                    ...e,
+                    'label': e['label'].toString().trim(),
+                    'value': e['value'].toString().trim(),
+                  },
                 )
                 .toList();
         setState(() => _agents = agents);
       } else {
-        setState(() => _agentLoadError = 'Failed to load agents.');
+        setState(
+          () =>
+              _agentLoadError =
+                  response['message']?.toString() ?? 'Failed to load agents.',
+        );
       }
     } catch (e) {
       if (mounted) setState(() => _agentLoadError = 'Error: $e');

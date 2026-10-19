@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:starlink_app/shared/widgets/logout_confirm_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/end_user/profile/edit_profile.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
@@ -88,11 +89,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   // ── Helper ───────────────────────────────────────────────────────────────
-  
+
   http.Client get _httpClient {
-    final httpClient = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 15)
-      ..badCertificateCallback = (cert, host, port) => true;
+    final httpClient =
+        HttpClient()
+          ..connectionTimeout = const Duration(seconds: 15)
+          ..badCertificateCallback = (cert, host, port) => true;
     return IOClient(httpClient);
   }
 
@@ -100,7 +102,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     try {
       _prefs = await SharedPreferences.getInstance();
       final userId = await _resolveUserId();
-      
+
       Map<String, dynamic> response;
       if (userId != null) {
         response = await ApiService.getCurrentUser(userId);
@@ -108,10 +110,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         // Fallback: try fetching the current user profile directly
         final token = await ApiService.getValidAccessToken();
         if (token == null) throw Exception('User not authenticated');
-        
+
         final res = await _httpClient.get(
-            Uri.parse('${ApiService.baseUrl}/v1/auth/me'),
-            headers: {'Authorization': 'Bearer $token'},
+          Uri.parse('${ApiService.baseUrl}/v1/auth/me'),
+          headers: {'Authorization': 'Bearer $token'},
         );
         if (res.statusCode == 200) {
           response = {'status': 'success', 'data': json.decode(res.body)};
@@ -137,18 +139,21 @@ class _ProfileScreenState extends State<ProfileScreen>
         final token = await ApiService.getValidAccessToken();
         if (token != null && token.isNotEmpty) {
           final uri = Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/');
-          final response = await _httpClient.get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          ).timeout(const Duration(seconds: 15));
+          final response = await _httpClient
+              .get(
+                uri,
+                headers: {
+                  'Accept': 'application/json',
+                  'Authorization': 'Bearer $token',
+                },
+              )
+              .timeout(const Duration(seconds: 15));
 
           if (response.statusCode == 200) {
             final decoded = json.decode(response.body);
             if (decoded is Map<String, dynamic>) {
-              final extraData = (decoded['data'] as Map<String, dynamic>?) ?? decoded;
+              final extraData =
+                  (decoded['data'] as Map<String, dynamic>?) ?? decoded;
               merged.addAll(extraData);
             }
           }
@@ -162,16 +167,22 @@ class _ProfileScreenState extends State<ProfileScreen>
       final firstName = userData['first_name'] ?? '';
       final lastName = userData['last_name'] ?? '';
       final middleName = userData['middle_name'] ?? '';
-      final fullName = (firstName +
-              (middleName.isNotEmpty ? ' $middleName' : '') +
-              (lastName.isNotEmpty ? ' $lastName' : ''))
-          .trim();
+      final fullName =
+          (firstName +
+                  (middleName.isNotEmpty ? ' $middleName' : '') +
+                  (lastName.isNotEmpty ? ' $lastName' : ''))
+              .trim();
 
       setState(() {
         _userId = userData['id']?.toString() ?? 'N/A';
-        _fullName = fullName.isNotEmpty ? fullName : (userData['name'] ?? 'N/A');
-        _lastName = lastName.isNotEmpty ? lastName : (userData['last_name'] ?? 'N/A');
-        _position = userData['position']?.toString() ?? userData['role']?.toString() ?? 'end_user';
+        _fullName =
+            fullName.isNotEmpty ? fullName : (userData['name'] ?? 'N/A');
+        _lastName =
+            lastName.isNotEmpty ? lastName : (userData['last_name'] ?? 'N/A');
+        _position =
+            userData['position']?.toString() ??
+            userData['role']?.toString() ??
+            'end_user';
         _userEmail = userData['email'] ?? _prefs.getString('email') ?? 'N/A';
         _isLoading = false;
       });
@@ -186,7 +197,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       _fadeController.forward(from: 0);
     } catch (e) {
       setState(() {
-        _userId = _prefs.getString('userId') ?? _prefs.getString('user_id') ?? 'N/A';
+        _userId =
+            _prefs.getString('userId') ?? _prefs.getString('user_id') ?? 'N/A';
         _fullName = _prefs.getString('name') ?? 'N/A';
         _lastName = _prefs.getString('lastName') ?? 'N/A';
         _position = _prefs.getString('position') ?? 'N/A';
@@ -232,6 +244,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _handleLogout() async {
+    if (!await confirmLogout(context)) return;
     HapticFeedback.mediumImpact();
     try {
       await ApiService.logout();

@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:starlink_app/services/api_service.dart';
 
 // ── Design tokens (identical to create-ticket page) ──────────────────────────
@@ -26,7 +24,6 @@ class AdminCreateAgentPage extends StatefulWidget {
 class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
     with TickerProviderStateMixin {
   // ── Pagination state ───────────────────────────────────────────────────────
-  static const int _pageSize = 20;
 
   final List<Map<String, dynamic>> _items = [];
   final ScrollController _scrollCtrl = ScrollController();
@@ -39,6 +36,7 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
   bool _submitting = false;
   String? _loadError;
   String _lastQuery = '';
+  List<Map<String, dynamic>>? _allCustomers;
 
   // Multi-select
   final Map<String, Map<String, dynamic>> _selected = {};
@@ -123,65 +121,73 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
     }
 
     try {
-      final token = await ApiService.getValidAccessToken();
-      final uri = Uri.parse('${ApiService.baseUrl}/external/list/customer').replace(
-        queryParameters: {
-          'limit': '$_pageSize',
-          'page': '$page',
-          'search': query,
-        },
-      );
-
-      final res = await http
-          .get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              if (token != null && token.isNotEmpty)
-                'Authorization': 'Bearer $token',
-            },
-          )
-          .timeout(const Duration(seconds: 20));
-
-      if (!mounted) return;
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final body = json.decode(res.body) as Map<String, dynamic>;
-        final pag = body['pagination'] as Map<String, dynamic>? ?? {};
-        final total = (pag['totalPages'] as num?)?.toInt() ?? 1;
-
-        final newItems =
-            (body['data'] as List? ?? [])
+      // Load the full customer list once (same source as Manage Users), then
+      // filter client-side. The old /external/list/customer endpoint returned
+      // nothing for this role.
+      if (_allCustomers == null) {
+        final res = await ApiService.getCustomersListAll();
+        if (!mounted) return;
+        final ok =
+            res['status'] == 'success' ||
+            res['StatusCode'] == 200 ||
+            res['message'] == 'Success';
+        if (!ok) {
+          setState(() {
+            _loadError =
+                res['message']?.toString() ?? 'Failed to load companies';
+            _loadingFirst = false;
+            _loadingMore = false;
+          });
+          return;
+        }
+        final raw = res['data'];
+        _allCustomers =
+            (raw is List ? raw : const [])
                 .whereType<Map>()
                 .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
                 .where(
                   (e) =>
-                      (e['label'] as String? ?? '').trim().isNotEmpty &&
-                      e['value'] != null,
+                      (e['label']?.toString() ?? '').trim().isNotEmpty &&
+                      (e['value']?.toString() ?? '').trim().isNotEmpty,
+                )
+                // Normalise to strings — the API may send numeric values.
+                .map(
+                  (e) => <String, dynamic>{
+                    ...e,
+                    'label': e['label'].toString().trim(),
+                    'value': e['value'].toString().trim(),
+                  },
                 )
                 .toList();
+      }
 
-        setState(() {
-          if (reset) _items.clear();
-          _items.addAll(newItems);
-          _currentPage = page;
-          _totalPages = total;
-          _loadingFirst = false;
-          _loadingMore = false;
-          _loadError = null;
-        });
+      final q = query.toLowerCase();
+      final newItems =
+          q.isEmpty
+              ? List<Map<String, dynamic>>.from(_allCustomers!)
+              : _allCustomers!
+                  .where(
+                    (e) =>
+                        e['label'].toString().toLowerCase().contains(q) ||
+                        e['value'].toString().toLowerCase().contains(q),
+                  )
+                  .toList();
 
-        if (reset) {
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _animController.forward(from: 0),
-          );
-        }
-      } else {
-        setState(() {
-          _loadError = 'Server error: ${res.statusCode}';
-          _loadingFirst = false;
-          _loadingMore = false;
-        });
+      if (!mounted) return;
+      setState(() {
+        if (reset) _items.clear();
+        _items.addAll(newItems);
+        _currentPage = 1;
+        _totalPages = 1;
+        _loadingFirst = false;
+        _loadingMore = false;
+        _loadError = null;
+      });
+
+      if (reset) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _animController.forward(from: 0),
+        );
       }
     } catch (e) {
       if (!mounted) return;

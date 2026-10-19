@@ -40,6 +40,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
   final _roleController = TextEditingController();
 
   bool _isLoading = true;
+  bool _isSaving = false;
   String? _errorMessage;
   Map<String, dynamic>? _profileData;
   String? _resolvedToken;
@@ -157,16 +158,50 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
     super.dispose();
   }
 
-  void _saveProfile() {
-    if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: _success,
-          content: Text('Profile updated successfully'),
-        ),
-      );
-      Navigator.pop(context);
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate() || _isSaving) return;
+
+    var userId = _profileData?['id']?.toString() ?? '';
+    if (userId.isEmpty) {
+      final me = await ApiService.getMe();
+      final data = me['data'];
+      final user = data is Map && data['user'] is Map ? data['user'] : data;
+      if (user is Map) userId = user['id']?.toString() ?? '';
     }
+    if (!mounted) return;
+    if (userId.isEmpty) {
+      _showSnack('User ID not found. Please log out and back in.', true);
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    final res = await ApiService.updateUser(userId, {
+      'first_name': _firstNameController.text.trim(),
+      'last_name': _lastNameController.text.trim(),
+      'middle_name': _middleNameController.text.trim(),
+      'position': _positionController.text.trim(),
+    });
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+
+    if (res['status'] == 'success') {
+      _showSnack('Profile updated successfully', false);
+      Navigator.pop(context, true);
+    } else {
+      _showSnack(
+        res['message']?.toString() ?? 'Failed to update profile.',
+        true,
+      );
+    }
+  }
+
+  void _showSnack(String msg, bool isError) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: isError ? _primary : _success,
+        content: Text(msg),
+      ),
+    );
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -566,7 +601,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _saveProfile,
+                onPressed: _isSaving ? null : _saveProfile,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _primary,
                   foregroundColor: Colors.white,
@@ -576,10 +611,23 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: const Text(
-                  'Save Changes',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                ),
+                child:
+                    _isSaving
+                        ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                        : const Text(
+                          'Save Changes',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
               ),
             ),
 
@@ -594,4 +642,3 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
 }
 
 // ── Dialog Field ──────────────────────────────────────────────────────────────
-

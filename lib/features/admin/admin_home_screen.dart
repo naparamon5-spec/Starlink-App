@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:starlink_app/shared/widgets/logout_confirm_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/admin/sections/ticket/admin_tickets_page.dart';
 import 'package:starlink_app/features/admin/sections/ticket/admin_ticket_details_page.dart';
@@ -1735,6 +1736,7 @@ class _SettingsSection extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () async {
+                if (!await confirmLogout(context)) return;
                 await ApiService.logout();
                 if (context.mounted) {
                   Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(

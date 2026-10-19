@@ -448,10 +448,9 @@ class ApiService {
               TextButton(
                 onPressed: () {
                   Navigator.of(ctx).pop();
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                    '/',
-                    (route) => false,
-                  );
+                  Navigator.of(
+                    context,
+                  ).pushNamedAndRemoveUntil('/', (route) => false);
                 },
                 child: const Text('OK'),
               ),
@@ -542,7 +541,7 @@ class ApiService {
     if (token != null && token.isNotEmpty) return token;
     final result = await refreshToken();
     if (result['status'] == 'success') return result['accessToken'];
-    
+
     // Auto-logout
     await clearTokens();
     final context = navigatorKey.currentContext;
@@ -1024,8 +1023,12 @@ class ApiService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         if (decoded is Map<String, dynamic>) {
+          // Backend may send status as true/200/"OK"; only an explicit
+          // error/fail value means the 2xx update did not happen.
+          final st = decoded['status']?.toString().toLowerCase() ?? '';
+          final failed = st == 'error' || st == 'fail' || st == 'false';
           return {
-            'status': decoded['status']?.toString() ?? 'success',
+            'status': failed ? 'error' : 'success',
             'message': decoded['message']?.toString() ?? 'User updated.',
             'data': decoded['data'],
             'raw': decoded,
@@ -1377,7 +1380,8 @@ class ApiService {
 
         result = {
           'status': 'error',
-          'message': serverMsg?.toString() ?? 'Server error: ${response.statusCode}',
+          'message':
+              serverMsg?.toString() ?? 'Server error: ${response.statusCode}',
           'statusCode': response.statusCode,
           'raw': decoded,
         };
@@ -1529,16 +1533,28 @@ class ApiService {
     return '';
   }
 
-  static String ticketTypeValue(Map<String, dynamic> item) => _firstNonEmpty(
-    item,
-    const ['id', 'value', 'ticket_type_id', 'name', 'category', 'label'],
-  );
+  // Tickets store ticket_type as the category *name* (it is shown as-is and
+  // filtered by name), so posting the numeric id made the server report an
+  // unknown ticket type. Prefer the name; fall back to id only as a last resort.
+  static String ticketTypeValue(Map<String, dynamic> item) =>
+      _firstNonEmpty(item, const [
+        'name',
+        'category',
+        'ticket_type',
+        'label',
+        'value',
+        'ticket_type_id',
+        'id',
+      ]);
 
   static String ticketTypeLabel(Map<String, dynamic> item) {
-    final l = _firstNonEmpty(
-      item,
-      const ['name', 'label', 'category', 'ticket_type', 'value'],
-    );
+    final l = _firstNonEmpty(item, const [
+      'name',
+      'label',
+      'category',
+      'ticket_type',
+      'value',
+    ]);
     return l.isEmpty ? '—' : l;
   }
 

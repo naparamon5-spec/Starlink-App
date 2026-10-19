@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import 'package:starlink_app/shared/widgets/logout_confirm_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/customer/profile/customer_edit_profile.dart';
 import 'package:starlink_app/features/customer/profile/customer_security_settings.dart';
@@ -333,6 +334,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   }
 
   Future<void> _handleLogout() async {
+    if (!await confirmLogout(context)) return;
     try {
       await ApiService.logout();
       final prefs = await SharedPreferences.getInstance();

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:starlink_app/features/auth/login_screen.dart';
+import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/logout_confirm_dialog.dart';
 import 'package:starlink_app/features/agent/profile/agent_edit_profile_page.dart';
 import 'package:starlink_app/features/agent/profile/agent_manage_users_page.dart';
 import 'package:starlink_app/features/agent/profile/agent_user_guide_page.dart';
@@ -3004,7 +3007,16 @@ class _AgentSettingsPage extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           GestureDetector(
-            onTap: () {},
+            onTap: () async {
+              if (!await confirmLogout(context)) return;
+              await ApiService.logout();
+              if (context.mounted) {
+                Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
+            },
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 15),
               decoration: BoxDecoration(
