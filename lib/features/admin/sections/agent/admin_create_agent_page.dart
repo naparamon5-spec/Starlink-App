@@ -221,21 +221,19 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
 
     final failures = <String>[];
     var created = 0;
-    for (final c in _selected.values) {
-      final code = c['value']?.toString() ?? '';
-      final name = c['label']?.toString() ?? '';
-      final res = await ApiService.createAgent({
-        ...c,
-        'customer_code': code,
-        'customer_name': name,
-        'code': code,
-        'name': name,
-      });
-      if (res['status'] == 'success') {
-        created++;
-      } else {
-        failures.add('$name: ${res['message'] ?? 'Failed'}');
-      }
+    final res = await ApiService.createAgent({
+      'formData': [
+        for (final c in _selected.values)
+          {
+            'customer_code': c['value']?.toString() ?? '',
+            'customer_name': c['label']?.toString() ?? '',
+          },
+      ],
+    });
+    if (res['status'] == 'success') {
+      created = _selected.length;
+    } else {
+      failures.add(res['message']?.toString() ?? 'Failed');
     }
 
     if (!mounted) return;

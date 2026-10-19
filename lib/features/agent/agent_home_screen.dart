@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/shared/widgets/logout_confirm_dialog.dart';
-import 'package:starlink_app/features/agent/profile/agent_edit_profile_page.dart';
+import 'package:starlink_app/features/admin/profile/admin_edit_profile_page.dart';
 import 'package:starlink_app/features/agent/profile/agent_manage_users_page.dart';
 import 'package:starlink_app/features/agent/profile/agent_user_guide_page.dart';
 import 'package:starlink_app/features/agent/sections/agent/agent_agents_page.dart';
@@ -2955,7 +2955,9 @@ class _AgentSettingsPage extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => AgentEditProfilePage()),
+                MaterialPageRoute(
+                  builder: (context) => const AdminEditProfilePage(),
+                ),
               );
             },
           ),

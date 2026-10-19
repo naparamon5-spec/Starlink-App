@@ -93,9 +93,12 @@ class _AdminCreateEndUserPageState extends State<AdminCreateEndUserPage> {
     setState(() => _isSubmitting = true);
     try {
       final payload = {
-        'name': _nameController.text.trim(),
-        'customer_code': (_selectedAgent!['value'] ?? '').toString(),
-        'customer_name': (_selectedAgent!['label'] ?? '').toString(),
+        'formData': [
+          {
+            'eu_name': _nameController.text.trim(),
+            'customer_code': (_selectedAgent!['value'] ?? '').toString(),
+          },
+        ],
       };
       final response = await ApiService.createEndUser(payload);
       if (!mounted) return;
