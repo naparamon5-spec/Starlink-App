@@ -4,14 +4,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:provider/provider.dart';
+// import 'package:provider/provider.dart'; // notifications disabled
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:starlink_app/features/end_user/ticket/ticket_screen.dart'
     show TicketScreen, EndUserTicketDetailsScreen;
 import 'package:starlink_app/features/end_user/profile/profile_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
-import 'package:starlink_app/providers/notification_provider.dart';
+// import 'package:starlink_app/providers/notification_provider.dart'; // notifications disabled
 // import 'package:starlink_app/features/end_user/home/subscription_header.dart';
 // import 'package:starlink_app/features/end_user/home/billing_cycle_chart.dart';
 import 'package:starlink_app/features/end_user/subscription/end_user_subscription_page.dart';
@@ -73,7 +73,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadAll();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<NotificationProvider>(context, listen: false).refresh();
+      // Notifications disabled: the backend has no /v1/notifications route.
+      // Provider.of<NotificationProvider>(context, listen: false).refresh();
       if (widget.loginMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

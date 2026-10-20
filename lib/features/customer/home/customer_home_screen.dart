@@ -11,8 +11,8 @@ import 'package:starlink_app/features/customer/ticket/customer_view.dart';
 import 'package:starlink_app/features/customer/profile/customer_profile.dart';
 import 'package:starlink_app/features/customer/billing/customer_billing_page.dart';
 import 'package:starlink_app/features/customer/subscription/customer_subscription_page.dart';
-import 'package:provider/provider.dart';
-import 'package:starlink_app/providers/notification_provider.dart';
+// import 'package:provider/provider.dart'; // notifications disabled
+// import 'package:starlink_app/providers/notification_provider.dart'; // notifications disabled
 import 'package:flutter_svg/flutter_svg.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -72,7 +72,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     super.initState();
     _loadUserData();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<NotificationProvider>(context, listen: false).refresh();
+      // Notifications disabled: the backend has no /v1/notifications route.
+      // Provider.of<NotificationProvider>(context, listen: false).refresh();
     });
   }
 

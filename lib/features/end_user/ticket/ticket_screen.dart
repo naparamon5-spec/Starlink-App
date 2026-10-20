@@ -5,8 +5,8 @@ import 'package:starlink_app/features/end_user/ticket/ticket_modal.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/core/utils/file_download/file_downloader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:provider/provider.dart';
-import 'package:starlink_app/providers/notification_provider.dart';
+// import 'package:provider/provider.dart'; // notifications disabled
+// import 'package:starlink_app/providers/notification_provider.dart'; // notifications disabled
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFFEB1E23);
@@ -72,7 +72,8 @@ class _TicketScreenState extends State<TicketScreen> {
     _searchController.addListener(_handleSearch);
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<NotificationProvider>(context, listen: false).refresh();
+      // Notifications disabled: the backend has no /v1/notifications route.
+      // Provider.of<NotificationProvider>(context, listen: false).refresh();
     });
   }
 

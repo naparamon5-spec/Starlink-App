@@ -161,6 +161,8 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
     required String contactName,
     required String description,
   }) async {
+    // Notifications disabled: the backend has no /v1/notifications route.
+    return;
     final selectedContact = _selectedContact;
     if (selectedContact == null) return;
 
@@ -227,6 +229,8 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
     required String contactValue,
     required String subscriptionId,
   }) async {
+    // Notifications disabled: the backend has no /v1/notifications route.
+    return;
     if (_selectedContact == null) return;
 
     final selectedUserId = _extractNotificationUserId(_selectedContact!);
