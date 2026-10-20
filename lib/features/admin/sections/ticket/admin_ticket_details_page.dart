@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/resolve_remarks_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/core/utils/file_download/file_downloader.dart';
 
@@ -655,10 +656,19 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     final ticketId = widget.ticketId.trim();
     if (ticketId.isEmpty) return;
     if (_isActionLoading) return;
+    String? remarks;
+    if (newStatus == 'resolved') {
+      remarks = await askResolveRemarks(context);
+      if (remarks == null || !mounted) return;
+    }
 
     setState(() => _isActionLoading = true);
     try {
-      final response = await ApiService.updateTicketStatus(ticketId, newStatus);
+      final response = await ApiService.updateTicketStatus(
+        ticketId,
+        newStatus,
+        remarks: remarks,
+      );
       if (!mounted) return;
       if (response['status'] == 'success') {
         setState(() {

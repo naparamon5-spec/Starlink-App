@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:starlink_app/shared/widgets/app_table.dart';
+import 'package:starlink_app/shared/widgets/resolve_remarks_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
@@ -232,16 +233,26 @@ class _TicketScreenState extends State<TicketScreen> {
       final manilaDate = utcDate.add(const Duration(hours: 8));
 
       const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
       ];
-      
+
       int hour = manilaDate.hour;
       int h = hour % 12;
       if (h == 0) h = 12;
       final m = manilaDate.minute.toString().padLeft(2, '0');
       final period = hour >= 12 ? 'PM' : 'AM';
-      
+
       return '${months[manilaDate.month - 1]} ${manilaDate.day.toString().padLeft(2, '0')}, ${manilaDate.year}  $h:$m $period';
     } catch (_) {
       return dateStr;
@@ -261,8 +272,17 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   Future<void> _updateTicketStatus(String ticketId, String newStatus) async {
+    String? remarks;
+    if (newStatus == 'resolved') {
+      remarks = await askResolveRemarks(context);
+      if (remarks == null || !mounted) return;
+    }
     try {
-      final response = await ApiService.updateTicketStatus(ticketId, newStatus);
+      final response = await ApiService.updateTicketStatus(
+        ticketId,
+        newStatus,
+        remarks: remarks,
+      );
       if (response['status'] == 'success') {
         setState(() {
           final normalized = newStatus.replaceAll('_', ' ').toUpperCase();
@@ -813,10 +833,14 @@ class _TicketScreenState extends State<TicketScreen> {
                                       if (e is! Map) {
                                         return const SizedBox.shrink();
                                       }
-                                      final actionRaw = e['action']?.toString() ?? '';
+                                      final actionRaw =
+                                          e['action']?.toString() ?? '';
                                       final action =
-                                          actionRaw.trim().isEmpty ? 'UPDATE' : actionRaw;
-                                      final by = e['user_name']?.toString() ??
+                                          actionRaw.trim().isEmpty
+                                              ? 'UPDATE'
+                                              : actionRaw;
+                                      final by =
+                                          e['user_name']?.toString() ??
                                           e['name']?.toString() ??
                                           '—';
                                       final dateRaw =
@@ -824,17 +848,20 @@ class _TicketScreenState extends State<TicketScreen> {
                                               ?.toString();
                                       final details =
                                           e['new_value']?.toString() ??
-                                              e['message']?.toString() ??
-                                              '';
+                                          e['message']?.toString() ??
+                                          '';
 
                                       return Container(
                                         width: double.infinity,
-                                        margin: const EdgeInsets.only(bottom: 10),
+                                        margin: const EdgeInsets.only(
+                                          bottom: 10,
+                                        ),
                                         padding: const EdgeInsets.all(14),
                                         decoration: BoxDecoration(
                                           color: Colors.grey[50],
-                                          borderRadius:
-                                              BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                           border: Border.all(
                                             color: Colors.grey[300]!,
                                           ),
@@ -847,10 +874,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                               children: [
                                                 Expanded(
                                                   child: Text(
-                                                    action.replaceAll(
-                                                      '_',
-                                                      ' ',
-                                                    ).toUpperCase(),
+                                                    action
+                                                        .replaceAll('_', ' ')
+                                                        .toUpperCase(),
                                                     style: const TextStyle(
                                                       fontWeight:
                                                           FontWeight.bold,
@@ -928,7 +954,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                               context,
                                               ticketId,
                                             ),
-                                        borderRadius: BorderRadius.circular(999),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
                                         child: Ink(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 12,
@@ -938,8 +966,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                             color: const Color(
                                               0xFF133343,
                                             ).withOpacity(0.08),
-                                            borderRadius:
-                                                BorderRadius.circular(999),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
                                             border: Border.all(
                                               color: const Color(
                                                 0xFF133343,
@@ -989,7 +1018,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                   )
                                 else
                                   FutureBuilder<Map<String, dynamic>>(
-                                    future: ApiService.getTicketComments(ticketId),
+                                    future: ApiService.getTicketComments(
+                                      ticketId,
+                                    ),
                                     builder: (context, snapshot) {
                                       if (snapshot.connectionState ==
                                           ConnectionState.waiting) {
@@ -998,8 +1029,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                           padding: const EdgeInsets.all(16),
                                           decoration: BoxDecoration(
                                             color: Colors.grey[50],
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                             border: Border.all(
                                               color: Colors.grey[300]!,
                                             ),
@@ -1009,9 +1041,10 @@ class _TicketScreenState extends State<TicketScreen> {
                                               SizedBox(
                                                 width: 18,
                                                 height: 18,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                ),
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
                                               ),
                                               SizedBox(width: 10),
                                               Text('Loading comments...'),
@@ -1026,15 +1059,18 @@ class _TicketScreenState extends State<TicketScreen> {
                                           padding: const EdgeInsets.all(16),
                                           decoration: BoxDecoration(
                                             color: Colors.grey[50],
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                             border: Border.all(
                                               color: Colors.grey[300]!,
                                             ),
                                           ),
                                           child: Text(
                                             'Failed to load comments: ${snapshot.error}',
-                                            style: const TextStyle(fontSize: 14),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                            ),
                                           ),
                                         );
                                       }
@@ -1045,7 +1081,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                       final list =
                                           data is List
                                               ? data
-                                              : (data is Map ? data['data'] : null);
+                                              : (data is Map
+                                                  ? data['data']
+                                                  : null);
                                       final items =
                                           (list is List) ? list : const [];
 
@@ -1055,8 +1093,9 @@ class _TicketScreenState extends State<TicketScreen> {
                                           padding: const EdgeInsets.all(16),
                                           decoration: BoxDecoration(
                                             color: Colors.grey[50],
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                             border: Border.all(
                                               color: Colors.grey[300]!,
                                             ),
@@ -1079,13 +1118,16 @@ class _TicketScreenState extends State<TicketScreen> {
                                               final dateRaw =
                                                   e['date']?.toString();
                                               final comment =
-                                                  e['comment']?.toString() ?? '';
+                                                  e['comment']?.toString() ??
+                                                  '';
                                               return Container(
                                                 width: double.infinity,
                                                 margin: const EdgeInsets.only(
                                                   bottom: 10,
                                                 ),
-                                                padding: const EdgeInsets.all(14),
+                                                padding: const EdgeInsets.all(
+                                                  14,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   color: Colors.grey[50],
                                                   borderRadius:
@@ -1103,20 +1145,24 @@ class _TicketScreenState extends State<TicketScreen> {
                                                         Expanded(
                                                           child: Text(
                                                             name,
-                                                            style: const TextStyle(
-                                                              fontWeight:
-                                                                  FontWeight.bold,
-                                                              color: Color(
-                                                                0xFF133343,
-                                                              ),
-                                                            ),
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  color: Color(
+                                                                    0xFF133343,
+                                                                  ),
+                                                                ),
                                                           ),
                                                         ),
                                                         Text(
                                                           _formatDate(dateRaw),
                                                           style: TextStyle(
                                                             fontSize: 12,
-                                                            color: Colors.grey[600],
+                                                            color:
+                                                                Colors
+                                                                    .grey[600],
                                                           ),
                                                         ),
                                                       ],
@@ -1718,7 +1764,11 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
       appBar: AppBar(
         title: const Text(
           'Ticket Details',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
         ),
         centerTitle: true,
         elevation: 0,
@@ -1751,13 +1801,19 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                         const SizedBox(height: 8),
                         Text(
                           'Created: ${fullData['created_at']?.toString() ?? 'N/A'}',
-                          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
                         ),
                       ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: _getStatusColor(status).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
@@ -1765,7 +1821,10 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                     ),
                     child: Text(
                       status,
-                      style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: _getStatusColor(status),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -1773,7 +1832,9 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
               const SizedBox(height: 32),
               Card(
                 elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
@@ -1781,16 +1842,35 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                     children: [
                       const Text(
                         'Ticket Information',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF133343)),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF133343),
+                        ),
                       ),
                       const SizedBox(height: 24),
-                      _buildDetailItem('Subject', fullData['subject']?.toString() ?? 'No subject'),
+                      _buildDetailItem(
+                        'Subject',
+                        fullData['subject']?.toString() ?? 'No subject',
+                      ),
                       const SizedBox(height: 8),
-                      _buildDetailItem('Ticket Type', fullData['ticket_type']?.toString() ?? fullData['type']?.toString() ?? 'N/A'),
+                      _buildDetailItem(
+                        'Ticket Type',
+                        fullData['ticket_type']?.toString() ??
+                            fullData['type']?.toString() ??
+                            'N/A',
+                      ),
                       const SizedBox(height: 8),
-                      _buildDetailItem('Description', fullData['description']?.toString() ?? 'No description'),
+                      _buildDetailItem(
+                        'Description',
+                        fullData['description']?.toString() ?? 'No description',
+                      ),
                       const SizedBox(height: 8),
-                      _buildDetailItem('Email', fullData['created_by_email']?.toString() ?? 'Not Available'),
+                      _buildDetailItem(
+                        'Email',
+                        fullData['created_by_email']?.toString() ??
+                            'Not Available',
+                      ),
                     ],
                   ),
                 ),

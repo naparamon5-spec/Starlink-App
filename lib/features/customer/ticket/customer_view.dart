@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:starlink_app/shared/widgets/resolve_remarks_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/core/utils/file_download/file_downloader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -303,16 +304,26 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
     try {
       final utcDate = DateTime.parse(raw).toUtc();
       final manilaDate = utcDate.add(const Duration(hours: 8));
-      
+
       const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
       ];
-      
+
       final h = manilaDate.hour % 12 == 0 ? 12 : manilaDate.hour % 12;
       final m = manilaDate.minute.toString().padLeft(2, '0');
       final period = manilaDate.hour >= 12 ? 'PM' : 'AM';
-      
+
       return '${months[manilaDate.month - 1]} ${manilaDate.day.toString().padLeft(2, '0')}, ${manilaDate.year}  $h:$m $period';
     } catch (_) {
       return raw ?? '—';
@@ -332,7 +343,6 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
     }
     return fallback;
   }
-
 
   List<dynamic> _extractList(dynamic d) {
     if (d is List) return d;
@@ -415,10 +425,13 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   }
 
   Future<void> _resolveTicket() async {
+    final remarks = await askResolveRemarks(context);
+    if (remarks == null || !mounted) return;
     setState(() => _isActionLoading = true);
     try {
       final response = await ApiService.resolveTicket(
         widget.ticket['id'].toString(),
+        remarks: remarks,
       );
       if (response['status'] == 'success') {
         _updateLocalStatus('RESOLVED');
@@ -945,7 +958,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                               fallback: '0',
                             );
                             final sizeInBytes = double.tryParse(sizeStr) ?? 0.0;
-                            final sizeDisplay = '${(sizeInBytes / 1024).toStringAsFixed(1)}KB';
+                            final sizeDisplay =
+                                '${(sizeInBytes / 1024).toStringAsFixed(1)}KB';
                             return Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,

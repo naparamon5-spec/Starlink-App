@@ -740,9 +740,10 @@ class ApiService {
         payload['otp'] = verificationCode.trim();
       }
 
+      // Backend: PUT /v1/auth/update-password { token, new_password }.
       final response = await _client
-          .post(
-            Uri.parse('$baseUrl/v1/auth/reset-password'),
+          .put(
+            Uri.parse('$baseUrl/v1/auth/update-password'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -1400,6 +1401,8 @@ class ApiService {
     }
   }
 
+  /// Backend: POST /v1/end-user/ with
+  /// `{ formData: [{ eu_name, customer_code }] }`.
   static Future<Map<String, dynamic>> createEndUser(
     Map<String, dynamic> payload,
   ) => _authorizedPostFirst(
@@ -1408,8 +1411,8 @@ class ApiService {
     successMessage: 'End user created.',
   );
 
-  /// Registers an agent (customer) record so it shows up in
-  /// `/v1/customers/paginated`.
+  /// Backend: POST /v1/customers/ with
+  /// `{ formData: [{ customer_code, customer_name }] }`.
   static Future<Map<String, dynamic>> createAgent(
     Map<String, dynamic> payload,
   ) => _authorizedPostFirst(
@@ -1695,8 +1698,9 @@ class ApiService {
 
   static Future<Map<String, dynamic>> updateTicketStatus(
     String ticketId,
-    String newStatus,
-  ) async {
+    String newStatus, {
+    String? remarks,
+  }) async {
     final id = ticketId.trim();
     final status = newStatus.trim();
     if (id.isEmpty || status.isEmpty) {
@@ -1706,84 +1710,30 @@ class ApiService {
       };
     }
 
-    // Prefer v1 API (authenticated). Backend implementations vary; try common
-    // routes and payload keys, then fall back to legacy endpoint.
-    final candidates = <Map<String, dynamic>>[
-      {
-        'method': 'PUT',
-        'path': '/v1/tickets/$id',
-        'body': {'status': status},
-      },
-      {
-        'method': 'PATCH',
-        'path': '/v1/tickets/$id',
-        'body': {'status': status},
-      },
-      {
-        'method': 'PUT',
-        'path': '/v1/tickets/$id/status',
-        'body': {'status': status},
-      },
-      {
-        'method': 'POST',
-        'path': '/v1/tickets/$id/status',
-        'body': {'status': status},
-      },
-      {
-        'method': 'POST',
-        'path': '/v1/tickets/status/$id',
-        'body': {'status': status},
-      },
-      {
-        'method': 'POST',
-        'path': '/v1/tickets/update/status',
-        'body': {'ticket_id': id, 'status': status},
-      },
-    ];
-
-    for (final c in candidates) {
-      final result = await _authorizedWrite(
-        c['method'] as String,
-        c['path'] as String,
-        body: Map<String, dynamic>.from(c['body'] as Map),
-      );
-      if (result['status'] == 'success') return result;
+    // Backend routes (ticket.controller.js):
+    //   PUT /v1/tickets/accept-ticket/:id   → in_progress (admin/agent)
+    //   PUT /v1/tickets/resolved/:id        → resolved, needs { remarks }
+    //   PUT /v1/tickets/closed/:id          → closed
+    final String path;
+    Map<String, dynamic>? body;
+    switch (status) {
+      case 'in_progress':
+        path = '/v1/tickets/accept-ticket/$id';
+      case 'resolved':
+        if ((remarks ?? '').trim().isEmpty) {
+          return {
+            'status': 'error',
+            'message': 'Remarks are required to resolve a ticket.',
+          };
+        }
+        path = '/v1/tickets/resolved/$id';
+        body = {'remarks': remarks!.trim()};
+      case 'closed':
+        path = '/v1/tickets/closed/$id';
+      default:
+        return {'status': 'error', 'message': 'Unsupported status: $status'};
     }
-
-    // Legacy fallback (some environments still use this).
-    try {
-      final response = await _client.post(
-        Uri.parse('$baseUrl/api.php?action=update_ticket_status'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode({'ticket_id': id, 'status': status}),
-      );
-      dynamic decoded;
-      try {
-        decoded = json.decode(response.body);
-      } catch (_) {
-        decoded = null;
-      }
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        if (decoded is Map<String, dynamic>) return decoded;
-        return {'status': 'success', 'data': decoded, 'raw': decoded};
-      }
-
-      String msg = 'Server error: ${response.statusCode}';
-      if (decoded is Map) {
-        final m = decoded['message'] ?? decoded['Message'] ?? decoded['error'];
-        if (m != null) msg = m.toString();
-      }
-      return {'status': 'error', 'message': msg, 'raw': decoded};
-    } catch (e) {
-      return {
-        'status': 'error',
-        'message': 'Failed to update ticket status: $e',
-      };
-    }
+    return _authorizedWrite('PUT', path, body: body);
   }
 
   // ─── Ticket status shortcuts (Accept/Resolve/Close) ───────────────────────
@@ -1791,8 +1741,10 @@ class ApiService {
   static Future<Map<String, dynamic>> acceptTicket(String ticketId) async =>
       updateTicketStatus(ticketId, 'in_progress');
 
-  static Future<Map<String, dynamic>> resolveTicket(String ticketId) async =>
-      updateTicketStatus(ticketId, 'resolved');
+  static Future<Map<String, dynamic>> resolveTicket(
+    String ticketId, {
+    required String remarks,
+  }) async => updateTicketStatus(ticketId, 'resolved', remarks: remarks);
 
   static Future<Map<String, dynamic>> closeTicket(String ticketId) async =>
       updateTicketStatus(ticketId, 'closed');
@@ -2430,9 +2382,8 @@ class ApiService {
     required String customerCode,
     required String cpoNumber,
     required String sidrNumber,
-  }) async => _getV1WithAuth(
-    '/v1/billing/details/$customerCode/$cpoNumber/$sidrNumber',
-  );
+  }) async =>
+      _getV1WithAuth('/v1/billing/$customerCode/$cpoNumber/$sidrNumber');
 
   static Future<Map<String, dynamic>> getBillingCycles(
     String serviceLineNumber,
@@ -2471,8 +2422,12 @@ class ApiService {
       }
 
       final response = await _client
-          .post(
-            Uri.parse('$baseUrl/v1/billing/payment'),
+          // Backend: PUT /v1/billing/:c/:cpo/:sidr { amount }.
+          .put(
+            Uri.parse(
+              '$baseUrl/v1/billing/${Uri.encodeComponent(customerCode)}/'
+              '${Uri.encodeComponent(cpoNumber)}/${Uri.encodeComponent(sidrNumber)}',
+            ),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
