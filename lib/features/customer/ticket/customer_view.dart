@@ -105,8 +105,14 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   }
 
   Widget _buildCommentComposer() {
+    final canSend = !_postingComment && _commentCtrl.text.trim().isNotEmpty;
+    // Same look as the Description box: light fill, thin border, radius 10.
+    OutlineInputBorder outline(Color c, [double w = 1]) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: c, width: w),
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -115,44 +121,55 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
               controller: _commentCtrl,
               minLines: 1,
               maxLines: 4,
+              cursorColor: _brandRed,
               textCapitalization: TextCapitalization.sentences,
               onChanged: (_) => setState(() {}),
+              style: const TextStyle(fontSize: 13, color: _inkSecondary),
               decoration: InputDecoration(
                 hintText: 'Write a comment…',
+                hintStyle: const TextStyle(fontSize: 13, color: _inkTertiary),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 10,
+                  vertical: 12,
                 ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: _border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: _border),
-                ),
+                border: outline(const Color(0xFFE2E8F0)),
+                enabledBorder: outline(const Color(0xFFE2E8F0)),
+                focusedBorder: outline(_brandRed, 1.2),
               ),
             ),
           ),
           const SizedBox(width: 8),
-          IconButton.filled(
-            onPressed:
-                _postingComment || _commentCtrl.text.trim().isEmpty
-                    ? null
-                    : _postComment,
-            style: IconButton.styleFrom(backgroundColor: _brandRed),
-            icon:
-                _postingComment
-                    ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                    : const Icon(Icons.send_rounded, color: Colors.white),
+          SizedBox(
+            width: 42,
+            height: 42,
+            child: Material(
+              color: canSend ? _brandRed : const Color(0xFFE2E8F0),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: canSend ? _postComment : null,
+                child: Center(
+                  child:
+                      _postingComment
+                          ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : Icon(
+                            Icons.send_rounded,
+                            size: 18,
+                            color: canSend ? Colors.white : _inkTertiary,
+                          ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1594,7 +1611,10 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                           ),
                         ),
                       // ── Add comment (POST /v1/activities) ─────────────────
-                      if (_currentStatus != 'CLOSED') _buildCommentComposer(),
+                      // Same rule as the admin and end-user screens: comments while the
+                      // ticket is in progress.
+                      if (_currentStatus == 'IN PROGRESS')
+                        _buildCommentComposer(),
                     ],
                   ),
                 ),
