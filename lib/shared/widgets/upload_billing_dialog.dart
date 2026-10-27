@@ -248,23 +248,32 @@ class _UploadBillingDialogState extends State<UploadBillingDialog> {
     int successCount = 0;
     final errors = <String>[];
 
-    for (int i = 0; i < _parsedRows.length; i++) {
-      final row = _parsedRows[i];
+    // Backend: POST /v1/billing/ { formData: [rows] }, all-or-nothing per
+    // request, so send in 300-row chunks (its legacy-import chunk size).
+    const chunkSize = 300;
+    for (int start = 0; start < _parsedRows.length; start += chunkSize) {
+      final end =
+          start + chunkSize < _parsedRows.length
+              ? start + chunkSize
+              : _parsedRows.length;
+      final chunk = _parsedRows.sublist(start, end);
       try {
-        final result = await ApiService.uploadBillingRecord(row);
+        final result = await ApiService.uploadBillingRecord({
+          'formData': chunk,
+        });
         if (result['status'] == 'success') {
-          successCount++;
+          successCount += chunk.length;
         } else {
           errors.add(
-            'Row ${i + 1} (${row['customer_name'] ?? ''}): ${result['message'] ?? 'Failed'}',
+            'Rows ${start + 1}-$end: ${result['message'] ?? 'Failed'}',
           );
         }
       } catch (e) {
         errors.add(
-          'Row ${i + 1}: ${e.toString().replaceAll("Exception: ", "")}',
+          'Rows ${start + 1}-$end: ${e.toString().replaceAll("Exception: ", "")}',
         );
       }
-      setState(() => _submittedCount = successCount);
+      if (mounted) setState(() => _submittedCount = successCount);
     }
 
     setState(() {

@@ -459,6 +459,25 @@ class ApiService {
     );
   }
 
+  /// The backend only sends the refresh token as an httpOnly cookie
+  /// (`Set-Cookie: refreshToken=...`), never in the JSON body.
+  static String? _refreshTokenFromCookie(http.Response response) {
+    final header = response.headers['set-cookie'];
+    if (header == null) return null;
+    final m = RegExp(r'refreshToken=([^;,\s]+)').firstMatch(header);
+    return m?.group(1);
+  }
+
+  /// Copies the cookie refresh token into the decoded body so callers that
+  /// read `refreshToken` / `data.refreshToken` find it.
+  static void _injectRefreshToken(http.Response response, dynamic decoded) {
+    final token = _refreshTokenFromCookie(response);
+    if (token == null || decoded is! Map) return;
+    decoded['refreshToken'] ??= token;
+    final inner = decoded['data'];
+    if (inner is Map) inner['refreshToken'] ??= token;
+  }
+
   static Future<Map<String, dynamic>> refreshToken() async {
     if (_isRefreshingToken) {
       // Avoid parallel refresh calls racing and wiping tokens unexpectedly.
@@ -488,6 +507,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        _injectRefreshToken(response, data);
         String? newAccessToken;
         String? newRefreshToken;
 
@@ -593,6 +613,7 @@ class ApiService {
           .timeout(const Duration(seconds: 15));
 
       final Map<String, dynamic> data = json.decode(response.body);
+      _injectRefreshToken(response, data);
       if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
         data.addAll(Map<String, dynamic>.from(data['data']));
       }
@@ -618,7 +639,11 @@ class ApiService {
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'otp': otp}),
     );
-    if (response.statusCode == 200) return jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      _injectRefreshToken(response, decoded);
+      return decoded;
+    }
     throw Exception('Failed to verify OTP');
   }
 
@@ -1887,54 +1912,13 @@ class ApiService {
       };
     }
 
-    // Try common backend shapes. We keep this resilient because deployments
-    // sometimes expose different routes/payload keys.
-    final candidates = <Map<String, dynamic>>[
-      // POST /v1/activities/:ticketNo  { comment: "..." }
-      {
-        'method': 'POST',
-        'path': '/v1/activities/$id',
-        'body': {'comment': text},
-      },
-      // POST /v1/activities  { ticket_no: 123, comment: "..." }
-      {
-        'method': 'POST',
-        'path': '/v1/activities',
-        'body': {'ticket_no': id, 'comment': text},
-      },
-      // POST /v1/tickets/:id/comments  { comment: "..." }
-      {
-        'method': 'POST',
-        'path': '/v1/tickets/$id/comments',
-        'body': {'comment': text},
-      },
-      // POST /v1/tickets/:id/comment  { comment: "..." }
-      {
-        'method': 'POST',
-        'path': '/v1/tickets/$id/comment',
-        'body': {'comment': text},
-      },
-      // POST /v1/comments  { ticket_no: 123, comment: "..." }
-      {
-        'method': 'POST',
-        'path': '/v1/comments',
-        'body': {'ticket_no': id, 'comment': text},
-      },
-    ];
-
-    Map<String, dynamic>? lastError;
-    for (final c in candidates) {
-      final result = await _authorizedWrite(
-        c['method'] as String,
-        c['path'] as String,
-        body: Map<String, dynamic>.from(c['body'] as Map),
-      );
-      if (result['status'] == 'success') return result;
-      lastError = result;
-    }
-
-    return lastError ??
-        {'status': 'error', 'message': 'Failed to add comment.'};
+    // Backend: POST /v1/activities { ticket_no, comment }. Admin/agent may
+    // comment on any ticket; customers/end users on their own tickets.
+    return _authorizedWrite(
+      'POST',
+      '/v1/activities',
+      body: {'ticket_no': id, 'comment': text},
+    );
   }
 
   static Future<Map<String, dynamic>> getTicketAttachments(
@@ -2382,8 +2366,10 @@ class ApiService {
     required String customerCode,
     required String cpoNumber,
     required String sidrNumber,
-  }) async =>
-      _getV1WithAuth('/v1/billing/$customerCode/$cpoNumber/$sidrNumber');
+  }) async => _getV1WithAuth(
+    '/v1/billing/${Uri.encodeComponent(customerCode)}/'
+    '${Uri.encodeComponent(cpoNumber)}/${Uri.encodeComponent(sidrNumber)}',
+  );
 
   static Future<Map<String, dynamic>> getBillingCycles(
     String serviceLineNumber,
@@ -2571,6 +2557,8 @@ class ApiService {
   static Future<Map<String, dynamic>> logout() async {
     try {
       final accessToken = await getAccessToken();
+      // The backend revokes the session named by the refreshToken cookie.
+      final refresh = await getRefreshToken();
       if (accessToken != null && accessToken.isNotEmpty) {
         try {
           await _client
@@ -2580,6 +2568,8 @@ class ApiService {
                   'Content-Type': 'application/json',
                   'Accept': 'application/json',
                   'Authorization': 'Bearer $accessToken',
+                  if (refresh != null && refresh.isNotEmpty)
+                    'Cookie': 'refreshToken=$refresh',
                 },
               )
               .timeout(const Duration(seconds: 10));

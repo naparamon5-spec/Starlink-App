@@ -38,6 +38,9 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
   final Map<String, bool> _downloadingMap = {};
 
   List<dynamic> _activities = [];
+
+  final TextEditingController _commentCtrl = TextEditingController();
+  bool _postingComment = false;
   String? _activitiesError;
 
   bool _canManageTickets = false;
@@ -68,6 +71,92 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
       if (!mounted) return;
       setState(() => _canManageTickets = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _postComment() async {
+    final text = _commentCtrl.text.trim();
+    final ticketId =
+        widget.ticket['id']?.toString() ??
+        widget.ticket['full_data']?['id']?.toString() ??
+        '';
+    if (text.isEmpty || ticketId.isEmpty || _postingComment) return;
+    setState(() => _postingComment = true);
+    final res = await ApiService.addTicketComment(ticketId, text);
+    if (!mounted) return;
+    setState(() => _postingComment = false);
+    if (res['status'] == 'success') {
+      _commentCtrl.clear();
+      FocusScope.of(context).unfocus();
+      await _loadTicketDetails();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message']?.toString() ?? 'Failed to add comment.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Widget _buildCommentComposer() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _commentCtrl,
+              minLines: 1,
+              maxLines: 4,
+              textCapitalization: TextCapitalization.sentences,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Write a comment…',
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _border),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filled(
+            onPressed:
+                _postingComment || _commentCtrl.text.trim().isEmpty
+                    ? null
+                    : _postComment,
+            style: IconButton.styleFrom(backgroundColor: _brandRed),
+            icon:
+                _postingComment
+                    ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                    : const Icon(Icons.send_rounded, color: Colors.white),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadTicketDetails() async {
@@ -658,8 +747,11 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
 
     final String contact = _resolveValue([
       data['contact_name']?.toString(),
-      data['created_by']?.toString(),
+      // GET /tickets names the contact `requester`; created_by is the
+      // ticket's author, not its contact, so it is only a last resort.
       data['requester']?.toString(),
+      widget.ticket['full_data']?['requester']?.toString(),
+      data['created_by']?.toString(),
       widget.ticket['Contact']?.toString(),
     ]);
     final String email = _resolveValue([
@@ -1501,6 +1593,8 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                             }),
                           ),
                         ),
+                      // ── Add comment (POST /v1/activities) ─────────────────
+                      if (_currentStatus != 'CLOSED') _buildCommentComposer(),
                     ],
                   ),
                 ),

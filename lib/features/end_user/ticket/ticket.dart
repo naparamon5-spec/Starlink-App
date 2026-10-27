@@ -43,6 +43,10 @@ class _TicketScreenState extends State<TicketScreen> {
   /// Populated entirely from the API — zero hardcoded statuses.
   List<Map<String, dynamic>> _statusFilters = [];
 
+  /// Accept and Resolve are staff-only on the backend (admin/agent); hidden
+  /// once the role is known to be anything else.
+  bool _isStaff = true;
+
   final List<String> _tableHeaders = [
     'Status',
     'Contact',
@@ -56,6 +60,19 @@ class _TicketScreenState extends State<TicketScreen> {
     super.initState();
     _loadCategoriesAndTickets();
     _searchController.addListener(_handleSearch);
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    try {
+      final me = await ApiService.getMe();
+      final data = me['data'];
+      final role =
+          data is Map ? (data['role']?.toString() ?? '').toLowerCase() : '';
+      if (mounted && role.isNotEmpty) {
+        setState(() => _isStaff = role == 'admin' || role == 'agent');
+      }
+    } catch (_) {}
   }
 
   @override
@@ -177,6 +194,7 @@ class _TicketScreenState extends State<TicketScreen> {
 
             // Contact name
             String contactName =
+                ticket['requester']?.toString() ?? // GET /tickets
                 ticket['contact_name']?.toString() ??
                 ticket['contact']?.toString() ??
                 'Not Assigned';
@@ -584,7 +602,7 @@ class _TicketScreenState extends State<TicketScreen> {
                   if (ticketId.isNotEmpty && (isOpen || isInProgress)) ...[
                     Row(
                       children: [
-                        if (isOpen)
+                        if (isOpen && _isStaff)
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed:
@@ -613,7 +631,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               ),
                             ),
                           ),
-                        if (isInProgress) ...[
+                        if (isInProgress && _isStaff) ...[
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed:
@@ -643,6 +661,8 @@ class _TicketScreenState extends State<TicketScreen> {
                             ),
                           ),
                           const SizedBox(width: 10),
+                        ],
+                        if (isInProgress)
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed:
@@ -673,7 +693,6 @@ class _TicketScreenState extends State<TicketScreen> {
                               ),
                             ),
                           ),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 18),

@@ -36,6 +36,23 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
       _billing = Map<String, dynamic>.from(widget.prefetchedData!);
     }
     _tryFetchFromApi();
+    _loadPaymentPermission();
+  }
+
+  /// PUT /billing/:c/:cpo/:sidr is admin/biller only; agents get 403.
+  // Shown unless the role is known to be one the backend rejects.
+  bool _canRecordPayment = true;
+
+  Future<void> _loadPaymentPermission() async {
+    try {
+      final me = await ApiService.getMe();
+      final data = me['data'];
+      final role =
+          data is Map ? (data['role']?.toString() ?? '').toLowerCase() : '';
+      if (mounted && role.isNotEmpty) {
+        setState(() => _canRecordPayment = role == 'admin' || role == 'biller');
+      }
+    } catch (_) {}
   }
 
   Future<void> _tryFetchFromApi() async {
@@ -223,6 +240,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
   );
 
   Widget _buildMakePaymentButton() {
+    if (!_canRecordPayment) return const SizedBox.shrink();
     final b = _billing ?? {};
     final amount = _parseAmount(b['amount']);
     final paid = _parseAmount(b['paid_amount'] ?? b['paidAmount']);
@@ -230,9 +248,9 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
     final isPaid = balance <= 0;
 
     // Only show the button if there has been payment made OR if there is a balance to pay.
-    // Wait, user said "show only if there's been payment made except if both 0". 
-    // And "remove that if no payment made yet". 
-    // So if paid == 0, hide button entirely. 
+    // Wait, user said "show only if there's been payment made except if both 0".
+    // And "remove that if no payment made yet".
+    // So if paid == 0, hide button entirely.
     // If paid > 0, show button (disabled if isPaid).
     if (paid <= 0) return const SizedBox.shrink();
 
@@ -692,12 +710,16 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
             icon: Icons.account_balance_wallet_outlined,
             iconColor: const Color(0xFF10B981),
             label: 'Payment Summary',
-            trailing: (paid > 0)
-                ? _StatusBadge(
-                    label: isPaid ? 'PAID' : 'PARTIAL',
-                    color: isPaid ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
-                  )
-                : null,
+            trailing:
+                (paid > 0)
+                    ? _StatusBadge(
+                      label: isPaid ? 'PAID' : 'PARTIAL',
+                      color:
+                          isPaid
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFF59E0B),
+                    )
+                    : null,
           ),
           const _HDivider(),
           Padding(

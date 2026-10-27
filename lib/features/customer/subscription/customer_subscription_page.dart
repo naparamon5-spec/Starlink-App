@@ -301,29 +301,13 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
     try {
       Map<String, dynamic>? response;
 
-      final isAdminLike =
-          _role == 'admin' ||
-          _role == 'agent' ||
-          _role == 'biller' ||
-          _role == 'billing';
-
-      if (isAdminLike) {
-        response = await ApiService.getSubscriptionsPaginated(
-          page: page,
-          limit: _pageSize,
-        );
-      } else if (_euCode != null && _euCode!.isNotEmpty) {
-        response = await ApiService.getSubscriptionsByEndUserId(_euCode!);
-      } else if (_customerCode != null && _customerCode!.isNotEmpty) {
-        response = await ApiService.getSubscriptionsByCustomerId(
-          _customerCode!,
-        );
-      } else {
-        response = await ApiService.getSubscriptionsPaginated(
-          page: page,
-          limit: _pageSize,
-        );
-      }
+      // /subscriptions/paginated is scoped by role on the backend (customers
+      // and end users only get their own). The /customer/:id and
+      // /end-user/:id routes are staff-only and return 403 for them.
+      response = await ApiService.getSubscriptionsPaginated(
+        page: page,
+        limit: _pageSize,
+      );
 
       if (response['status'] != 'success') return null;
 

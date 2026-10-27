@@ -307,19 +307,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     try {
       Map<String, dynamic>? response;
 
-      if (_euCode != null && _euCode!.isNotEmpty) {
-        response = await ApiService.getSubscriptionsByEndUserId(_euCode!);
-      } else if (_customerCode != null && _customerCode!.isNotEmpty) {
-        response = await ApiService.getSubscriptionsByCustomerId(
-          _customerCode!,
-        );
-      } else {
-        final token = await ApiService.getValidAccessToken();
-        if (token != null) {
-          final raw = await ApiService.getSubscriptions(bearerToken: token);
-          response = {'status': 'success', 'data': raw};
-        }
-      }
+      // Backend scopes /subscriptions/paginated to the caller's own records;
+      // the /customer/:id and /end-user/:id routes are staff-only (403).
+      response = await ApiService.getSubscriptionsPaginated(limit: 100);
 
       if (response != null &&
           response['status'] == 'success' &&
