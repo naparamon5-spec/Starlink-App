@@ -48,6 +48,10 @@ app.*.map.json
 /android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 
+# Backend hand-off guides (shared directly with the backend developer)
+/docs/BACKEND_PUSH_NOTIFICATIONS.md
+/docs/BACKEND_TWO_FACTOR_AUTH.md
+
 
 #Environment variable
 .env
