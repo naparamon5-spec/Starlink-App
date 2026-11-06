@@ -22,7 +22,7 @@ class _AgentManageUsersPageState extends State<AgentManageUsersPage> {
       initials: 'LH',
       openTickets: 3,
       joinDate: 'Jan 12, 2024',
-      color: Color(0xFF6366F1),
+      color: Color(0xFF3B82F6),
     ),
     _UserItem(
       name: 'Carlos Mendes',
@@ -153,7 +153,7 @@ class _AgentManageUsersPageState extends State<AgentManageUsersPage> {
                       _Strip(
                         value: '${_users.length}',
                         label: 'Total',
-                        color: const Color(0xFF6366F1),
+                        color: const Color(0xFF3B82F6),
                       ),
                       Container(
                         width: 1,
@@ -241,13 +241,13 @@ class _AgentManageUsersPageState extends State<AgentManageUsersPage> {
                             decoration: BoxDecoration(
                               color:
                                   sel
-                                      ? const Color(0xFF6366F1)
+                                      ? const Color(0xFF3B82F6)
                                       : const Color(0xFF162032),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color:
                                     sel
-                                        ? const Color(0xFF6366F1)
+                                        ? const Color(0xFF3B82F6)
                                         : const Color(0xFF1E3050),
                               ),
                             ),
@@ -380,7 +380,7 @@ class _UserCard extends StatelessWidget {
   Color get _planColor {
     switch (data.plan) {
       case 'Enterprise':
-        return const Color(0xFF6366F1);
+        return const Color(0xFF3B82F6);
       case 'Pro':
         return const Color(0xFF0EA5E9);
       default:
@@ -460,10 +460,10 @@ class _UserCard extends StatelessWidget {
                     vertical: 7,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withOpacity(0.1),
+                    color: const Color(0xFF3B82F6).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: const Color(0xFF6366F1).withOpacity(0.3),
+                      color: const Color(0xFF3B82F6).withOpacity(0.3),
                     ),
                   ),
                   child: const Text(
@@ -471,7 +471,7 @@ class _UserCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF6366F1),
+                      color: Color(0xFF3B82F6),
                     ),
                   ),
                 ),

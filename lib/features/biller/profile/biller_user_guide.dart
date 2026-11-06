@@ -82,7 +82,7 @@ class _BillerUserGuidePageState extends State<BillerUserGuidePage> {
     ),
     _GuideSection(
       icon: Icons.people_alt_outlined,
-      color: Color(0xFF6366F1),
+      color: Color(0xFF3B82F6),
       title: 'Clients',
       subtitle: 'Manage billing accounts',
       steps: [

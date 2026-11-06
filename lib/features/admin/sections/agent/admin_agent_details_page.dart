@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
+import 'package:starlink_app/shared/widgets/picker_option_tile.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/account_limit_card.dart';
 import 'package:starlink_app/features/admin/profile/admin_manage_users_page.dart';
 import 'package:starlink_app/features/admin/sections/subscription/admin_subscription_details_page.dart';
 import 'package:starlink_app/features/admin/profile/view-user/admin_view_user_details_page.dart';
@@ -205,27 +208,23 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
   }
 
   // ── Design tokens ─────────────────────────────────────────────────────────
-  static const _primary = Color(0xFFEB1E23);
-  static const _primaryDark = Color(0xFF760F12);
-  static const _success = Color(0xFF24A148);
-  static const _danger = Color(0xFFEB1E23);
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _primary = Color(0xFF133341);
+  static const _primaryDark = Color(0xFF0C2029);
+  static const _success = Color(0xFF10B981);
+  static const _danger = Color(0xFFE90408);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _surfaceSubtle,
       appBar: AppBar(
-        backgroundColor: _surface,
-        foregroundColor: _ink,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        centerTitle: false,
+        centerTitle: true,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -234,21 +233,17 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _ink,
+                color: Colors.white,
                 letterSpacing: -0.3,
               ),
             ),
             Text(
               widget.agentCode,
-              style: const TextStyle(fontSize: 11, color: _inkTertiary),
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
             ),
           ],
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: _border),
         ),
       ),
       body:
@@ -264,6 +259,8 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                   children: [
                     _buildCompanyCard(),
+                    const SizedBox(height: 12),
+                    AccountLimitCard(code: widget.agentCode),
                     const SizedBox(height: 12),
                     _buildSubscriptionsCard(),
                     const SizedBox(height: 12),
@@ -320,7 +317,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: _inkSecondary,
+                color: Color(0xFFE90408),
                 height: 1.5,
               ),
             ),
@@ -328,12 +325,10 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
             ElevatedButton.icon(
               onPressed: _loadAll,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _primary,
+                backgroundColor: AppColors.brand,
                 foregroundColor: Colors.white,
                 elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+                shape: const StadiumBorder(),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 12,
@@ -622,14 +617,7 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _subscriptions = List.from(_stagedSubscriptions!);
-                      _isEditingSubscriptions = false;
-                      _stagedSubscriptions = null;
-                    });
-                    _showSnack('Subscriptions updated locally.', _success);
-                  },
+                  onTap: _saveSubscriptionChanges,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
@@ -660,9 +648,32 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
   void _showSubscriptionPicker() async {
     setState(() => _loading = true);
     try {
-      final allSubs = await ApiService.getSubscriptions(limit: 100);
+      // Only service lines not linked to any customer can be added
+      // (GET /subscriptions/none/customer), as on the web portal.
+      final res = await ApiService.getUnlinkedSubscriptions(limit: 1000);
       if (!mounted) return;
       setState(() => _loading = false);
+      final payload = res['data'];
+      final raw =
+          payload is List
+              ? payload
+              : (payload is Map && payload['data'] is List
+                  ? payload['data'] as List
+                  : const []);
+      final staged = {
+        for (final s in _stagedSubscriptions ?? const [])
+          _str(s['serviceLineNumber'] ?? s['service_line_number']),
+      };
+      final allSubs =
+          raw
+              .whereType<Map>()
+              .where(
+                (m) =>
+                    !staged.contains(
+                      _str(m['serviceLineNumber'] ?? m['service_line_number']),
+                    ),
+              )
+              .toList();
 
       if (allSubs.isEmpty) {
         _showSnack('No available subscriptions found.', _primary);
@@ -700,6 +711,75 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
       setState(() => _loading = false);
       _showSnack('Failed to load subscriptions: $e', _primary);
     }
+  }
+
+  String _slnOf(Map s) =>
+      _str(s['serviceLineNumber'] ?? s['service_line_number']);
+
+  /// Saves the edit: links added service lines to this customer
+  /// (PUT /subscriptions/link/:code) and unlinks removed ones
+  /// (PUT /subscriptions/unlink/:sln).
+  Future<void> _saveSubscriptionChanges() async {
+    final staged = _stagedSubscriptions ?? const [];
+    final before = {for (final s in _subscriptions) _slnOf(s)};
+    final after = {for (final s in staged) _slnOf(s)};
+    final added = after.difference(before)..remove('—');
+    final removed = before.difference(after)..remove('—');
+    if (added.isEmpty && removed.isEmpty) {
+      setState(() {
+        _isEditingSubscriptions = false;
+        _stagedSubscriptions = null;
+      });
+      return;
+    }
+    if (removed.isNotEmpty) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder:
+            (ctx) => AlertDialog(
+              title: Text(
+                'Unlink ${removed.length} service line${removed.length == 1 ? '' : 's'}?',
+              ),
+              content: Text(
+                '${removed.join(', ')} will no longer belong to ${widget.agentName}.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Unlink'),
+                ),
+              ],
+            ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    setState(() => _loading = true);
+    String? error;
+    if (added.isNotEmpty) {
+      final res = await ApiService.linkSubscriptions(widget.agentCode, [
+        for (final sln in added) {'serviceLineNumber': sln, 'eu_code': ''},
+      ]);
+      if (res['status'] != 'success') error = res['message']?.toString();
+    }
+    for (final sln in removed) {
+      if (error != null) break;
+      final res = await ApiService.unlinkSubscription(sln);
+      if (res['status'] != 'success') error = res['message']?.toString();
+    }
+    if (!mounted) return;
+    setState(() {
+      _isEditingSubscriptions = false;
+      _stagedSubscriptions = null;
+    });
+    _showSnack(
+      error ?? 'Subscriptions updated',
+      error == null ? _success : _primary,
+    );
+    await _loadAll();
   }
 
   void _showSnack(String msg, Color color) {
@@ -924,10 +1004,10 @@ class _SectionCard extends StatelessWidget {
     this.trailing,
   });
 
-  static const _ink = Color(0xFF000000);
+  static const _ink = Color(0xFF111111);
   static const _surface = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFE0E0E0);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
+  static const _border = Color(0xFFD7D7D7);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
 
   @override
   Widget build(BuildContext context) {
@@ -1153,13 +1233,13 @@ class _PickerSheetState extends State<_PickerSheet> {
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _filtered = [];
 
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
-  static const _primary = Color(0xFFEB1E23);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
+  static const _primary = Color(0xFF133341);
 
   @override
   void initState() {
@@ -1284,33 +1364,14 @@ class _PickerSheetState extends State<_PickerSheet> {
                               const Divider(height: 1, color: _surfaceSubtle),
                       itemBuilder: (context, i) {
                         final item = _filtered[i];
-                        return InkWell(
+                        return PickerOptionTile(
+                          label: item['label'] ?? '',
+                          icon: Icons.satellite_alt_outlined,
+                          trailingIcon: Icons.add_circle_outline_rounded,
                           onTap: () {
                             widget.onSelect(item['value']);
                             Navigator.pop(context);
                           },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    item['label'] ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: _ink,
-                                    ),
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.add_circle_outline_rounded,
-                                  size: 20,
-                                  color: _primary,
-                                ),
-                              ],
-                            ),
-                          ),
                         );
                       },
                     ),

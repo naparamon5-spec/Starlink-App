@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/features/auth/two_factor/two_factor_settings_card.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _success = Color(0xFF24A148);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _success = Color(0xFF10B981);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
+const _danger = Color(0xFFE90408);
 
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
@@ -34,11 +37,13 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   bool _isSaving = false;
+  String? _currentPasswordError;
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(
+      value: 1.0,
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
@@ -62,11 +67,8 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
   }
 
   void _saveSecuritySettings() async {
+    setState(() => _currentPasswordError = null);
     if (!_formKey.currentState!.validate()) return;
-    if (_newPasswordController.text != _confirmPasswordController.text) {
-      _showSnack('New passwords do not match', isError: true);
-      return;
-    }
 
     setState(() => _isSaving = true);
     try {
@@ -121,12 +123,10 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                       width: double.infinity,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _primary,
+                          backgroundColor: AppColors.brand,
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: const StadiumBorder(),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                         onPressed: () {
@@ -152,10 +152,16 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
               ),
         );
       } else {
-        _showSnack(
-          response['message'] ?? 'Failed to update password.',
-          isError: true,
-        );
+        final msg =
+            response['message']?.toString() ?? 'Failed to update password.';
+        final l = msg.toLowerCase();
+        if (l.contains('current') ||
+            l.contains('old') ||
+            l.contains('incorrect')) {
+          setState(() => _currentPasswordError = msg);
+        } else {
+          _showSnack(msg, isError: true);
+        }
       }
     } catch (_) {
       _showSnack('An error occurred. Please try again.', isError: true);
@@ -168,22 +174,49 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
-        backgroundColor: isError ? Colors.red : _success,
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(msg, style: const TextStyle(fontSize: 13))),
+          ],
+        ),
+        backgroundColor: isError ? const Color(0xFFE90408) : _success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
   Widget _sectionTitle(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Text(
-      t,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: _inkTertiary,
-        letterSpacing: 1.1,
-      ),
+    padding: const EdgeInsets.only(bottom: 12, left: 2),
+    child: Row(
+      children: [
+        Container(
+          width: 4,
+          height: 14,
+          decoration: BoxDecoration(
+            color: _primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          t,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: _primary,
+            letterSpacing: 1.1,
+          ),
+        ),
+      ],
     ),
   );
 
@@ -191,13 +224,13 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: _surface,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFFEDF1F5)),
       boxShadow: [
         BoxShadow(
-          blurRadius: 8,
-          color: Colors.black.withOpacity(.04),
-          offset: const Offset(0, 3),
+          blurRadius: 18,
+          color: const Color(0xFF133341).withOpacity(0.06),
+          offset: const Offset(0, 6),
         ),
       ],
     ),
@@ -209,17 +242,22 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
     required String hint,
     required bool obscureText,
     required VoidCallback onToggleVisibility,
-  }) => Container(
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: _border),
-    ),
-    child: TextFormField(
+    String? Function(String)? extraValidator,
+    String? errorText,
+    VoidCallback? onChanged,
+  }) {
+    OutlineInputBorder border(Color c, [double w = 1]) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: c, width: w),
+    );
+    return TextFormField(
       controller: controller,
       obscureText: obscureText,
       style: const TextStyle(color: _ink, fontSize: 14),
+      onChanged: onChanged == null ? null : (_) => onChanged(),
       decoration: InputDecoration(
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
         prefixIcon: const Icon(Icons.lock_outline, size: 18, color: _primary),
         hintText: hint,
         hintStyle: const TextStyle(color: _inkTertiary, fontSize: 14),
@@ -233,19 +271,28 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
           ),
           onPressed: onToggleVisibility,
         ),
-        border: InputBorder.none,
+        errorText: errorText,
+        errorMaxLines: 2,
+        errorStyle: const TextStyle(color: _danger, fontSize: 12),
+        enabledBorder: border(const Color(0xFFE2E8F0)),
+        focusedBorder: border(_primary, 1.5),
+        errorBorder: border(_danger),
+        focusedErrorBorder: border(_danger, 1.5),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 14,
         ),
       ),
       validator: (v) {
-        if (v == null || v.isEmpty) return 'This field is required';
+        if (v == null || v.isEmpty) {
+          final name = hint.toLowerCase();
+          return '${name[0].toUpperCase()}${name.substring(1)} is required';
+        }
         if (v.length < 6) return 'Password must be at least 6 characters';
-        return null;
+        return extraValidator?.call(v);
       },
-    ),
-  );
+    );
+  }
 
   Widget _infoTile(IconData icon, String title, String subtitle) => Row(
     children: [
@@ -292,7 +339,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
               Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                    colors: [Color(0xFF133341), Color(0xFF0C2029)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -315,6 +362,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                         const Expanded(
                           child: Text(
                             'Security Settings',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -323,6 +371,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                             ),
                           ),
                         ),
+                        const SizedBox(width: 52),
                       ],
                     ),
                   ),
@@ -386,6 +435,9 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                             ),
                           ),
                           const SizedBox(height: 28),
+                          _sectionTitle('TWO-FACTOR AUTHENTICATION'),
+                          _card(child: const TwoFactorSettingsCard()),
+                          const SizedBox(height: 22),
                           _sectionTitle('CHANGE PASSWORD'),
                           _card(
                             child: Column(
@@ -394,6 +446,14 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                                   controller: _currentPasswordController,
                                   hint: 'Current Password',
                                   obscureText: _obscureCurrentPassword,
+                                  errorText: _currentPasswordError,
+                                  onChanged: () {
+                                    if (_currentPasswordError != null) {
+                                      setState(
+                                        () => _currentPasswordError = null,
+                                      );
+                                    }
+                                  },
                                   onToggleVisibility:
                                       () => setState(
                                         () =>
@@ -418,6 +478,11 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                                   controller: _confirmPasswordController,
                                   hint: 'Confirm New Password',
                                   obscureText: _obscureConfirmPassword,
+                                  extraValidator:
+                                      (v) =>
+                                          v != _newPasswordController.text
+                                              ? 'New passwords do not match'
+                                              : null,
                                   onToggleVisibility:
                                       () => setState(
                                         () =>
@@ -464,16 +529,14 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                               onPressed:
                                   _isSaving ? null : _saveSecuritySettings,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _primary,
+                                backgroundColor: AppColors.brand,
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 16,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                disabledBackgroundColor: _primary.withOpacity(
+                                shape: const StadiumBorder(),
+                                disabledBackgroundColor: AppColors.brand.withOpacity(
                                   0.5,
                                 ),
                               ),

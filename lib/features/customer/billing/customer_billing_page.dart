@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/customer/billing/customer_billing_details_page.dart';
 
-const _primary = Color(0xFFEB1E23);
-const _inProgress = Color(0xFF0F62FE);
-const _success = Color(0xFF24A148);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _inProgress = Color(0xFF3B82F6);
+const _success = Color(0xFF10B981);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 const _kPageSize = 15;
 
@@ -174,20 +175,13 @@ class _CustomerBillingPageState extends State<CustomerBillingPage> {
                 title: const Text(
                   'Billing',
                   style: TextStyle(
-                    color: _ink,
-                    fontSize: 16,
+                    color: Colors.white,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                   ),
                 ),
                 centerTitle: true,
-                backgroundColor: _surface,
-                elevation: 0,
-                iconTheme: const IconThemeData(color: _ink),
-                bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(1),
-                  child: Container(height: 1, color: _border),
-                ),
               )
               : null,
       body: RefreshIndicator(
@@ -445,7 +439,9 @@ class _BillingTile extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 6),
-                    Row(
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
                         _AmountChip(
                           label: 'Billed',
@@ -454,7 +450,6 @@ class _BillingTile extends StatelessWidget {
                         ),
                         if (double.tryParse(paidAmount) != null &&
                             double.tryParse(paidAmount)! > 0) ...[
-                          const SizedBox(width: 6),
                           _AmountChip(
                             label: 'Paid',
                             value: '₱${_fmt(paidAmount)}',
@@ -481,7 +476,8 @@ class _BillingTile extends StatelessWidget {
     );
   }
 
-  String _fmt(String v) => (double.tryParse(v) ?? 0.0).toStringAsFixed(2);
+  String _fmt(String v) =>
+      NumberFormat('#,##0.00').format(double.tryParse(v) ?? 0.0);
 }
 
 // ── Amount Chip ────────────────────────────────────────────────────────────────
@@ -506,8 +502,8 @@ class _AmountChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(5),
         border: Border.all(color: _border),
       ),
-      child: RichText(
-        text: TextSpan(
+      child: Text.rich(
+        TextSpan(
           children: [
             TextSpan(
               text: '$label ',
@@ -694,8 +690,8 @@ class _HighlightText extends StatelessWidget {
       );
       start = idx + query.length;
     }
-    return RichText(
-      text: TextSpan(style: style, children: spans),
+    return Text.rich(
+      TextSpan(style: style, children: spans),
       maxLines: maxLines,
       overflow: overflow ?? TextOverflow.clip,
     );

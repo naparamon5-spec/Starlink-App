@@ -32,16 +32,16 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   static const int _pageSize = 10;
 
   // ── Design tokens ──────────────────────────────────────────────────────────
-  static const _primary = Color(0xFFEB1E23);
-  static const _inProgressColor = Color(0xFF0F62FE);
-  static const _success = Color(0xFF24A148);
-  static const _warning = Color(0xFFFF832B);
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _primary = Color(0xFF133341);
+  static const _inProgressColor = Color(0xFF3B82F6);
+  static const _success = Color(0xFF10B981);
+  static const _warning = Color(0xFFF59E0B);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   @override
   void initState() {
@@ -59,9 +59,10 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     final me = await ApiService.getMe();
     if (me['status'] == 'success') {
       final data = me['data'] is Map ? (me['data'] as Map) : {};
-      final r = (data['role'] ?? data['user_role'] ?? data['type'] ?? '')
-          .toString()
-          .toLowerCase();
+      final r =
+          (data['role'] ?? data['user_role'] ?? data['type'] ?? '')
+              .toString()
+              .toLowerCase();
       if (mounted) setState(() => _role = r);
     }
   }
@@ -347,9 +348,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
     if (_role == null) {
       return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: _primary),
-        ),
+        body: Center(child: CircularProgressIndicator(color: _primary)),
       );
     }
 
@@ -371,9 +370,6 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
               ),
       body: Column(
         children: [
-          // Stats banner
-          if (!_loading) _buildStatsBanner(),
-
           // Search bar
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -546,7 +542,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                                 ),
                                 child: Center(
                                   child: Text(
-                                    'All $_totalItems tickets loaded',
+                                    'All ${_totalItems > filtered.length ? _totalItems : filtered.length} tickets loaded',
                                     style: const TextStyle(
                                       fontSize: 11,
                                       color: _inkTertiary,
@@ -583,64 +579,6 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   }
 
   // ── Stats banner ───────────────────────────────────────────────────────────
-
-  Widget _buildStatsBanner() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.confirmation_num_outlined,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Total Tickets',
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.4,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '$_totalItems',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Tab _tab(String label, int count, Color color) => Tab(
     child: Row(
@@ -695,7 +633,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 13,
-              color: _inkSecondary,
+              color: Color(0xFFE90408),
               height: 1.5,
             ),
           ),
@@ -706,7 +644,10 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
             label: const Text('Try again'),
             style: TextButton.styleFrom(
               foregroundColor: _primary,
-              textStyle: const TextStyle(fontWeight: FontWeight.w600),
+              textStyle: const TextStyle(
+                fontFamily: 'Montserrat',
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -753,7 +694,7 @@ class _SkeletonListState extends State<_SkeletonList>
   late final AnimationController _ctrl;
   late final Animation<double> _anim;
 
-  static const _border = Color(0xFFE0E0E0);
+  static const _border = Color(0xFFD7D7D7);
   static const _surface = Color(0xFFFFFFFF);
 
   @override
@@ -885,10 +826,10 @@ class _TicketCard extends StatelessWidget {
   final Color statusColor;
   final String formattedDate;
 
-  static const _ink = Color(0xFF000000);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _ink = Color(0xFF111111);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFE0E0E0);
+  static const _border = Color(0xFFD7D7D7);
 
   const _TicketCard({
     required this.ticket,
@@ -1050,9 +991,9 @@ class _TicketCard extends StatelessWidget {
 
 class _MetaTag extends StatelessWidget {
   final String value;
-  static const _inkTertiary = Color(0xFFA8A8A8);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _inkTertiary = Color(0xFF888888);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   const _MetaTag({required this.value});
 

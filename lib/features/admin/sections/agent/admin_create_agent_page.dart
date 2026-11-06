@@ -1,18 +1,20 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:starlink_app/services/api_service.dart';
 
 // ── Design tokens (identical to create-ticket page) ──────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _success = Color(0xFF24A148);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
+const _success = Color(0xFF10B981);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class AdminCreateAgentPage extends StatefulWidget {
   const AdminCreateAgentPage({super.key});
@@ -337,7 +339,7 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                  colors: [Color(0xFF133341), Color(0xFF0C2029)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -505,20 +507,18 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
           Text(
             _loadError ?? '',
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: _inkSecondary),
+            style: const TextStyle(fontSize: 12, color: Color(0xFFE90408)),
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed:
                 () => _fetchPage(page: 1, query: _lastQuery, reset: true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _primary,
+              backgroundColor: AppColors.brand,
               foregroundColor: Colors.white,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: const StadiumBorder(),
             ),
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text(
@@ -651,51 +651,55 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
 
                         // Scrollable chips
                         Expanded(
-                          child: ListView(
-                            scrollDirection: Axis.horizontal,
-                            children:
-                                _selected.values.map((c) {
-                                  final lbl =
-                                      (c['label'] as String? ?? '').trim();
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 5),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 7,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _primary.withOpacity(0.07),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: _primary.withOpacity(0.25),
+                          child: EdgeFade(
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children:
+                                  _selected.values.map((c) {
+                                    final lbl =
+                                        (c['label'] as String? ?? '').trim();
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 5),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 7,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _primary.withOpacity(0.07),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                          border: Border.all(
+                                            color: _primary.withOpacity(0.25),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              lbl,
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: _primary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            GestureDetector(
+                                              onTap: () => _toggle(c),
+                                              child: const Icon(
+                                                Icons.close_rounded,
+                                                size: 11,
+                                                color: _primary,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            lbl,
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
-                                              color: _primary,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          GestureDetector(
-                                            onTap: () => _toggle(c),
-                                            child: const Icon(
-                                              Icons.close_rounded,
-                                              size: 11,
-                                              color: _primary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
+                                    );
+                                  }).toList(),
+                            ),
                           ),
                         ),
 
@@ -786,9 +790,7 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
                         color: Color.fromARGB(255, 240, 233, 233),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                      shape: const StadiumBorder(),
                     ),
                     icon: const Icon(Icons.close, size: 14),
                     label: const Text(
@@ -806,14 +808,12 @@ class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
                   child: ElevatedButton.icon(
                     onPressed: _submitting ? null : _save,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _primary,
+                      backgroundColor: AppColors.brand,
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: _primary.withOpacity(0.5),
+                      disabledBackgroundColor: AppColors.brand.withOpacity(0.5),
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                      shape: const StadiumBorder(),
                     ),
                     icon:
                         _submitting

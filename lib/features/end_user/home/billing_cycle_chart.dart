@@ -85,7 +85,7 @@ class BillingCycleChart extends StatelessWidget {
           ),
           BarChartRodData(
             toY: lim,
-            color: const Color(0xFF133343),
+            color: const Color(0xFF133341),
             width: 2,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
           ),
@@ -128,13 +128,13 @@ class BillingCycleChart extends StatelessWidget {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF133343),
+                color: Color(0xFF133341),
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF133343).withOpacity(0.08),
+                color: const Color(0xFF133341).withOpacity(0.08),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
@@ -143,7 +143,7 @@ class BillingCycleChart extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: Color(0xFF133343),
+                  color: Color(0xFF133341),
                 ),
               ),
             ),
@@ -169,7 +169,7 @@ class BillingCycleChart extends StatelessWidget {
                   // Use tooltipColor (fl_chart ≥ 0.66) with
                   // tooltipBgColor as compile-time fallback for older versions.
                   // If your version uses tooltipBgColor, swap the name below.
-                  // tooltipColor: const Color(0xFF133343),
+                  // tooltipColor: const Color(0xFF133341),
                   tooltipPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 8,
@@ -258,11 +258,11 @@ class BillingCycleChart extends StatelessWidget {
                 show: true,
                 border: Border(
                   bottom: BorderSide(
-                    color: const Color(0xFF133343).withOpacity(0.08),
+                    color: const Color(0xFF133341).withOpacity(0.08),
                     width: 0.5,
                   ),
                   left: BorderSide(
-                    color: const Color(0xFF133343).withOpacity(0.08),
+                    color: const Color(0xFF133341).withOpacity(0.08),
                     width: 0.5,
                   ),
                 ),
@@ -273,7 +273,7 @@ class BillingCycleChart extends StatelessWidget {
                 horizontalInterval: interval,
                 getDrawingHorizontalLine:
                     (_) => FlLine(
-                      color: const Color(0xFF133343).withOpacity(0.08),
+                      color: const Color(0xFF133341).withOpacity(0.08),
                       strokeWidth: 0.5,
                     ),
               ),
@@ -289,7 +289,7 @@ class BillingCycleChart extends StatelessWidget {
           children: [
             _legend('Usage', const Color(0xFF4CAF50)),
             const SizedBox(width: 12),
-            _legend('Limit', const Color(0xFF133343)),
+            _legend('Limit', const Color(0xFF133341)),
           ],
         ),
       ],

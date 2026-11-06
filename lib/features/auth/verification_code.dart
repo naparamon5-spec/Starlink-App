@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -6,15 +7,15 @@ import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/auth/reset_password.dart';
 
 // ── Brand tokens ──────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
-const _success = Color(0xFF24A148);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
+const _success = Color(0xFF10B981);
 
 class VerificationCodeScreen extends StatefulWidget {
   final String email;
@@ -291,8 +292,8 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen>
                           ),
                         ),
                         const SizedBox(height: 6),
-                        RichText(
-                          text: TextSpan(
+                        Text.rich(
+                          TextSpan(
                             style: const TextStyle(
                               fontSize: 13,
                               color: _inkSecondary,
@@ -394,15 +395,13 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen>
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _verifyCode,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _primary,
-                              disabledBackgroundColor: _primary.withOpacity(
+                              backgroundColor: AppColors.brand,
+                              disabledBackgroundColor: AppColors.brand.withOpacity(
                                 0.5,
                               ),
                               elevation: 0,
                               shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
+                              shape: const StadiumBorder(),
                             ),
                             child:
                                 _isLoading
@@ -511,7 +510,7 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen>
             child: Text(
               _errorMessage!,
               style: const TextStyle(
-                color: _primaryDark,
+                color: Color(0xFFE90408),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 height: 1.4,
@@ -549,7 +548,7 @@ class _TopHeader extends StatelessWidget {
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          colors: [Color(0xFF133341), Color(0xFF0C2029)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

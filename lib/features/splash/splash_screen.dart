@@ -6,8 +6,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 
 // Brand tokens (matching login_screen.dart)
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -10,18 +11,20 @@ import 'package:starlink_app/features/admin/admin_home_screen.dart';
 import 'package:starlink_app/features/end_user/home/home_screen.dart';
 import 'package:starlink_app/features/auth/forgot_password.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/services/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/features/auth/otp_verification_page.dart';
+import 'package:starlink_app/features/auth/two_factor/authenticator_widgets.dart';
 
 // Brand tokens (matching admin_home_screen.dart)
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 // Legal links opened from the login consent row.
 // TODO(Ardent): confirm these public URLs point to the live pages before release.
@@ -29,8 +32,7 @@ const _userAgreementUrl =
     'https://starlink.ardentnetworks.com.ph/terms-of-service';
 const _privacyPolicyUrl =
     'https://starlink.ardentnetworks.com.ph/privacy-policy';
-const _supportUrl =
-    'https://starlink.ardentnetworks.com.ph/support';
+const _supportUrl = 'https://starlink.ardentnetworks.com.ph/support';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -69,9 +71,9 @@ class _LoginScreenState extends State<LoginScreen>
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open $url')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not open $url')));
     }
   }
 
@@ -163,11 +165,21 @@ class _LoginScreenState extends State<LoginScreen>
       );
 
       if (response.containsKey('userId') && response['flag'] == false) {
+        // Two-factor step (authenticator app). `setupRequired` means the
+        // account has no authenticator linked yet, so show the QR first.
+        final setup =
+            response['setupRequired'] == true
+                ? AuthenticatorSetupInfo.fromMap(response)
+                : null;
         if (!mounted) return;
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => OtpVerificationPage(email: _emailController.text),
+            builder:
+                (_) => OtpVerificationPage(
+                  email: _emailController.text.trim(),
+                  setup: setup,
+                ),
           ),
         );
       } else if (response.containsKey('accessToken')) {
@@ -180,6 +192,8 @@ class _LoginScreenState extends State<LoginScreen>
         if (refreshToken != null) {
           await ApiService.setRefreshToken(refreshToken.toString());
         }
+        // Register this device for push notifications (best-effort).
+        PushService.instance.registerWithBackend();
 
         final profileResponse = await ApiService.getCurrentUserProfile();
 
@@ -202,7 +216,7 @@ class _LoginScreenState extends State<LoginScreen>
               (userData['id'] is int)
                   ? userData['id'] as int
                   : int.tryParse(userData['id']?.toString() ?? '') ?? 0;
-          
+
           final prefs = await SharedPreferences.getInstance();
           await prefs.setInt('user_id', userId);
 
@@ -223,7 +237,7 @@ class _LoginScreenState extends State<LoginScreen>
               (userData['id'] is int)
                   ? userData['id'] as int
                   : int.tryParse(userData['id']?.toString() ?? '') ?? 0;
-          
+
           final prefs = await SharedPreferences.getInstance();
           await prefs.setInt('user_id', userId);
 
@@ -453,36 +467,38 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                               ),
                               const SizedBox(width: 9),
-                              RichText(
-                                text: TextSpan(
-                                  text: 'I agree to the ',
-                                  style: const TextStyle(
-                                    color: _inkSecondary,
-                                    fontSize: 13,
+                              Flexible(
+                                child: Text.rich(
+                                  TextSpan(
+                                    text: 'I agree to the ',
+                                    style: const TextStyle(
+                                      color: _inkSecondary,
+                                      fontSize: 13,
+                                    ),
+                                    children: [
+                                      TextSpan(
+                                        text: 'Terms of Service',
+                                        style: const TextStyle(
+                                          color: _primary,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: _primary,
+                                        ),
+                                        recognizer: _userAgreementTap,
+                                      ),
+                                      const TextSpan(text: ' and '),
+                                      TextSpan(
+                                        text: 'Privacy Policy',
+                                        style: const TextStyle(
+                                          color: _primary,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: _primary,
+                                        ),
+                                        recognizer: _privacyPolicyTap,
+                                      ),
+                                    ],
                                   ),
-                                  children: [
-                                    TextSpan(
-                                      text: 'Terms of Service',
-                                      style: const TextStyle(
-                                        color: _primary,
-                                        fontWeight: FontWeight.w600,
-                                        decoration: TextDecoration.underline,
-                                        decorationColor: _primary,
-                                      ),
-                                      recognizer: _userAgreementTap,
-                                    ),
-                                    const TextSpan(text: ' and '),
-                                    TextSpan(
-                                      text: 'Privacy Policy',
-                                      style: const TextStyle(
-                                        color: _primary,
-                                        fontWeight: FontWeight.w600,
-                                        decoration: TextDecoration.underline,
-                                        decorationColor: _primary,
-                                      ),
-                                      recognizer: _privacyPolicyTap,
-                                    ),
-                                  ],
                                 ),
                               ),
                             ],
@@ -498,14 +514,14 @@ class _LoginScreenState extends State<LoginScreen>
                                 children: const [
                                   Icon(
                                     Icons.info_outline,
-                                    color: _primary,
+                                    color: Color(0xFFE90408),
                                     size: 12,
                                   ),
                                   SizedBox(width: 4),
                                   Text(
                                     'You must agree to continue',
                                     style: TextStyle(
-                                      color: _primary,
+                                      color: Color(0xFFE90408),
                                       fontSize: 12,
                                     ),
                                   ),
@@ -523,15 +539,12 @@ class _LoginScreenState extends State<LoginScreen>
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _handleLogin,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _primary,
-                              disabledBackgroundColor: _primary.withOpacity(
-                                0.5,
-                              ),
+                              backgroundColor: AppColors.brand,
+                              disabledBackgroundColor: AppColors.brand
+                                  .withOpacity(0.5),
                               elevation: 0,
                               shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
+                              shape: const StadiumBorder(),
                             ),
                             child: const Text(
                               'Sign In',
@@ -548,8 +561,8 @@ class _LoginScreenState extends State<LoginScreen>
                         // Contact support
                         const SizedBox(height: 28),
                         Center(
-                          child: RichText(
-                            text: TextSpan(
+                          child: Text.rich(
+                            TextSpan(
                               text: 'Need help? ',
                               style: const TextStyle(
                                 color: _inkSecondary,
@@ -642,7 +655,7 @@ class _LoginScreenState extends State<LoginScreen>
             child: Text(
               _errorMessage!,
               style: const TextStyle(
-                color: _primaryDark,
+                color: Color(0xFFE90408),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 height: 1.4,
@@ -677,29 +690,29 @@ class _LoginScreenState extends State<LoginScreen>
       prefixIcon: Icon(prefixIcon, color: _inkTertiary, size: 20),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: _surfaceSubtle,
+      fillColor: AppColors.paper,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _border),
+        borderSide: const BorderSide(color: _border, width: 1.5),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _border),
+        borderSide: const BorderSide(color: _border, width: 1.5),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _primary, width: 1.8),
+        borderSide: const BorderSide(color: AppColors.brand, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _primary, width: 1.5),
+        borderSide: const BorderSide(color: Color(0xFFE90408), width: 1.5),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _primary, width: 1.5),
+        borderSide: const BorderSide(color: Color(0xFFE90408), width: 1.5),
       ),
-      errorStyle: const TextStyle(color: _primary, fontSize: 12),
+      errorStyle: const TextStyle(color: Color(0xFFE90408), fontSize: 12),
       errorMaxLines: 2,
       errorText: errorText,
     );
@@ -752,7 +765,7 @@ class _TopHeader extends StatelessWidget {
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          colors: [Color(0xFF133341), Color(0xFF0C2029)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -795,14 +808,12 @@ class _TopHeader extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  // Ardent logo: red circle, black slant, white
+                  // "ARDENT NETWORKS, INC." text for the navy header.
                   SvgPicture.asset(
-                    'assets/images/logo_full.svg',
+                    'assets/images/logo_full_on_dark.svg',
                     height: 64,
                     fit: BoxFit.contain,
-                    colorFilter: const ColorFilter.mode(
-                      Colors.white,
-                      BlendMode.srcIn,
-                    ),
                   ),
                   const SizedBox(height: 10), // reduced from 18
                   Text(

@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
+import 'package:starlink_app/core/utils/status_labels.dart';
+import 'package:starlink_app/features/admin/tools/announcements_admin_page.dart';
+import 'package:starlink_app/features/admin/tools/billing_import_page.dart';
+import 'package:starlink_app/features/admin/tools/report_builder_page.dart';
+import 'package:starlink_app/features/admin/tools/reports_page.dart';
+import 'package:starlink_app/shared/widgets/whats_new_dialog.dart';
+import 'package:starlink_app/shared/widgets/notifications.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:starlink_app/shared/widgets/modern_nav.dart';
 import 'package:starlink_app/shared/widgets/logout_confirm_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/admin/sections/ticket/admin_tickets_page.dart';
@@ -13,24 +20,25 @@ import 'package:starlink_app/features/admin/sections/subscription/admin_subscrip
 import 'package:starlink_app/features/admin/sections/enduser/admin_end_users_page.dart';
 import 'package:starlink_app/features/admin/profile/admin_edit_profile_page.dart';
 import 'package:starlink_app/features/admin/profile/admin_manage_users_page.dart';
-import 'package:starlink_app/features/admin/profile/admin_user_guide_page.dart';
+// User Guide is disabled for now (see the Settings section).
+// import 'package:starlink_app/features/admin/profile/admin_user_guide_page.dart';
 import 'package:starlink_app/features/admin/sections/agent/admin_create_agent_page.dart';
 import 'package:starlink_app/features/auth/change_password.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _inProgress = Color(0xFF0F62FE);
-const _success = Color(0xFF24A148);
-const _warning = Color(0xFFFF832B);
-const _danger = Color(0xFFEB1E23);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
+const _inProgress = Color(0xFF3B82F6);
+const _success = Color(0xFF10B981);
+const _warning = Color(0xFFF59E0B);
+const _danger = Color(0xFFE90408);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -61,6 +69,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   void initState() {
     super.initState();
+    // "What's new": unseen announcements, once after sign-in.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => WhatsNew.maybeShow(context),
+    );
     _loadDashboard();
   }
 
@@ -80,8 +92,31 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     setState(() => _quickMenuOpen = true);
     _overlayEntry = OverlayEntry(
       builder:
-          (_) => _AdminQuickMenuOverlay(
-            activeAction: _quickAction,
+          (_) => ModernQuickMenu<QuickActionType>(
+            items: const [
+              QuickMenuItem(
+                value: QuickActionType.tickets,
+                icon: Icons.confirmation_number_outlined,
+                label: 'Tickets',
+                subtitle: 'Create and track support tickets',
+                color: _warning,
+              ),
+              QuickMenuItem(
+                value: QuickActionType.subscriptions,
+                icon: Icons.subscriptions_outlined,
+                label: 'Subscriptions',
+                subtitle: 'View your service lines',
+                color: Color(0xFF133341),
+              ),
+              QuickMenuItem(
+                value: QuickActionType.billing,
+                icon: Icons.receipt_long_outlined,
+                label: 'Billing',
+                subtitle: 'Invoices and payments',
+                color: _success,
+              ),
+            ],
+            active: _quickAction,
             onDismiss: _closeQuickMenu,
             onSelect: _selectQuickAction,
           ),
@@ -417,6 +452,33 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     }
   }
 
+  /// Title of the navy app bar for the current tab.
+  String? get _appBarTitle {
+    switch (_selectedIndex) {
+      case 0:
+        return 'Dashboard';
+      case 1:
+        return 'Agents';
+      case 2:
+        switch (_quickAction) {
+          case QuickActionType.tickets:
+            return 'Tickets';
+          case QuickActionType.subscriptions:
+            return 'Subscriptions';
+          case QuickActionType.billing:
+            return 'Billing';
+          case null:
+            return 'Quick Actions';
+        }
+      case 3:
+        return 'End Users';
+      case 4:
+        return 'Settings';
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -429,24 +491,32 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         quickAction: _quickAction,
       ),
       appBar:
-          _selectedIndex == 0
+          _appBarTitle != null
               ? AppBar(
-                backgroundColor: _surface,
+                backgroundColor: const Color(0xFF133341),
+                surfaceTintColor: const Color(0xFF133341),
+                foregroundColor: Colors.white,
                 elevation: 0,
                 centerTitle: true,
-                title: const Text(
-                  'Dashboard',
-                  style: TextStyle(
-                    color: _ink,
-                    fontSize: 16,
+                title: Text(
+                  _appBarTitle!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                   ),
                 ),
                 bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(1),
-                  child: Container(height: 1, color: _border),
+                  preferredSize: const Size.fromHeight(3),
+                  child: Container(height: 3, color: const Color(0xFF1E4D62)),
                 ),
+                actions: const [
+                  Padding(
+                    padding: EdgeInsets.only(right: 6),
+                    child: NotificationBell(),
+                  ),
+                ],
                 // actions: [
                 //   IconButton(
                 //     icon: const Icon(
@@ -520,206 +590,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
 // ── Admin Quick Menu Overlay (full-screen, renders above bottom nav) ───────────
 
-class _AdminQuickMenuOverlay extends StatefulWidget {
-  final QuickActionType? activeAction;
-  final VoidCallback onDismiss;
-  final ValueChanged<QuickActionType> onSelect;
-
-  const _AdminQuickMenuOverlay({
-    required this.activeAction,
-    required this.onDismiss,
-    required this.onSelect,
-  });
-
-  @override
-  State<_AdminQuickMenuOverlay> createState() => _AdminQuickMenuOverlayState();
-}
-
-class _AdminQuickMenuOverlayState extends State<_AdminQuickMenuOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    )..forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    final screenWidth = mq.size.width;
-    final screenHeight = mq.size.height;
-    final bottomInset = mq.padding.bottom;
-    const navBarContentHeight = 60.0;
-    final navBarHeight =
-        navBarContentHeight + (bottomInset > 0 ? bottomInset : 10);
-    // FAB center: horizontally centered, vertically at nav bar middle, lifted 12px
-    final fabCenterX = screenWidth / 2;
-    final fabCenterY = screenHeight - navBarHeight / 2 - 12;
-
-    const bubbleSize = 56.0;
-    const labelHeight = 20.0;
-    const gap = 6.0;
-    const totalH = bubbleSize + gap + labelHeight;
-
-    final actions = [
-      _AdminBubbleSpec(
-        type: QuickActionType.tickets,
-        icon: Icons.confirmation_number_outlined,
-        label: 'Ticket',
-        color: _warning,
-        dx: -76.0,
-        dy: -78.0,
-        delay: 0.0,
-      ),
-      _AdminBubbleSpec(
-        type: QuickActionType.subscriptions,
-        icon: Icons.subscriptions_outlined,
-        label: 'Subs',
-        color: _primary,
-        dx: 0.0,
-        dy: -118.0,
-        delay: 0.07,
-      ),
-      _AdminBubbleSpec(
-        type: QuickActionType.billing,
-        icon: Icons.receipt_long_outlined,
-        label: 'Billing',
-        color: _success,
-        dx: 76.0,
-        dy: -78.0,
-        delay: 0.14,
-      ),
-    ];
-
-    return Stack(
-      children: [
-        // Dim backdrop
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: widget.onDismiss,
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder:
-                  (_, __) => Container(
-                    color: Colors.black.withOpacity(0.55 * _controller.value),
-                  ),
-            ),
-          ),
-        ),
-        // Bubbles
-        ...actions.map((spec) {
-          final anim = CurvedAnimation(
-            parent: _controller,
-            curve: Interval(
-              spec.delay,
-              math.min(spec.delay + 0.65, 1.0),
-              curve: Curves.elasticOut,
-            ),
-          );
-          return AnimatedBuilder(
-            animation: anim,
-            builder: (_, child) {
-              final t = anim.value.clamp(0.0, 1.0);
-              final cx = fabCenterX + spec.dx * t;
-              final cy = fabCenterY + spec.dy * t;
-              final left = cx - bubbleSize / 2;
-              final top = cy - bubbleSize / 2;
-              return Positioned(
-                left: left,
-                top: top,
-                width: bubbleSize,
-                height: totalH,
-                child: Opacity(
-                  opacity: t,
-                  child: Transform.scale(
-                    scale: t,
-                    alignment: Alignment.bottomCenter,
-                    child: child,
-                  ),
-                ),
-              );
-            },
-            child: GestureDetector(
-              onTap: () => widget.onSelect(spec.type),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: bubbleSize,
-                    height: bubbleSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color:
-                          widget.activeAction == spec.type
-                              ? spec.color
-                              : _surface,
-                      border: Border.all(
-                        color: spec.color.withOpacity(0.5),
-                        width: widget.activeAction == spec.type ? 0 : 1.5,
-                      ),
-                    ),
-                    child: Icon(
-                      spec.icon,
-                      color:
-                          widget.activeAction == spec.type
-                              ? Colors.white
-                              : spec.color,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(height: gap),
-                  Text(
-                    spec.label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color:
-                          widget.activeAction == spec.type
-                              ? spec.color
-                              : Colors.white.withOpacity(0.85),
-                      letterSpacing: 0.2,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
-
-class _AdminBubbleSpec {
-  final QuickActionType type;
-  final IconData icon;
-  final String label;
-  final Color color;
-  final double dx, dy, delay;
-
-  const _AdminBubbleSpec({
-    required this.type,
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.dx,
-    required this.dy,
-    required this.delay,
-  });
-}
-
 // ─── Quick Create Buttons ─────────────────────────────────────────────────────
 
 class _QuickCreateSection extends StatelessWidget {
@@ -774,7 +644,7 @@ class _QuickCreateButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
         decoration: BoxDecoration(
           color: _surface,
           borderRadius: BorderRadius.circular(14),
@@ -800,12 +670,16 @@ class _QuickCreateButton extends StatelessWidget {
               child: Icon(icon, color: color, size: 16),
             ),
             const SizedBox(width: 10),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: color,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
               ),
             ),
           ],
@@ -843,7 +717,7 @@ class _TicketOverviewCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          colors: [Color(0xFF133341), Color(0xFF0C2029)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1051,8 +925,8 @@ class _SubscriptionSection extends StatelessWidget {
 
   String _activeFromSub(dynamic sub) {
     if (sub is Map) {
-      final a = (sub['active'] ?? sub['status'] ?? '').toString();
-      if (a.trim().isNotEmpty) return a.trim();
+      final a = subscriptionStatusLabel(sub['active'] ?? sub['status']);
+      if (a != '—') return a;
     }
     return '';
   }
@@ -1552,28 +1426,13 @@ class _SettingsSection extends StatelessWidget {
     return Container(
       color: _surfaceSubtle,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
-          const Text(
-            'Settings',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: _ink,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Manage your profile and app settings.',
-            style: TextStyle(fontSize: 13, color: _inkSecondary),
-          ),
-          const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                colors: [Color(0xFF133341), Color(0xFF0C2029)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -1719,17 +1578,71 @@ class _SettingsSection extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 20),
+          // Same tools as the web portal's sidebar (admins and agents).
+          const _SectionHeader(title: 'TOOLS'),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            icon: Icons.bar_chart_rounded,
+            iconColor: _primary,
+            title: 'Reports',
+            subtitle: 'Current-cycle data usage per service line.',
+            onTap:
+                () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ReportsPage())),
+          ),
+          const SizedBox(height: 10),
+          _SettingsCard(
+            icon: Icons.table_chart_outlined,
+            iconColor: _primary,
+            title: 'Report Builder',
+            subtitle: 'Build, run and export custom reports.',
+            onTap:
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ReportBuilderPage()),
+                ),
+          ),
+          const SizedBox(height: 10),
+          _SettingsCard(
+            icon: Icons.campaign_outlined,
+            iconColor: _primary,
+            title: 'Announcements',
+            subtitle: 'Publish news and notices to users.',
+            onTap:
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AnnouncementsAdminPage(),
+                  ),
+                ),
+          ),
+          if (role.toLowerCase() == 'admin') ...[
+            const SizedBox(height: 10),
+            _SettingsCard(
+              icon: Icons.upload_file_outlined,
+              iconColor: _primary,
+              title: 'Import Billing',
+              subtitle: 'Upload billing records from an Excel or CSV file.',
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const BillingImportPage(),
+                    ),
+                  ),
+            ),
+          ],
+          const SizedBox(height: 20),
           const _SectionHeader(title: 'HELP'),
           const SizedBox(height: 12),
           _SettingsCard(
             icon: Icons.menu_book_outlined,
             iconColor: _success,
             title: 'User Guide',
-            subtitle: 'Read documentation and guides for the admin portal.',
-            onTap:
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AdminUserGuidePage()),
-                ),
+            subtitle: 'Coming soon.',
+            // Disabled for now; re-enable by restoring this onTap:
+            // () => Navigator.of(context).push(
+            //   MaterialPageRoute(builder: (_) => const AdminUserGuidePage()),
+            // ),
+            onTap: null,
           ),
           const SizedBox(height: 28),
           SizedBox(
@@ -1750,9 +1663,7 @@ class _SettingsSection extends StatelessWidget {
                 foregroundColor: Colors.white,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: const StadiumBorder(),
               ),
               icon: const Icon(Icons.logout, size: 18),
               label: const Text(
@@ -1793,7 +1704,9 @@ class _SettingsCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String title, subtitle;
-  final VoidCallback onTap;
+
+  /// Null shows the card dimmed and not tappable.
+  final VoidCallback? onTap;
 
   const _SettingsCard({
     required this.icon,
@@ -1805,66 +1718,70 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
+    return Opacity(
+      opacity: onTap == null ? 0.5 : 1,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: _ink,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: _inkSecondary,
-                      ),
-                    ),
-                  ],
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 20),
                 ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: _inkTertiary,
-                size: 20,
-              ),
-            ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: _ink,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: _inkSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (onTap != null)
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: _inkTertiary,
+                    size: 20,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1902,150 +1819,54 @@ class _BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        border: const Border(top: BorderSide(color: _border, width: 1)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.only(
-        left: 8,
-        right: 8,
-        top: 8,
-        bottom: bottomInset > 0 ? bottomInset : 10,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _NavItem(
-            icon: Icons.dashboard_outlined,
-            label: 'Dashboard',
-            selected: selectedIndex == 0,
-            onTap: () => onTap(0),
-          ),
-          _NavItem(
-            icon: Icons.group_outlined,
-            label: 'Agents',
-            selected: selectedIndex == 1,
-            onTap: () => onTap(1),
-          ),
-          GestureDetector(
-            onTap: () => onTap(2),
-            child: Transform.translate(
-              offset: const Offset(0, -12),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: quickMenuOpen ? _surfaceSubtle : _primary,
-                  shape: BoxShape.circle,
-                  border:
-                      quickMenuOpen
-                          ? Border.all(color: _primary, width: 2)
-                          : null,
-                  boxShadow: [
-                    BoxShadow(
-                      color: _primaryDark.withOpacity(
-                        quickMenuOpen ? 0.15 : 0.40,
-                      ),
-                      blurRadius: 14,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: AnimatedRotation(
-                  turns: quickMenuOpen ? 0.125 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child:
-                      quickMenuOpen
-                          ? Icon(Icons.close, color: _primary, size: 24)
-                          : (quickAction != null
-                              ? Icon(
-                                _quickActionIcon(),
-                                color: Colors.white,
-                                size: 24,
-                              )
-                              : Center(
-                                child: SvgPicture.asset(
-                                  'assets/images/logo.svg',
-                                  width: 18,
-                                  height: 18,
-                                  fit: BoxFit.contain,
-                                  colorFilter: const ColorFilter.mode(
-                                    Colors.white,
-                                    BlendMode.srcIn,
-                                  ),
-                                ),
-                              )),
-                ),
-              ),
-            ),
-          ),
-          _NavItem(
-            icon: Icons.people_alt_outlined,
-            label: 'End Users',
-            selected: selectedIndex == 3,
-            onTap: () => onTap(3),
-          ),
-          _NavItem(
-            icon: Icons.settings_outlined,
-            label: 'Settings',
-            selected: selectedIndex == 4,
-            onTap: () => onTap(4),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected ? _primary : _inkTertiary;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: color,
-              ),
-            ),
-          ],
+    return ModernNavBar(
+      children: [
+        ModernNavItem(
+          icon: Icons.dashboard_outlined,
+          activeIcon: Icons.dashboard_rounded,
+          label: 'Dashboard',
+          selected: selectedIndex == 0,
+          onTap: () => onTap(0),
         ),
-      ),
+        ModernNavItem(
+          icon: Icons.group_outlined,
+          activeIcon: Icons.group_rounded,
+          label: 'Agents',
+          selected: selectedIndex == 1,
+          onTap: () => onTap(1),
+        ),
+        ModernCenterButton(
+          open: quickMenuOpen,
+          onTap: () => onTap(2),
+          child:
+              quickAction != null
+                  ? Icon(_quickActionIcon(), color: Colors.white, size: 24)
+                  : SvgPicture.asset(
+                    'assets/images/logo.svg',
+                    width: 20,
+                    height: 20,
+                    fit: BoxFit.contain,
+                    colorFilter: const ColorFilter.mode(
+                      Colors.white,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+        ),
+        ModernNavItem(
+          icon: Icons.people_alt_outlined,
+          activeIcon: Icons.people_alt_rounded,
+          label: 'End Users',
+          selected: selectedIndex == 3,
+          onTap: () => onTap(3),
+        ),
+        ModernNavItem(
+          icon: Icons.settings_outlined,
+          activeIcon: Icons.settings_rounded,
+          label: 'Settings',
+          selected: selectedIndex == 4,
+          onTap: () => onTap(4),
+        ),
+      ],
     );
   }
 }

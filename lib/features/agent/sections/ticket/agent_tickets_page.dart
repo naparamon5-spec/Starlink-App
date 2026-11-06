@@ -30,7 +30,7 @@ class MyTicketsPageState extends State<MyTicketsPage> {
       status: 'In Progress',
       time: '45 min ago',
       priorityColor: Color(0xFFF59E0B),
-      statusColor: Color(0xFF6366F1),
+      statusColor: Color(0xFF3B82F6),
     ),
     TicketItem(
       id: 'TKT-2039',
@@ -70,7 +70,7 @@ class MyTicketsPageState extends State<MyTicketsPage> {
       status: 'In Progress',
       time: '5 hours ago',
       priorityColor: Color(0xFFF59E0B),
-      statusColor: Color(0xFF6366F1),
+      statusColor: Color(0xFF3B82F6),
     ),
   ];
 
@@ -108,7 +108,7 @@ class MyTicketsPageState extends State<MyTicketsPage> {
                         vertical: 7,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6366F1),
+                        color: const Color(0xFF3B82F6),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
@@ -147,13 +147,13 @@ class MyTicketsPageState extends State<MyTicketsPage> {
                             decoration: BoxDecoration(
                               color:
                                   sel
-                                      ? const Color(0xFF6366F1)
+                                      ? const Color(0xFF3B82F6)
                                       : const Color(0xFF162032),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color:
                                     sel
-                                        ? const Color(0xFF6366F1)
+                                        ? const Color(0xFF3B82F6)
                                         : const Color(0xFF1E3050),
                               ),
                             ),

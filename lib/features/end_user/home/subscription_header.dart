@@ -137,7 +137,7 @@ class SubscriptionHeader extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF133343),
+                  color: Color(0xFF133341),
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -172,7 +172,7 @@ class SubscriptionHeader extends StatelessWidget {
           style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF133343),
+            color: Color(0xFF133341),
           ),
         ),
 
@@ -207,7 +207,7 @@ class SubscriptionHeader extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF133343),
+            color: Color(0xFF133341),
           ),
         ),
         const SizedBox(height: 8),
@@ -216,7 +216,7 @@ class SubscriptionHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF133343).withOpacity(0.04),
+              color: const Color(0xFF133341).withOpacity(0.04),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Row(
@@ -234,7 +234,7 @@ class SubscriptionHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF133343).withOpacity(0.05),
+              color: const Color(0xFF133341).withOpacity(0.05),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
@@ -328,7 +328,7 @@ class SubscriptionHeader extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: valueColor ?? const Color(0xFF133343),
+              color: valueColor ?? const Color(0xFF133341),
             ),
           ),
         ),

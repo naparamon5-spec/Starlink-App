@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -8,15 +9,14 @@ import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/shared/widgets/app_version_label.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _success = Color(0xFF24A148);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _success = Color(0xFF10B981);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class AdminEditProfilePage extends StatefulWidget {
   final String? bearerToken;
@@ -37,6 +37,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
   final _emailController = TextEditingController();
   final _positionController = TextEditingController();
   final _companyController = TextEditingController();
+  final _codeController = TextEditingController();
   final _roleController = TextEditingController();
 
   bool _isLoading = true;
@@ -44,13 +45,6 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
   String? _errorMessage;
   Map<String, dynamic>? _profileData;
   String? _resolvedToken;
-
-  String get _initials {
-    final f = _firstNameController.text.trim();
-    final l = _lastNameController.text.trim();
-    if (f.isEmpty && l.isEmpty) return '?';
-    return '${f.isNotEmpty ? f[0].toUpperCase() : ''}${l.isNotEmpty ? l[0].toUpperCase() : ''}';
-  }
 
   http.Client get _httpClient {
     final httpClient =
@@ -64,6 +58,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
   void initState() {
     super.initState();
     _animController = AnimationController(
+      value: 1.0,
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
@@ -110,6 +105,16 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
         _emailController.text = data['email']?.toString() ?? '';
         _positionController.text = data['position']?.toString() ?? '';
         _companyController.text = data['company_name']?.toString() ?? '';
+        // First non-empty company/user code the profile has (admins may
+        // have none, in which case the Code row is hidden).
+        _codeController.text = [
+              data['com_eu_code'],
+              data['eu_code'],
+              data['customer_code'],
+              data['code'],
+            ]
+            .map((v) => v?.toString().trim() ?? '')
+            .firstWhere((v) => v.isNotEmpty, orElse: () => '');
         _roleController.text = _capitalize(data['role']?.toString() ?? '');
         setState(() => _isLoading = false);
         WidgetsBinding.instance.addPostFrameCallback(
@@ -154,6 +159,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
     _emailController.dispose();
     _positionController.dispose();
     _companyController.dispose();
+    _codeController.dispose();
     _roleController.dispose();
     super.dispose();
   }
@@ -207,46 +213,74 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   Widget _sectionTitle(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Text(
-      t,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: _inkTertiary,
-        letterSpacing: 1.1,
-      ),
+    padding: const EdgeInsets.only(bottom: 12, left: 2),
+    child: Row(
+      children: [
+        Container(
+          width: 4,
+          height: 14,
+          decoration: BoxDecoration(
+            color: _primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          t,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: _primary,
+            letterSpacing: 1.1,
+          ),
+        ),
+      ],
     ),
   );
 
+  /// Labeled field (label stays above the value so read-only rows like
+  /// Code and Role are self-explanatory).
   Widget _field(
     TextEditingController c,
-    String hint,
+    String label,
     IconData icon, {
     bool readOnly = false,
   }) => Container(
     decoration: BoxDecoration(
-      color: readOnly ? const Color(0xFFF0F0F0) : _surface,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: _border),
+      color: readOnly ? _surfaceSubtle : _surface,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _border, width: 1.5),
     ),
     child: TextFormField(
       controller: c,
       readOnly: readOnly,
-      style: TextStyle(color: readOnly ? _inkSecondary : _ink, fontSize: 14),
+      style: TextStyle(
+        color: readOnly ? _inkSecondary : _ink,
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+      ),
       decoration: InputDecoration(
         prefixIcon: Icon(
           icon,
           size: 18,
           color: readOnly ? _inkTertiary : _primary,
         ),
-        hintText: hint,
+        labelText: label,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        labelStyle: const TextStyle(
+          color: _inkTertiary,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+        floatingLabelStyle: const TextStyle(
+          color: _inkTertiary,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+        hintText: readOnly ? '—' : 'Enter ${label.toLowerCase()}',
         hintStyle: const TextStyle(color: _inkTertiary, fontSize: 14),
         border: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 14,
-        ),
+        contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       ),
     ),
   );
@@ -255,88 +289,17 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: _surface,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFFEDF1F5)),
       boxShadow: [
         BoxShadow(
-          blurRadius: 8,
-          color: Colors.black.withOpacity(.04),
-          offset: const Offset(0, 3),
+          blurRadius: 18,
+          color: const Color(0xFF133341).withOpacity(0.06),
+          offset: const Offset(0, 6),
         ),
       ],
     ),
     child: child,
-  );
-
-  Widget _chip(String label, String value) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-    decoration: BoxDecoration(
-      color: _primary.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: _primary.withOpacity(0.2)),
-    ),
-    child: Text(
-      '$label: $value',
-      style: const TextStyle(
-        fontSize: 12,
-        color: _primary,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
-
-  Widget _avatar() => Center(
-    child: Stack(
-      children: [
-        Container(
-          width: 88,
-          height: 88,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: _primaryDark.withOpacity(0.35),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              _initials,
-              style: const TextStyle(
-                fontSize: 30,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          right: -2,
-          bottom: -2,
-          child: Container(
-            decoration: BoxDecoration(
-              color: _surface,
-              shape: BoxShape.circle,
-              border: Border.all(color: _border, width: 2),
-            ),
-            // child: IconButton(
-            //   icon: const Icon(Icons.camera_alt, size: 16, color: _primary),
-            //   onPressed: () {},
-            //   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            //   padding: const EdgeInsets.all(6),
-            // ),
-          ),
-        ),
-      ],
-    ),
   );
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -356,7 +319,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
               Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                    colors: [Color(0xFF133341), Color(0xFF0C2029)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -379,6 +342,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
                         const Expanded(
                           child: Text(
                             'Edit Profile',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -387,6 +351,7 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
                             ),
                           ),
                         ),
+                        const SizedBox(width: 52),
                         // if (!_isLoading && _errorMessage == null)
                         //   TextButton(
                         //     onPressed: _saveProfile,
@@ -452,19 +417,17 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
           Text(
             _errorMessage!,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: _inkSecondary, fontSize: 14),
+            style: const TextStyle(color: Color(0xFFE90408), fontSize: 14),
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: _loadProfile,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _primary,
+              backgroundColor: AppColors.brand,
               foregroundColor: Colors.white,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: const StadiumBorder(),
             ),
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text(
@@ -494,27 +457,6 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Avatar + chips
-            _avatar(),
-            const SizedBox(height: 14),
-            Center(
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  if (_profileData?['role'] != null)
-                    // _chip(
-                    //   'Role',
-                    //   _capitalize(_profileData!['role'].toString()),
-                    // ),
-                    if (_profileData?['com_eu_code'] != null)
-                      _chip('Code', _profileData!['com_eu_code'].toString()),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 28),
-
             _sectionTitle('PERSONAL INFORMATION'),
             _card(
               child: Column(
@@ -561,6 +503,15 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
                     Icons.business_outlined,
                     readOnly: true,
                   ),
+                  if (_codeController.text.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _field(
+                      _codeController,
+                      'Code',
+                      Icons.tag_rounded,
+                      readOnly: true,
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   _field(
                     _roleController,
@@ -603,13 +554,11 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
               child: ElevatedButton(
                 onPressed: _isSaving ? null : _saveProfile,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _primary,
+                  backgroundColor: AppColors.brand,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  shape: const StadiumBorder(),
                 ),
                 child:
                     _isSaving

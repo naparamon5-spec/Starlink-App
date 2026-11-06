@@ -133,9 +133,7 @@ class _BillerEditProfilePageState extends State<BillerEditProfilePage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF4F46E5),
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
+              shape: const StadiumBorder(),
             ),
             child: const Text(
               'Save Changes',

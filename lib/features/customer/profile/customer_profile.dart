@@ -12,15 +12,15 @@ import 'package:starlink_app/features/auth/login_screen.dart';
 import 'package:starlink_app/shared/widgets/app_version_label.dart';
 
 // ── Design tokens (matching home screen) ────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _success = Color(0xFF24A148);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
+const _success = Color(0xFF10B981);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class CustomerProfileScreen extends StatefulWidget {
   final bool showAppBar;
@@ -393,20 +393,13 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                 title: const Text(
                   'Profile',
                   style: TextStyle(
-                    color: _ink,
-                    fontSize: 16,
+                    color: Colors.white,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                   ),
                 ),
                 centerTitle: true,
-                elevation: 0,
-                backgroundColor: _surface,
-                foregroundColor: _ink,
-                bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(1),
-                  child: Container(height: 1, color: _border),
-                ),
               )
               : null,
       body:
@@ -443,7 +436,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          colors: [Color(0xFF133341), Color(0xFF0C2029)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

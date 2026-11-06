@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/features/customer/ticket/customer_ticket_modal.dart';
@@ -6,16 +7,16 @@ import 'package:starlink_app/features/customer/ticket/customer_view.dart';
 import 'dart:convert';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _inProgress = Color(0xFF0F62FE);
-const _success = Color(0xFF24A148);
-const _warning = Color(0xFFFF832B);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _inProgress = Color(0xFF3B82F6);
+const _success = Color(0xFF10B981);
+const _warning = Color(0xFFF59E0B);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class CustomerTicketScreen extends StatefulWidget {
   final bool showAppBar;
@@ -340,22 +341,15 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
           widget.showAppBar
               ? AppBar(
                 title: const Text(
-                  'My Tickets',
+                  'Tickets',
                   style: TextStyle(
-                    color: _ink,
-                    fontSize: 16,
+                    color: Colors.white,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                   ),
                 ),
                 centerTitle: true,
-                elevation: 0,
-                backgroundColor: _surface,
-                foregroundColor: _ink,
-                bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(1),
-                  child: Container(height: 1, color: _border),
-                ),
               )
               : null,
       body: RefreshIndicator(
@@ -379,67 +373,70 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
               sliver: SliverToBoxAdapter(
                 child: SizedBox(
                   height: 34,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _filterOptions.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (context, i) {
-                      final option = _filterOptions[i];
-                      final isSelected = _selectedFilter == option;
-                      final dotColor =
-                          option == 'All' ? _primary : _statusColor(option);
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() => _selectedFilter = option);
-                          _applyFilter();
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color:
-                                isSelected
-                                    ? dotColor.withOpacity(0.1)
-                                    : _surface,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isSelected ? dotColor : _border,
-                              width: isSelected ? 1.5 : 1,
+                  child: EdgeFade(
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _filterOptions.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, i) {
+                        final option = _filterOptions[i];
+                        final isSelected = _selectedFilter == option;
+                        final dotColor =
+                            option == 'All' ? _primary : _statusColor(option);
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() => _selectedFilter = option);
+                            _applyFilter();
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (option != 'All') ...[
-                                Container(
-                                  width: 7,
-                                  height: 7,
-                                  decoration: BoxDecoration(
-                                    color: dotColor,
-                                    shape: BoxShape.circle,
+                            decoration: BoxDecoration(
+                              color:
+                                  isSelected
+                                      ? dotColor.withOpacity(0.1)
+                                      : _surface,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected ? dotColor : _border,
+                                width: isSelected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (option != 'All') ...[
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: BoxDecoration(
+                                      color: dotColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                ],
+                                Text(
+                                  option,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight:
+                                        isSelected
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                    color:
+                                        isSelected ? dotColor : _inkSecondary,
                                   ),
                                 ),
-                                const SizedBox(width: 5),
                               ],
-                              Text(
-                                option,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight:
-                                      isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                  color: isSelected ? dotColor : _inkSecondary,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -451,7 +448,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
               sliver: SliverToBoxAdapter(
                 child: Row(
                   children: [
-                    const _SectionHeader(title: 'MY TICKETS'),
+                    const _SectionHeader(title: 'ALL TICKETS'),
                     const Spacer(),
                     if (!_isLoading)
                       Text(
@@ -913,15 +910,10 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
 
   // ── SharedPreferences helpers ─────────────────────────────────────────────
 
-
   Future<List<String>> _getInProgressTicketIds() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getStringList('in_progress_ticket_ids') ?? [];
   }
-
-
-
-
 
   Future<List<Map<String, dynamic>>> _getInProgressTicketsData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -1060,8 +1052,8 @@ class _HighlightText extends StatelessWidget {
       );
       start = idx + query.length;
     }
-    return RichText(
-      text: TextSpan(style: style, children: spans),
+    return Text.rich(
+      TextSpan(style: style, children: spans),
       maxLines: maxLines,
       overflow: overflow ?? TextOverflow.clip,
     );

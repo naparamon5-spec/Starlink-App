@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/core/utils/usage_export.dart';
+import 'package:starlink_app/shared/widgets/picker_option_tile.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:starlink_app/services/api_service.dart';
@@ -9,8 +12,8 @@ const _surface = Color(0xFFFFFFFF);
 const _heroTop = Color(0xFF0A2540);
 const _heroBot = Color(0xFF1A4080);
 const _accent = Color(0xFF2563EB);
-const _activeGreen = Color(0xFF16A34A);
-const _inactiveRed = Color(0xFFDC2626);
+const _activeGreen = Color(0xFF10B981);
+const _inactiveRed = Color(0xFFE90408);
 const _inkDark = Color(0xFF0F172A);
 const _inkMid = Color(0xFF475569);
 const _inkLight = Color(0xFF94A3B8);
@@ -18,7 +21,7 @@ const _border = Color(0xFFE2E8F0);
 const _divider = Color(0xFFF1F5F9);
 const _amber = Color(0xFFF59E0B);
 const _emerald = Color(0xFF10B981);
-const _indigo = Color(0xFF6366F1);
+const _indigo = Color(0xFF3B82F6);
 
 /// Shared robust active-status resolver.
 bool _isActiveSub(Map<String, dynamic> sub) {
@@ -74,6 +77,7 @@ class _UserSubscriptionDetailsPageState
   void initState() {
     super.initState();
     _animController = AnimationController(
+      value: 1.0,
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
@@ -177,7 +181,6 @@ class _UserSubscriptionDetailsPageState
     }
   }
 
-
   // ── Load ───────────────────────────────────────────────────────────────────
 
   Future<void> _load() async {
@@ -193,10 +196,11 @@ class _UserSubscriptionDetailsPageState
       _billingPeriods = [];
       _selectedPeriod = null;
     });
-    _animController.reset();
 
     final sln = widget.serviceLineNumber.trim();
-    ApiService.refreshStarlinkServiceLine(sln).catchError((_) => <String, dynamic>{});
+    ApiService.refreshStarlinkServiceLine(
+      sln,
+    ).catchError((_) => <String, dynamic>{});
 
     Map<String, dynamic>? subResult;
     String? subErr;
@@ -345,6 +349,26 @@ class _UserSubscriptionDetailsPageState
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
+
+  /// Excel export of the billing cycle on screen (same workbook as the web).
+  void _exportUsage() {
+    final sub = _subscriptionData ?? const <String, dynamic>{};
+    String? s(dynamic v) {
+      final t = v?.toString().trim() ?? '';
+      return t.isEmpty || t == 'null' ? null : t;
+    }
+
+    exportUsage(
+      context,
+      serviceLineNumber: widget.serviceLineNumber,
+      cycle: _billingData,
+      nickname: s(sub['nickname']),
+      account: s(sub['company_name']) ?? s(sub['end_user_name']),
+      plan: s(sub['subscriptionPlan']),
+      start: _selectedPeriod?.startDate,
+      end: _selectedPeriod?.endDate,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -502,7 +526,7 @@ class _UserSubscriptionDetailsPageState
                     _error!,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      color: _inkMid,
+                      color: Color(0xFFE90408),
                       fontSize: 13,
                       height: 1.5,
                     ),
@@ -513,9 +537,7 @@ class _UserSubscriptionDetailsPageState
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      shape: const StadiumBorder(),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 28,
                         vertical: 15,
@@ -603,6 +625,20 @@ class _UserSubscriptionDetailsPageState
               ),
             ),
           ),
+          actions: [
+            if (_billingData != null)
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: _CircleButton(
+                  onTap: _exportUsage,
+                  child: const Icon(
+                    Icons.download_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+          ],
           flexibleSpace: FlexibleSpaceBar(
             collapseMode: CollapseMode.parallax,
             background: _UserHeroHeader(
@@ -849,41 +885,59 @@ class _ServiceLineChip extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Service Line',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _inkLight,
-                    fontWeight: FontWeight.w500,
-                  ),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Service Line',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _inkLight,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _accent.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _accent.withOpacity(0.2),
+                        ),
+                      ),
+                      child: const Text(
+                        'Refreshes 30–45 min',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: _accent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  serviceLineNumber,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: _inkDark,
-                    letterSpacing: 0.2,
+                const SizedBox(height: 4),
+                // One line: long numbers shrink rather than break mid-number.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    serviceLineNumber,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _inkDark,
+                      letterSpacing: 0.2,
+                    ),
                   ),
                 ),
               ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _accent.withOpacity(0.06),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _accent.withOpacity(0.2)),
-            ),
-            child: const Text(
-              'Refreshes every 30–45 min',
-              style: TextStyle(
-                fontSize: 9,
-                color: _accent,
-                fontWeight: FontWeight.w600,
-              ),
             ),
           ),
         ],
@@ -1318,31 +1372,10 @@ class _BillingCard extends StatelessWidget {
                                   itemBuilder: (context, index) {
                                     final p = periods[index];
                                     final isSelected = p == selectedPeriod;
-                                    return ListTile(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 24,
-                                          ),
-                                      title: Text(
-                                        _periodLabel(p),
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight:
-                                              isSelected
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w500,
-                                          color:
-                                              isSelected ? _accent : _inkDark,
-                                        ),
-                                      ),
-                                      trailing:
-                                          isSelected
-                                              ? const Icon(
-                                                Icons.check_circle_rounded,
-                                                color: _accent,
-                                                size: 20,
-                                              )
-                                              : null,
+                                    return PickerOptionTile(
+                                      label: _periodLabel(p),
+                                      icon: Icons.calendar_month_outlined,
+                                      selected: isSelected,
                                       onTap: () {
                                         onPeriodChanged(p);
                                         Navigator.pop(ctx);
@@ -1747,121 +1780,123 @@ class _UsageUnifiedGraph extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              // extra right padding so the last label + dot is fully visible
-              padding: const EdgeInsets.only(right: 16),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
-                child: SizedBox(
-                  width: chartWidth < 300 ? 300 : chartWidth,
-                  child: LineChart(
-                    LineChartData(
-                      maxY: maxY,
-                      minX: 0,
-                      maxX: (labels.length - 1).toDouble(),
-                      lineTouchData: LineTouchData(
-                        enabled: true,
-                        handleBuiltInTouches: true,
-                        touchCallback: (FlTouchEvent event, touchResponse) {
-                          if (event is FlTapDownEvent &&
-                              touchResponse != null &&
-                              touchResponse.lineBarSpots != null &&
-                              touchResponse.lineBarSpots!.isNotEmpty) {
-                            final index =
-                                touchResponse.lineBarSpots!.first.x.toInt();
-                            _showDetailDialog(context, index);
-                          }
-                        },
-                        touchTooltipData: LineTouchTooltipData(
-                          tooltipBgColor: _inkDark.withOpacity(0.9),
-                          getTooltipItems: (touchedSpots) {
-                            return touchedSpots.map((s) {
-                              return LineTooltipItem(
-                                '${s.y.toStringAsFixed(2)} GB',
-                                const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                ),
-                              );
-                            }).toList();
+            child: EdgeFade(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                // extra right padding so the last label + dot is fully visible
+                padding: const EdgeInsets.only(right: 16),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+                  child: SizedBox(
+                    width: chartWidth < 300 ? 300 : chartWidth,
+                    child: LineChart(
+                      LineChartData(
+                        maxY: maxY,
+                        minX: 0,
+                        maxX: (labels.length - 1).toDouble(),
+                        lineTouchData: LineTouchData(
+                          enabled: true,
+                          handleBuiltInTouches: true,
+                          touchCallback: (FlTouchEvent event, touchResponse) {
+                            if (event is FlTapDownEvent &&
+                                touchResponse != null &&
+                                touchResponse.lineBarSpots != null &&
+                                touchResponse.lineBarSpots!.isNotEmpty) {
+                              final index =
+                                  touchResponse.lineBarSpots!.first.x.toInt();
+                              _showDetailDialog(context, index);
+                            }
                           },
-                        ),
-                      ),
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        getDrawingHorizontalLine:
-                            (v) => FlLine(
-                              color: _border.withOpacity(0.5),
-                              strokeWidth: 1,
-                            ),
-                      ),
-                      titlesData: FlTitlesData(
-                        show: true,
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 30,
-                            interval: 1,
-                            getTitlesWidget: (value, meta) {
-                              final i = value.toInt();
-                              if (i < 0 || i >= labels.length) {
-                                return const SizedBox.shrink();
-                              }
-                              String label = labels[i];
-                              try {
-                                final dt = DateTime.parse(
-                                  label.contains('T')
-                                      ? label.split('T').first
-                                      : label.split(' ').first,
-                                );
-                                label = '${dt.month}/${dt.day}';
-                              } catch (_) {}
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  label,
-                                  style: const TextStyle(
-                                    color: _inkLight,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
+                          touchTooltipData: LineTouchTooltipData(
+                            tooltipBgColor: _inkDark.withOpacity(0.9),
+                            getTooltipItems: (touchedSpots) {
+                              return touchedSpots.map((s) {
+                                return LineTooltipItem(
+                                  '${s.y.toStringAsFixed(2)} GB',
+                                  const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
                                   ),
-                                ),
-                              );
+                                );
+                              }).toList();
                             },
                           ),
                         ),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 36,
-                            getTitlesWidget:
-                                (v, m) => Text(
-                                  '${v.toInt()}',
-                                  style: const TextStyle(
-                                    color: _inkLight,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          getDrawingHorizontalLine:
+                              (v) => FlLine(
+                                color: _border.withOpacity(0.5),
+                                strokeWidth: 1,
+                              ),
+                        ),
+                        titlesData: FlTitlesData(
+                          show: true,
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 30,
+                              interval: 1,
+                              getTitlesWidget: (value, meta) {
+                                final i = value.toInt();
+                                if (i < 0 || i >= labels.length) {
+                                  return const SizedBox.shrink();
+                                }
+                                String label = labels[i];
+                                try {
+                                  final dt = DateTime.parse(
+                                    label.contains('T')
+                                        ? label.split('T').first
+                                        : label.split(' ').first,
+                                  );
+                                  label = '${dt.month}/${dt.day}';
+                                } catch (_) {}
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    label,
+                                    style: const TextStyle(
+                                      color: _inkLight,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
+                                );
+                              },
+                            ),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 36,
+                              getTitlesWidget:
+                                  (v, m) => Text(
+                                    '${v.toInt()}',
+                                    style: const TextStyle(
+                                      color: _inkLight,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                            ),
+                          ),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
                           ),
                         ),
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
+                        borderData: FlBorderData(show: false),
+                        lineBarsData: [
+                          _lineData(pSpots, _accent),
+                          if (showS) _lineData(sSpots, _indigo),
+                          if (showO) _lineData(oSpots, _amber),
+                          if (showN) _lineData(nSpots, _emerald),
+                        ],
                       ),
-                      borderData: FlBorderData(show: false),
-                      lineBarsData: [
-                        _lineData(pSpots, _accent),
-                        if (showS) _lineData(sSpots, _indigo),
-                        if (showO) _lineData(oSpots, _amber),
-                        if (showN) _lineData(nSpots, _emerald),
-                      ],
                     ),
                   ),
                 ),
@@ -1964,7 +1999,7 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = active ? _activeGreen : _inactiveRed;
-    final bg = active ? const Color(0xFFECFDF5) : const Color(0xFFFFF1F0);
+    final bg = active ? const Color(0xFFECFDF5) : const Color(0xFFE8F0F3);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -2003,15 +2038,18 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
       Text(label, style: const TextStyle(fontSize: 12, color: _inkLight)),
-      Text(
-        value,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: _inkDark,
+      const SizedBox(width: 12),
+      Expanded(
+        child: Text(
+          value,
+          textAlign: TextAlign.right,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: _inkDark,
+          ),
         ),
       ),
     ],

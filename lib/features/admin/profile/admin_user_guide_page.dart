@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class AdminUserGuidePage extends StatefulWidget {
   const AdminUserGuidePage({super.key});
@@ -28,7 +28,7 @@ class _AdminUserGuidePageState extends State<AdminUserGuidePage>
     {
       'title': 'Getting Started',
       'icon': Icons.rocket_launch_outlined,
-      'color': const Color(0xFF0F62FE),
+      'color': const Color(0xFF3B82F6),
       'content':
           'Welcome to the Admin Panel! Use the bottom navigation bar to switch between sections: Dashboard, Agents, Quick Actions, End Users, and Settings.\n\nThe red Quick Action button in the center gives you fast access to Tickets, Subscriptions, and Billing.',
     },
@@ -42,14 +42,14 @@ class _AdminUserGuidePageState extends State<AdminUserGuidePage>
     {
       'title': 'Handling Tickets',
       'icon': Icons.confirmation_number_outlined,
-      'color': const Color(0xFFFF832B),
+      'color': const Color(0xFFF59E0B),
       'content':
           'Tickets are organized by status: Open, In Progress, Resolved, and Closed. The dashboard shows a real-time ticket overview with color-coded counts.\n\nTap any ticket in Recent Activity to view its full details, attachments, and activity log.',
     },
     {
       'title': 'Billing & Invoices',
       'icon': Icons.receipt_long_outlined,
-      'color': const Color(0xFF24A148),
+      'color': const Color(0xFF10B981),
       'content':
           'The Billing section displays revenue summaries and individual invoices. Invoices can be Paid, Pending, or Overdue.\n\nMonitor overdue invoices promptly to maintain healthy cash flow.',
     },
@@ -77,7 +77,7 @@ class _AdminUserGuidePageState extends State<AdminUserGuidePage>
     {
       'title': 'Account & Security',
       'icon': Icons.lock_outline,
-      'color': const Color(0xFFEB1E23),
+      'color': const Color(0xFF133341),
       'content':
           'Update your profile details, change your password, and enable Two-Factor Authentication from the Edit Profile page.\n\nEmail notifications can also be toggled from that screen.',
     },
@@ -119,7 +119,7 @@ class _AdminUserGuidePageState extends State<AdminUserGuidePage>
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                  colors: [Color(0xFF133341), Color(0xFF0C2029)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),

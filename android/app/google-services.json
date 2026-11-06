@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "931478140862", 
-    "project_id": "starlink-app-2ed98",
-    "storage_bucket": "starlink-app-2ed98.firebasestorage.app"
+    "project_number": "958137090170",
+    "project_id": "ardent-starlink",
+    "storage_bucket": "ardent-starlink.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:931478140862:android:ca3651622e77036a78ebef",
+        "mobilesdk_app_id": "1:958137090170:android:29a946eaeb4280b1683bc3",
         "android_client_info": {
           "package_name": "com.ardentnetworks.starlink"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCt3zMILSE8zsAngFo58RdtEzAyF4gZ1wo"
+          "current_key": "AIzaSyBXg_j36Ab4nwMgR704qTYwigEKZ0-JYNg"
         }
       ],
       "services": {

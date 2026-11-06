@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/core/utils/usage_export.dart';
+import 'package:starlink_app/shared/widgets/picker_option_tile.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:starlink_app/services/api_service.dart';
@@ -8,14 +11,14 @@ const _bg = Color(0xFFF6F7F9);
 const _surface = Color(0xFFFFFFFF);
 const _heroTop = Color(0xFF0A1628);
 const _heroBot = Color(0xFF0D2444);
-const _accent = Color(0xFFEB1E23);
-const _accentBlue = Color(0xFF1A6FE8);
-const _activeGreen = Color(0xFF00C48C);
+const _accent = Color(0xFF133341);
+const _accentBlue = Color(0xFF3B82F6);
+const _activeGreen = Color(0xFF10B981);
 const _inactiveRed = Color(0xFFFF4757);
 const _inkDark = Color(0xFF0D1B2A);
 const _inkMid = Color(0xFF4A5568);
 const _inkLight = Color(0xFF9AA5B4);
-const _border = Color(0xFFEBEEF2);
+const _border = Color(0xFFD7D7D7);
 const _divider = Color(0xFFF0F4F8);
 const _amber = Color(0xFFF59E0B);
 const _emerald = Color(0xFF10B981);
@@ -74,6 +77,7 @@ class _CustomerSubscriptionDetailsPageState
   void initState() {
     super.initState();
     _animController = AnimationController(
+      value: 1.0,
       vsync: this,
       duration: const Duration(milliseconds: 650),
     );
@@ -194,10 +198,11 @@ class _CustomerSubscriptionDetailsPageState
       _billingPeriods = [];
       _selectedPeriod = null;
     });
-    _animController.reset();
 
     final sln = widget.serviceLineNumber.trim();
-    ApiService.refreshStarlinkServiceLine(sln).catchError((_) => <String, dynamic>{});
+    ApiService.refreshStarlinkServiceLine(
+      sln,
+    ).catchError((_) => <String, dynamic>{});
 
     Map<String, dynamic>? subResult;
     String? subErr;
@@ -349,6 +354,26 @@ class _CustomerSubscriptionDetailsPageState
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  /// Excel export of the billing cycle on screen (same workbook as the web).
+  void _exportUsage() {
+    final sub = _subscriptionData ?? const <String, dynamic>{};
+    String? s(dynamic v) {
+      final t = v?.toString().trim() ?? '';
+      return t.isEmpty || t == 'null' ? null : t;
+    }
+
+    exportUsage(
+      context,
+      serviceLineNumber: widget.serviceLineNumber,
+      cycle: _billingData,
+      nickname: s(sub['nickname']),
+      account: s(sub['company_name']) ?? s(sub['end_user_name']),
+      plan: s(sub['subscriptionPlan']),
+      start: _selectedPeriod?.startDate,
+      end: _selectedPeriod?.endDate,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -487,7 +512,7 @@ class _CustomerSubscriptionDetailsPageState
                     _error!,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      color: _inkDark,
+                      color: Color(0xFFE90408),
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -498,9 +523,7 @@ class _CustomerSubscriptionDetailsPageState
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: const StadiumBorder(),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
                         vertical: 14,
@@ -546,6 +569,20 @@ class _CustomerSubscriptionDetailsPageState
               ),
             ),
           ),
+          actions: [
+            if (_billingData != null)
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: _CircleButton(
+                  onTap: _exportUsage,
+                  child: const Icon(
+                    Icons.download_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+          ],
           flexibleSpace: FlexibleSpaceBar(
             collapseMode: CollapseMode.parallax,
             background: _HeroHeader(
@@ -742,7 +779,10 @@ class _HeroHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 6),
-                Row(
+                Wrap(
+                  // Long service lines push the pill to the next line.
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  runSpacing: 6,
                   children: [
                     Icon(
                       Icons.tag_rounded,
@@ -1285,31 +1325,10 @@ class _BillingCard extends StatelessWidget {
                                   itemBuilder: (context, index) {
                                     final p = periods[index];
                                     final isSelected = p == selectedPeriod;
-                                    return ListTile(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 24,
-                                          ),
-                                      title: Text(
-                                        periodLabel(p),
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight:
-                                              isSelected
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w500,
-                                          color:
-                                              isSelected ? _accent : _inkDark,
-                                        ),
-                                      ),
-                                      trailing:
-                                          isSelected
-                                              ? const Icon(
-                                                Icons.check_circle_rounded,
-                                                color: _accent,
-                                                size: 20,
-                                              )
-                                              : null,
+                                    return PickerOptionTile(
+                                      label: periodLabel(p),
+                                      icon: Icons.calendar_month_outlined,
+                                      selected: isSelected,
                                       onTap: () {
                                         onPeriodChanged(p);
                                         Navigator.pop(ctx);
@@ -1464,8 +1483,6 @@ class _BillingCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Summary Grid
 // ─────────────────────────────────────────────────────────────────────────────
-
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Unified Usage Graph — Scrollable fl_chart implementation
@@ -1696,120 +1713,122 @@ class _UsageUnifiedGraph extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.only(right: 16),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
-                child: SizedBox(
-                  width: chartWidth < 300 ? 300 : chartWidth,
-                  child: LineChart(
-                    LineChartData(
-                      maxY: maxY,
-                      minX: 0,
-                      maxX: (labels.length - 1).toDouble(),
-                      lineTouchData: LineTouchData(
-                        enabled: true,
-                        handleBuiltInTouches: true,
-                        touchCallback: (FlTouchEvent event, touchResponse) {
-                          if (event is FlTapDownEvent &&
-                              touchResponse != null &&
-                              touchResponse.lineBarSpots != null &&
-                              touchResponse.lineBarSpots!.isNotEmpty) {
-                            final index =
-                                touchResponse.lineBarSpots!.first.x.toInt();
-                            _showDetailDialog(context, index);
-                          }
-                        },
-                        touchTooltipData: LineTouchTooltipData(
-                          tooltipBgColor: _inkDark.withOpacity(0.9),
-                          getTooltipItems: (touchedSpots) {
-                            return touchedSpots.map((s) {
-                              return LineTooltipItem(
-                                '${s.y.toStringAsFixed(2)} GB',
-                                const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                ),
-                              );
-                            }).toList();
+            child: EdgeFade(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(right: 16),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+                  child: SizedBox(
+                    width: chartWidth < 300 ? 300 : chartWidth,
+                    child: LineChart(
+                      LineChartData(
+                        maxY: maxY,
+                        minX: 0,
+                        maxX: (labels.length - 1).toDouble(),
+                        lineTouchData: LineTouchData(
+                          enabled: true,
+                          handleBuiltInTouches: true,
+                          touchCallback: (FlTouchEvent event, touchResponse) {
+                            if (event is FlTapDownEvent &&
+                                touchResponse != null &&
+                                touchResponse.lineBarSpots != null &&
+                                touchResponse.lineBarSpots!.isNotEmpty) {
+                              final index =
+                                  touchResponse.lineBarSpots!.first.x.toInt();
+                              _showDetailDialog(context, index);
+                            }
                           },
-                        ),
-                      ),
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        getDrawingHorizontalLine:
-                            (v) => FlLine(
-                              color: _border.withOpacity(0.5),
-                              strokeWidth: 1,
-                            ),
-                      ),
-                      titlesData: FlTitlesData(
-                        show: true,
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 30,
-                            interval: 1,
-                            getTitlesWidget: (value, meta) {
-                              final i = value.toInt();
-                              if (i < 0 || i >= labels.length) {
-                                return const SizedBox.shrink();
-                              }
-                              String label = labels[i];
-                              try {
-                                final dt = DateTime.parse(
-                                  label.contains('T')
-                                      ? label.split('T').first
-                                      : label.split(' ').first,
-                                );
-                                label = '${dt.month}/${dt.day}';
-                              } catch (_) {}
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  label,
-                                  style: const TextStyle(
-                                    color: _inkLight,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
+                          touchTooltipData: LineTouchTooltipData(
+                            tooltipBgColor: _inkDark.withOpacity(0.9),
+                            getTooltipItems: (touchedSpots) {
+                              return touchedSpots.map((s) {
+                                return LineTooltipItem(
+                                  '${s.y.toStringAsFixed(2)} GB',
+                                  const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
                                   ),
-                                ),
-                              );
+                                );
+                              }).toList();
                             },
                           ),
                         ),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 36,
-                            getTitlesWidget:
-                                (v, m) => Text(
-                                  '${v.toInt()}',
-                                  style: const TextStyle(
-                                    color: _inkLight,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          getDrawingHorizontalLine:
+                              (v) => FlLine(
+                                color: _border.withOpacity(0.5),
+                                strokeWidth: 1,
+                              ),
+                        ),
+                        titlesData: FlTitlesData(
+                          show: true,
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 30,
+                              interval: 1,
+                              getTitlesWidget: (value, meta) {
+                                final i = value.toInt();
+                                if (i < 0 || i >= labels.length) {
+                                  return const SizedBox.shrink();
+                                }
+                                String label = labels[i];
+                                try {
+                                  final dt = DateTime.parse(
+                                    label.contains('T')
+                                        ? label.split('T').first
+                                        : label.split(' ').first,
+                                  );
+                                  label = '${dt.month}/${dt.day}';
+                                } catch (_) {}
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    label,
+                                    style: const TextStyle(
+                                      color: _inkLight,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
+                                );
+                              },
+                            ),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 36,
+                              getTitlesWidget:
+                                  (v, m) => Text(
+                                    '${v.toInt()}',
+                                    style: const TextStyle(
+                                      color: _inkLight,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                            ),
+                          ),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
                           ),
                         ),
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
+                        borderData: FlBorderData(show: false),
+                        lineBarsData: [
+                          _lineData(pSpots, _accent),
+                          if (showS) _lineData(sSpots, _accentBlue),
+                          if (showO) _lineData(oSpots, _amber),
+                          if (showN) _lineData(nSpots, _emerald),
+                        ],
                       ),
-                      borderData: FlBorderData(show: false),
-                      lineBarsData: [
-                        _lineData(pSpots, _accent),
-                        if (showS) _lineData(sSpots, _accentBlue),
-                        if (showO) _lineData(oSpots, _amber),
-                        if (showN) _lineData(nSpots, _emerald),
-                      ],
                     ),
                   ),
                 ),
@@ -2118,15 +2137,18 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
       Text(label, style: const TextStyle(fontSize: 12, color: _inkLight)),
-      Text(
-        value,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: _inkDark,
+      const SizedBox(width: 12),
+      Expanded(
+        child: Text(
+          value,
+          textAlign: TextAlign.right,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: _inkDark,
+          ),
         ),
       ),
     ],

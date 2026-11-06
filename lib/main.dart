@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +16,7 @@ import 'package:starlink_app/features/admin/admin_home_screen.dart';
 import 'package:starlink_app/features/end_user/home/home_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/services/post_update_reset.dart';
+import 'package:starlink_app/services/push_service.dart';
 import 'package:starlink_app/providers/notification_provider.dart';
 import 'package:starlink_app/core/config/ssl_config.dart'
     if (dart.library.html) 'package:starlink_app/core/config/ssl_config_stub.dart'
@@ -59,6 +61,13 @@ void main() async {
   // launch, clear stored tokens so the user signs in again on the fresh
   // build. Fails open — never blocks launch.
   await PostUpdateReset.runIfVersionChanged();
+
+  // Push notifications (FCM). Best-effort — a missing Firebase config never
+  // blocks startup.
+  if (!kIsWeb) {
+    PushService.navigatorKey = navigatorKey;
+    await PushService.instance.initialize();
+  }
 
   final initialHome = await _resolveInitialHomeForLaunch();
 
@@ -112,6 +121,8 @@ Future<Widget> _resolveInitialHomeForLaunch() async {
   final profileResponse = await ApiService.getCurrentUserProfile();
   if (profileResponse['status'] == 'success' &&
       profileResponse['data'] != null) {
+    // Session restored: make sure this device's push token is on the backend.
+    PushService.instance.registerWithBackend();
     final userData = profileResponse['data'];
     final userId =
         (userData['id'] is int)
@@ -335,19 +346,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       navigatorKey: navigatorKey,
       title: 'Ardent Dashboard',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF133343),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF133343),
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        useMaterial3: true,
-      ),
+      // Matches the Starlink web portal design system.
+      theme: AppTheme.light,
       home: widget.initialHome,
     );
   }

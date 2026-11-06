@@ -25,16 +25,13 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
 
   static const int _pageSize = 10;
 
-  static const _primary = Color(0xFFEB1E23);
-  static const _primaryDark = Color(0xFF760F12);
-  static const _success = Color(0xFF24A148);
-  static const _danger = Color(0xFFEB1E23);
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _primary = Color(0xFF133341);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   @override
   void initState() {
@@ -152,7 +149,6 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
     });
   }
 
-
   void _openDetails(Map<String, dynamic> b) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -206,7 +202,6 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
     return NumberFormat('#,##0.00').format(d);
   }
 
-
   double _parseAmount(Map<String, dynamic> b) =>
       double.tryParse((b['total_amount'] ?? b['amount'] ?? '0').toString()) ??
       0;
@@ -228,23 +223,10 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
     final displayList =
         _displayed.length <= filtered.length ? _displayed : filtered;
 
-    final totalAmount = _allBilling.fold<double>(
-      0,
-      (s, b) => s + _parseAmount(b),
-    );
-    final totalPaid = _allBilling.fold<double>(0, (s, b) => s + _parsePaid(b));
-    final outstanding = totalAmount - totalPaid;
-    final progress =
-        totalAmount > 0 ? (totalPaid / totalAmount).clamp(0.0, 1.0) : 0.0;
-
     return ColoredBox(
       color: _surface,
       child: Column(
         children: [
-          // Financial summary banner
-          if (!_loading)
-            _buildStatsBanner(totalAmount, totalPaid, outstanding, progress),
-
           // Search bar
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -435,114 +417,6 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
 
   // ── Stats banner ───────────────────────────────────────────────────────────
 
-  Widget _buildStatsBanner(
-    double totalAmount,
-    double totalPaid,
-    double outstanding,
-    double progress,
-  ) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.account_balance_wallet_outlined,
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Total Billed',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      '₱${_formatAmount(totalAmount)}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.8,
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _HeroChip(
-                    label: 'Collected',
-                    value: '₱${_formatAmount(totalPaid)}',
-                    color: const Color(0xFF42BE65),
-                  ),
-                  const SizedBox(height: 4),
-                  _HeroChip(
-                    label: 'Outstanding',
-                    value: '₱${_formatAmount(outstanding)}',
-                    color: const Color(0xFFFFB3B8),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 5,
-              backgroundColor: Colors.white.withOpacity(0.2),
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF42BE65),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              '${(progress * 100).toStringAsFixed(0)}% collected',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildError() => Center(
     child: Padding(
       padding: const EdgeInsets.all(40),
@@ -568,7 +442,7 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 13,
-              color: _inkSecondary,
+              color: Color(0xFFE90408),
               height: 1.5,
             ),
           ),
@@ -579,7 +453,10 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
             label: const Text('Try again'),
             style: TextButton.styleFrom(
               foregroundColor: _primary,
-              textStyle: const TextStyle(fontWeight: FontWeight.w600),
+              textStyle: const TextStyle(
+                fontFamily: 'Montserrat',
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -626,7 +503,7 @@ class _SkeletonListState extends State<_SkeletonList>
   late final AnimationController _ctrl;
   late final Animation<double> _anim;
 
-  static const _border = Color(0xFFE0E0E0);
+  static const _border = Color(0xFFD7D7D7);
   static const _surface = Color(0xFFFFFFFF);
 
   @override
@@ -782,14 +659,14 @@ class _BillingCard extends StatelessWidget {
   final double Function(Map<String, dynamic>) parseAmount;
   final double Function(Map<String, dynamic>) parsePaid;
 
-  static const _primary = Color(0xFFEB1E23);
-  static const _success = Color(0xFF24A148);
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _primary = Color(0xFF133341);
+  static const _success = Color(0xFF10B981);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   const _BillingCard({
     required this.billing,
@@ -816,7 +693,7 @@ class _BillingCard extends StatelessWidget {
     final paidD = parsePaid(b);
     final progress = amountD > 0 ? (paidD / amountD).clamp(0.0, 1.0) : 0.0;
     final isPaid = paidD >= amountD && amountD > 0;
-    final statusColor = isPaid ? _success : const Color(0xFFFF832B);
+    final statusColor = isPaid ? _success : const Color(0xFFF59E0B);
     final initial =
         customerName.isNotEmpty ? customerName[0].toUpperCase() : '?';
 
@@ -887,13 +764,13 @@ class _BillingCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
                         children: [
                           _MetaTag(label: 'SIDR', value: sidrNumber),
-                          if (cpoDate != '—') ...[
-                            const SizedBox(width: 6),
+                          if (cpoDate != '—')
                             _MetaTag(label: 'Date', value: cpoDate),
-                          ],
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -923,7 +800,12 @@ class _BillingCard extends StatelessWidget {
                               ),
                             ],
                           ),
-                          if ((double.tryParse((b['paid_amount'] ?? b['paidAmount']).toString()) ?? 0.0) > 0) ...[
+                          if ((double.tryParse(
+                                    (b['paid_amount'] ?? b['paidAmount'])
+                                        .toString(),
+                                  ) ??
+                                  0.0) >
+                              0) ...[
                             const SizedBox(width: 16),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -948,15 +830,19 @@ class _BillingCard extends StatelessWidget {
                               ],
                             ),
                           ],
-                          const Spacer(),
-                          if (uploadedBy.isNotEmpty)
-                            Text(
-                              'by $uploadedBy',
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              uploadedBy.isNotEmpty ? 'by $uploadedBy' : '',
+                              textAlign: TextAlign.right,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 10,
                                 color: _inkTertiary,
                               ),
                             ),
+                          ),
                           const SizedBox(width: 4),
                           const Icon(
                             Icons.chevron_right_rounded,
@@ -993,9 +879,9 @@ class _BillingCard extends StatelessWidget {
 
 class _MetaTag extends StatelessWidget {
   final String label, value;
-  static const _inkTertiary = Color(0xFFA8A8A8);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _inkTertiary = Color(0xFF888888);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   const _MetaTag({required this.label, required this.value});
 
@@ -1019,37 +905,3 @@ class _MetaTag extends StatelessWidget {
 }
 
 // ── Hero chip ──────────────────────────────────────────────────────────────────
-
-class _HeroChip extends StatelessWidget {
-  final String label, value;
-  final Color color;
-
-  const _HeroChip({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      Text(
-        label,
-        style: TextStyle(
-          fontSize: 9,
-          color: color.withOpacity(0.8),
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      Text(
-        value,
-        style: TextStyle(
-          fontSize: 12,
-          color: color,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    ],
-  );
-}

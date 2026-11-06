@@ -7,14 +7,14 @@ import 'package:starlink_app/features/end_user/subscription/end_user_subscriptio
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFF2563EB);
-const _activeGreen = Color(0xFF16A34A);
-const _inactiveRed = Color(0xFFDC2626);
-const _ink = Color(0xFF000000); // matches ticket screen
-const _inkSecondary = Color(0xFF6F6F6F); // matches ticket screen
-const _inkTertiary = Color(0xFFA8A8A8); // matches ticket screen
+const _activeGreen = Color(0xFF10B981);
+const _inactiveRed = Color(0xFFE90408);
+const _ink = Color(0xFF111111); // matches ticket screen
+const _inkSecondary = Color(0xFF666666); // matches ticket screen
+const _inkTertiary = Color(0xFF888888); // matches ticket screen
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4); // matches ticket screen
-const _border = Color(0xFFE0E0E0); // matches ticket screen
+const _surfaceSubtle = Color(0xFFF8F8F8); // matches ticket screen
+const _border = Color(0xFFD7D7D7); // matches ticket screen
 
 /// Robust active-status resolver.
 bool _isActiveSub(Map<String, dynamic> sub) {
@@ -526,7 +526,7 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 13,
-            color: _inkSecondary,
+            color: Color(0xFFE90408),
             height: 1.5,
           ),
         ),
@@ -537,7 +537,10 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
           label: const Text('Try again'),
           style: TextButton.styleFrom(
             foregroundColor: _primary,
-            textStyle: const TextStyle(fontWeight: FontWeight.w600),
+            textStyle: const TextStyle(
+                fontFamily: 'Montserrat',
+                fontWeight: FontWeight.w600,
+              ),
           ),
         ),
       ],
@@ -869,8 +872,8 @@ class _HighlightText extends StatelessWidget {
       );
       start = idx + query.length;
     }
-    return RichText(
-      text: TextSpan(style: style, children: spans),
+    return Text.rich(
+      TextSpan(style: style, children: spans),
       maxLines: maxLines,
       overflow: overflow ?? TextOverflow.clip,
     );

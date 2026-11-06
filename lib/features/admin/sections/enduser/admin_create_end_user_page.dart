@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:starlink_app/services/api_service.dart';
 
 class AdminCreateEndUserPage extends StatefulWidget {
@@ -9,14 +10,14 @@ class AdminCreateEndUserPage extends StatefulWidget {
 }
 
 class _AdminCreateEndUserPageState extends State<AdminCreateEndUserPage> {
-  static const _primary = Color(0xFFEB1E23);
-  static const _primaryDark = Color(0xFF760F12);
-  static const _ink = Color(0xFF000000);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _primary = Color(0xFF133341);
+  static const _primaryDark = Color(0xFF0C2029);
+  static const _ink = Color(0xFF111111);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
-  static const _success = Color(0xFF24A148);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
+  static const _success = Color(0xFF10B981);
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -188,29 +189,29 @@ class _AdminCreateEndUserPageState extends State<AdminCreateEndUserPage> {
     hintStyle: const TextStyle(fontSize: 13, color: _inkTertiary),
     prefixIcon: icon != null ? Icon(icon, size: 18, color: _inkTertiary) : null,
     filled: true,
-    fillColor: _surfaceSubtle,
+    fillColor: AppColors.paper,
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: _border),
+      borderSide: const BorderSide(color: _border, width: 1.5),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: _border),
+      borderSide: const BorderSide(color: _border, width: 1.5),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: _primary, width: 1.5),
+      borderSide: const BorderSide(color: AppColors.brand, width: 1.5),
     ),
     errorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: _primary),
+      borderSide: const BorderSide(color: Color(0xFFE90408)),
     ),
     focusedErrorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: _primary, width: 1.5),
+      borderSide: const BorderSide(color: Color(0xFFE90408), width: 1.5),
     ),
-    errorStyle: const TextStyle(fontSize: 11, color: _primary),
+    errorStyle: const TextStyle(fontSize: 11, color: Color(0xFFE90408)),
   );
 
   @override
@@ -221,7 +222,7 @@ class _AdminCreateEndUserPageState extends State<AdminCreateEndUserPage> {
         title: const Text(
           'Create End User',
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 18,
             fontWeight: FontWeight.w700,
             color: Colors.white,
           ),
@@ -297,9 +298,9 @@ class _AdminCreateEndUserPageState extends State<AdminCreateEndUserPage> {
 class _SectionHeader extends StatelessWidget {
   final IconData icon;
   final String title;
-  static const _primary = Color(0xFFEB1E23);
-  static const _ink = Color(0xFF000000);
-  static const _border = Color(0xFFE0E0E0);
+  static const _primary = Color(0xFF133341);
+  static const _ink = Color(0xFF111111);
+  static const _border = Color(0xFFD7D7D7);
 
   const _SectionHeader({required this.icon, required this.title});
 
@@ -348,12 +349,12 @@ class _AgentDropdown extends StatefulWidget {
 }
 
 class _AgentDropdownState extends State<_AgentDropdown> {
-  static const _primary = Color(0xFFEB1E23);
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _primary = Color(0xFF133341);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   final _searchCtrl = TextEditingController();
   final _overlayCtrl = OverlayPortalController();
@@ -503,13 +504,13 @@ class _Panel extends StatelessWidget {
   final ValueChanged<String> onSearch;
   final ValueChanged<Map<String, dynamic>> onSelect;
 
-  static const _primary = Color(0xFFEB1E23);
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _primary = Color(0xFF133341);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   const _Panel({
     required this.searchCtrl,
@@ -551,22 +552,25 @@ class _Panel extends StatelessWidget {
                     color: _inkTertiary,
                   ),
                   filled: true,
-                  fillColor: _surfaceSubtle,
+                  fillColor: AppColors.paper,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 9,
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: _border),
+                    borderSide: const BorderSide(color: _border, width: 1.5),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: _border),
+                    borderSide: const BorderSide(color: _border, width: 1.5),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: _primary, width: 1.5),
+                    borderSide: const BorderSide(
+                      color: AppColors.brand,
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -670,10 +674,10 @@ class _Panel extends StatelessWidget {
 
 // ── Loading / Error / Submit helpers ─────────────────────────────────────────
 class _LoadingBox extends StatelessWidget {
-  static const _primary = Color(0xFFEB1E23);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _primary = Color(0xFF133341);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
+  static const _inkTertiary = Color(0xFF888888);
 
   @override
   Widget build(BuildContext context) => Container(
@@ -703,7 +707,7 @@ class _LoadingBox extends StatelessWidget {
 class _ErrorBox extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
-  static const _primary = Color(0xFFEB1E23);
+  static const _primary = Color(0xFF133341);
 
   const _ErrorBox({required this.message, required this.onRetry});
 
@@ -747,7 +751,7 @@ class _ErrorBox extends StatelessWidget {
 class _SubmitBtn extends StatelessWidget {
   final bool isSubmitting;
   final VoidCallback onTap;
-  static const _primary = Color(0xFFEB1E23);
+  static const _primary = Color(0xFF133341);
 
   const _SubmitBtn({required this.isSubmitting, required this.onTap});
 

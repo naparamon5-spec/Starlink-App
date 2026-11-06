@@ -13,12 +13,12 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _ink = Color(0xFF1A1A1A);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _ink = Color(0xFF111111);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF7F7F7);
-const _border = Color(0xFFEAEAEA);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -293,7 +293,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ],
         ),
         backgroundColor:
-            isError ? Colors.red.shade700 : const Color(0xFF24A148),
+            isError ? Colors.red.shade700 : const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -310,7 +310,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF9B1215)],
+          colors: [Color(0xFF133341), Color(0xFF0C2029)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -354,7 +354,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       child: Container(
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                            colors: [Color(0xFF133341), Color(0xFF0C2029)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),

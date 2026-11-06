@@ -13,7 +13,7 @@ class AgentTeamPage extends StatelessWidget {
       statusColor: Color(0xFF22C55E),
       tickets: 12,
       resolved: 7,
-      gradA: Color(0xFF6366F1),
+      gradA: Color(0xFF3B82F6),
       gradB: Color(0xFF8B5CF6),
     ),
     AgentData(
@@ -47,7 +47,7 @@ class AgentTeamPage extends StatelessWidget {
       tickets: 6,
       resolved: 5,
       gradA: Color(0xFF0EA5E9),
-      gradB: Color(0xFF6366F1),
+      gradB: Color(0xFF3B82F6),
     ),
   ];
 
@@ -83,7 +83,7 @@ class AgentTeamPage extends StatelessWidget {
                     TStat(
                       value: '${_agents.length}',
                       label: 'Total',
-                      color: const Color(0xFF6366F1),
+                      color: const Color(0xFF3B82F6),
                     ),
                     Container(
                       width: 1,
@@ -295,7 +295,7 @@ class AgentTeamCard extends StatelessWidget {
                           children: [
                             Container(
                               height: 4,
-                              color: const Color(0xFF6366F1).withOpacity(0.15),
+                              color: const Color(0xFF3B82F6).withOpacity(0.15),
                             ),
                             FractionallySizedBox(
                               widthFactor: pct,

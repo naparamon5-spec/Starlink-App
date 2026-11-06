@@ -1,27 +1,37 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:starlink_app/features/admin/admin_home_screen.dart';
+import 'package:starlink_app/features/auth/two_factor/authenticator_widgets.dart';
+import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/services/push_service.dart';
 import 'package:starlink_app/features/end_user/home/home_screen.dart';
 
 // Brand tokens — matching login_screen.dart
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
-const _success = Color(0xFF16A34A);
+const _success = Color(0xFF10B981);
 const _successDark = Color(0xFF14532D);
 
+/// Second sign-in step: two-factor authentication with an authenticator app
+/// (Google Authenticator / Microsoft Authenticator), same as eForward and
+/// ANI HRIS. Replaces the old emailed 4-digit OTP.
+///
+/// When [setup] is given the account has no authenticator linked yet, so the
+/// page first shows the QR code / setup key; the first correct code links it
+/// and signs the user in.
 class OtpVerificationPage extends StatefulWidget {
   final String email;
+  final AuthenticatorSetupInfo? setup;
 
-  const OtpVerificationPage({super.key, required this.email});
+  const OtpVerificationPage({super.key, required this.email, this.setup});
 
   @override
   State<OtpVerificationPage> createState() => _OtpVerificationPageState();
@@ -29,33 +39,24 @@ class OtpVerificationPage extends StatefulWidget {
 
 class _OtpVerificationPageState extends State<OtpVerificationPage>
     with SingleTickerProviderStateMixin {
-  final List<TextEditingController> _controllers = List.generate(
-    4,
-    (_) => TextEditingController(),
-  );
-  final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
+  final _codeController = TextEditingController();
 
   bool _isLoading = false;
-  bool _isResending = false;
 
   // Banner state: null = hidden, true = success (green), false = error (red)
   String? _bannerMessage;
   bool _bannerIsSuccess = false;
 
-  bool _canResend = false;
-  int _resendSeconds = 30;
-  Timer? _timer;
-
   AnimationController? _bannerAnimController;
   Animation<double>? _bannerFadeAnim;
   Animation<Offset>? _bannerSlideAnim;
 
-  String get _otp => _controllers.map((c) => c.text).join();
+  bool get _isSetup => widget.setup != null;
+  String get _otp => _codeController.text.trim();
 
   @override
   void initState() {
     super.initState();
-    _startResendTimer();
     _bannerAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -74,43 +75,10 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
 
   @override
   void dispose() {
-    _timer?.cancel();
     _bannerTimer?.cancel();
     _bannerAnimController?.dispose();
-    for (var c in _controllers) {
-      c.dispose();
-    }
-    for (var f in _focusNodes) {
-      f.dispose();
-    }
+    _codeController.dispose();
     super.dispose();
-  }
-
-  void _startResendTimer() {
-    // Cancel any existing timer first
-    _timer?.cancel();
-    _timer = null;
-
-    setState(() {
-      _canResend = false;
-      _resendSeconds = 30;
-    });
-
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_resendSeconds <= 1) {
-        setState(() {
-          _resendSeconds = 0;
-          _canResend = true;
-        });
-        timer.cancel();
-      } else {
-        setState(() => _resendSeconds--);
-      }
-    });
   }
 
   Timer? _bannerTimer;
@@ -133,48 +101,28 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
     });
   }
 
-  Future<void> _resendCode() async {
-    if (_isResending || !_canResend) return;
-
-    // FIX: Start the timer immediately when the button is tapped,
-    // before the API call completes, so the UI locks right away.
-    _startResendTimer();
-    setState(() => _isResending = true);
-
-    try {
-      final response = await ApiService.resendOtp({'email': widget.email});
-      if (!mounted) return;
-
-      // API returns: { "StatusCode": 200, "message": "...", "data": {...} }
-      final dynamic rawCode = response['StatusCode'];
-      final int? statusCode =
-          rawCode is int ? rawCode : int.tryParse(rawCode?.toString() ?? '');
-      final String message =
-          (response['message'] as String?) ??
-          'OTP sent successfully to your email';
-
-      if (statusCode == 200) {
-        // Timer already started above — just show the green banner.
-        _showBanner(message, isSuccess: true);
-      } else {
-        // Something went wrong — show red banner.
-        // Do NOT restart the timer; it is already running from the tap above.
-        _showBanner(message, isSuccess: false);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      _showBanner('Error resending OTP: $e', isSuccess: false);
-    } finally {
-      if (mounted) setState(() => _isResending = false);
+  Widget _homeForRole(String role, int userId) {
+    switch (role.toLowerCase()) {
+      case 'admin' || 'agent':
+        return const AdminHomeScreen();
+      case 'end_user' || 'end-user' || 'enduser':
+        return HomeScreen(userId: userId, loginMessage: 'Login successful');
+      default:
+        return CustomerHomeScreen(loginMessage: 'Login successful');
     }
   }
 
   Future<void> _verifyOtp() async {
-    if (_otp.length != 4) {
-      _showBanner('Please enter the complete 4-digit code', isSuccess: false);
+    if (_isLoading) return;
+    if (_otp.length != kTotpLength) {
+      _showBanner(
+        'Enter the 6-digit code from your authenticator app',
+        isSuccess: false,
+      );
       return;
     }
 
+    FocusScope.of(context).unfocus();
     setState(() {
       _isLoading = true;
       _bannerMessage = null;
@@ -182,151 +130,85 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
 
     try {
       final response = await ApiService.verifyOtp(widget.email, _otp);
-      final data = response['data'];
-      final accessToken = data?['accessToken'];
-      final refreshToken = data?['refreshToken'];
-
-      if (accessToken != null) {
-        await ApiService.setAccessToken(accessToken.toString());
-        if (refreshToken != null) {
-          await ApiService.setRefreshToken(refreshToken.toString());
+      if (response['ok'] != true) {
+        _codeController.clear();
+        _showBanner(
+          response['message']?.toString() ?? 'Invalid code. Please try again.',
+          isSuccess: false,
+        );
+        // The backend ends this sign-in after too many wrong codes or when
+        // it expires; send the user back to enter their password again.
+        final msg = response['message']?.toString().toLowerCase() ?? '';
+        if (msg.contains('sign in again') && mounted) {
+          await Future.delayed(const Duration(seconds: 2));
+          if (mounted) Navigator.pop(context);
         }
-
-        final profileResponse = await ApiService.getCurrentUserProfile();
-
-        if (profileResponse['status'] == 'success' &&
-            profileResponse['data'] != null) {
-          final user = profileResponse['data'];
-          final userId = user['id'] ?? user['userId'];
-          final userIdStr = userId?.toString() ?? 'undefined';
-
-          final detailedProfileResponse = await ApiService.getUserById(
-            userIdStr,
-          );
-
-          if (detailedProfileResponse['status'] == 'success' &&
-              detailedProfileResponse['data'] != null) {
-            final detailedUser = detailedProfileResponse['data'];
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('userProfile', json.encode(detailedUser));
-          }
-
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('userType', user['role'] ?? 'end_user');
-          await prefs.setString('email', user['email'] ?? '');
-          await prefs.setString(
-            'name',
-            user['name'] ?? user['first_name'] ?? '',
-          );
-          await prefs.setString('phone', user['phone'] ?? '');
-          await prefs.setString('address', user['address'] ?? '');
-
-          if (!mounted) return;
-
-          if (userId != null) {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder:
-                    (_) => HomeScreen(
-                      userId:
-                          userId is int
-                              ? userId
-                              : int.tryParse(userId.toString()) ?? 0,
-                      loginMessage: 'Login successful',
-                    ),
-              ),
-              (route) => false,
-            );
-          } else {
-            _showBanner('Failed to get user ID', isSuccess: false);
-          }
-        } else {
-          final user = data?['user'];
-          if (user != null) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('userType', user['role'] ?? 'end_user');
-            await prefs.setString('email', user['email'] ?? '');
-            await prefs.setString('name', user['name'] ?? '');
-            await prefs.setString('phone', user['phone'] ?? '');
-            await prefs.setString('address', user['address'] ?? '');
-
-            if (!mounted) return;
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder:
-                    (_) => HomeScreen(
-                      userId: user['id'] ?? 0,
-                      loginMessage: 'Login successful',
-                    ),
-              ),
-              (route) => false,
-            );
-          } else {
-            _showBanner('Failed to load user profile', isSuccess: false);
-          }
-        }
-      } else {
-        _showBanner('Invalid OTP. Please try again.', isSuccess: false);
+        return;
       }
+
+      final data = response['data'];
+      final accessToken = data is Map ? data['accessToken'] : null;
+      final refreshToken = data is Map ? data['refreshToken'] : null;
+      if (accessToken == null) {
+        _showBanner('Sign-in failed. Please try again.', isSuccess: false);
+        return;
+      }
+
+      await ApiService.setAccessToken(accessToken.toString());
+      if (refreshToken != null) {
+        await ApiService.setRefreshToken(refreshToken.toString());
+      }
+      // Register this device for push notifications (best-effort).
+      PushService.instance.registerWithBackend();
+
+      final prefs = await SharedPreferences.getInstance();
+      Map<String, dynamic>? user;
+      final profileResponse = await ApiService.getCurrentUserProfile();
+      if (profileResponse['status'] == 'success' &&
+          profileResponse['data'] is Map) {
+        user = Map<String, dynamic>.from(profileResponse['data'] as Map);
+        final detailed = await ApiService.getUserById(
+          (user['id'] ?? user['userId'])?.toString() ?? 'undefined',
+        );
+        if (detailed['status'] == 'success' && detailed['data'] != null) {
+          await prefs.setString('userProfile', json.encode(detailed['data']));
+        }
+      } else if (data is Map && data['user'] is Map) {
+        user = Map<String, dynamic>.from(data['user'] as Map);
+      }
+
+      if (user == null) {
+        _showBanner('Failed to load user profile', isSuccess: false);
+        return;
+      }
+
+      final rawId = user['id'] ?? user['userId'];
+      final userId =
+          rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '') ?? 0;
+      final role =
+          (user['role'] ?? user['type'] ?? 'end_user').toString().toLowerCase();
+
+      await prefs.setInt('user_id', userId);
+      await prefs.setString('userType', role);
+      await prefs.setString('email', user['email']?.toString() ?? '');
+      await prefs.setString(
+        'name',
+        (user['name'] ?? user['first_name'] ?? '').toString(),
+      );
+      await prefs.setString('phone', user['phone']?.toString() ?? '');
+      await prefs.setString('address', user['address']?.toString() ?? '');
+
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => _homeForRole(role, userId)),
+        (route) => false,
+      );
     } catch (e) {
       _showBanner('Verification failed: ${e.toString()}', isSuccess: false);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Widget _buildOtpBox(int index) {
-    return SizedBox(
-      width: 64,
-      height: 64,
-      child: TextFormField(
-        controller: _controllers[index],
-        focusNode: _focusNodes[index],
-        keyboardType: TextInputType.number,
-        maxLength: 1,
-        textAlign: TextAlign.center,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        style: const TextStyle(
-          fontSize: 26,
-          fontWeight: FontWeight.w800,
-          color: _ink,
-          letterSpacing: 0,
-        ),
-        decoration: InputDecoration(
-          counterText: '',
-          filled: true,
-          fillColor: _surfaceSubtle,
-          contentPadding: EdgeInsets.zero,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: _border),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: _border),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: _primary, width: 2),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: _primary, width: 1.5),
-          ),
-        ),
-        onChanged: (value) {
-          if (value.isNotEmpty && index < 3) {
-            _focusNodes[index + 1].requestFocus();
-          }
-          if (value.isEmpty && index > 0) {
-            _focusNodes[index - 1].requestFocus();
-          }
-          if (_otp.length == 4) _verifyOtp();
-        },
-      ),
-    );
   }
 
   Widget _buildBanner() {
@@ -404,17 +286,11 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final topPad = MediaQuery.of(context).padding.top;
-
-    final emailParts = widget.email.split('@');
-    final maskedEmail =
-        emailParts.length == 2
-            ? '${emailParts[0].substring(0, emailParts[0].length.clamp(0, 2))}***@${emailParts[1]}'
-            : widget.email;
+    final headerHeight = size.height * (_isSetup ? 0.26 : 0.30);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
-        resizeToAvoidBottomInset: false,
         backgroundColor: _surface,
         body: Stack(
           children: [
@@ -423,13 +299,20 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
               top: 0,
               left: 0,
               right: 0,
-              child: _OtpHeader(height: size.height * 0.30, topPad: topPad),
+              child: _OtpHeader(
+                height: headerHeight,
+                topPad: topPad,
+                title:
+                    _isSetup
+                        ? 'Set up two-factor authentication'
+                        : 'Two-factor authentication',
+              ),
             ),
 
             // ── Scrollable content
             Positioned.fill(
               child: SingleChildScrollView(
-                padding: EdgeInsets.only(top: size.height * 0.30),
+                padding: EdgeInsets.only(top: headerHeight),
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 child: Container(
@@ -438,9 +321,11 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Enter verification code',
-                        style: TextStyle(
+                      Text(
+                        _isSetup
+                            ? 'Link an authenticator app'
+                            : 'Enter authentication code',
+                        style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
                           color: _ink,
@@ -448,41 +333,40 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
                         ),
                       ),
                       const SizedBox(height: 6),
-                      RichText(
-                        text: TextSpan(
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: _inkSecondary,
-                            height: 1.5,
-                          ),
-                          children: [
-                            const TextSpan(text: 'We sent a 4-digit code to '),
-                            TextSpan(
-                              text: maskedEmail,
-                              style: const TextStyle(
-                                color: _ink,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const TextSpan(
-                              text: '. Enter it below to continue.',
-                            ),
-                          ],
+                      Text(
+                        _isSetup
+                            ? 'Your account now needs a code from Google '
+                                'Authenticator or Microsoft Authenticator '
+                                'each time you sign in. Link the app once to '
+                                'continue.'
+                            : 'Open Google Authenticator or Microsoft '
+                                'Authenticator and enter the 6-digit code '
+                                'for Ardent Starlink.',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _inkSecondary,
+                          height: 1.5,
                         ),
                       ),
 
-                      const SizedBox(height: 36),
+                      if (_isSetup) ...[
+                        const SizedBox(height: 22),
+                        AuthenticatorLinkPanel(info: widget.setup!),
+                      ],
 
-                      // OTP boxes
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(4, _buildOtpBox),
+                      const SizedBox(height: 28),
+
+                      TotpCodeField(
+                        controller: _codeController,
+                        enabled: !_isLoading,
+                        autofocus: !_isSetup,
+                        onCompleted: (_) => _verifyOtp(),
                       ),
 
                       // Banner (success green / error red)
                       if (_bannerMessage != null) _buildBanner(),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 28),
 
                       // Verify button
                       SizedBox(
@@ -491,13 +375,11 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _verifyOtp,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _primary,
-                            disabledBackgroundColor: _primary.withOpacity(0.5),
+                            backgroundColor: AppColors.brand,
+                            disabledBackgroundColor: AppColors.brand.withOpacity(0.5),
                             elevation: 0,
                             shadowColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
+                            shape: const StadiumBorder(),
                           ),
                           child:
                               _isLoading
@@ -511,9 +393,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
                                       ),
                                     ),
                                   )
-                                  : const Text(
-                                    'Verify Code',
-                                    style: TextStyle(
+                                  : Text(
+                                    _isSetup ? 'Link and Sign In' : 'Verify Code',
+                                    style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
                                       color: Colors.white,
@@ -525,67 +407,17 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
 
                       const SizedBox(height: 20),
 
-                      // Resend row — timer OR resend button
-                      Center(
-                        child:
-                            _canResend
-                                ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text(
-                                      "Didn't receive it? ",
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: _inkSecondary,
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: _isResending ? null : _resendCode,
-                                      child:
-                                          _isResending
-                                              ? const SizedBox(
-                                                width: 14,
-                                                height: 14,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  valueColor:
-                                                      AlwaysStoppedAnimation<
-                                                        Color
-                                                      >(_primary),
-                                                ),
-                                              )
-                                              : const Text(
-                                                'Resend code',
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: _primary,
-                                                  decoration:
-                                                      TextDecoration.underline,
-                                                  decorationColor: _primary,
-                                                ),
-                                              ),
-                                    ),
-                                  ],
-                                )
-                                : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.schedule_rounded,
-                                      size: 14,
-                                      color: _inkTertiary,
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      'Resend in $_resendSeconds seconds',
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        color: _inkTertiary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                      const Center(
+                        child: Text(
+                          'Lost access to your authenticator app?\n'
+                          'Contact your administrator to reset it.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _inkSecondary,
+                            height: 1.5,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -618,7 +450,12 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
 class _OtpHeader extends StatelessWidget {
   final double height;
   final double topPad;
-  const _OtpHeader({required this.height, required this.topPad});
+  final String title;
+  const _OtpHeader({
+    required this.height,
+    required this.topPad,
+    required this.title,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -627,7 +464,7 @@ class _OtpHeader extends StatelessWidget {
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          colors: [Color(0xFF133341), Color(0xFF0C2029)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -675,14 +512,14 @@ class _OtpHeader extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Icon(
-                      Icons.mark_email_read_outlined,
+                      Icons.verified_user_outlined,
                       size: 48,
                       color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    'Check your inbox',
+                    title,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.75),
                       fontSize: 13,

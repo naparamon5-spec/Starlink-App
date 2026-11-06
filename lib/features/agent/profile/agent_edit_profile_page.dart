@@ -81,7 +81,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               margin: const EdgeInsets.only(right: 16),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF6366F1),
+                color: const Color(0xFF3B82F6),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Text(
@@ -110,7 +110,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: const Color(0xFF6366F1).withOpacity(0.25),
+                color: const Color(0xFF3B82F6).withOpacity(0.25),
               ),
             ),
             child: Row(
@@ -123,12 +123,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                          colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         border: Border.all(
-                          color: const Color(0xFF6366F1).withOpacity(0.5),
+                          color: const Color(0xFF3B82F6).withOpacity(0.5),
                           width: 3,
                         ),
                       ),
@@ -150,7 +150,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                         width: 26,
                         height: 26,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1),
+                          color: const Color(0xFF3B82F6),
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: const Color(0xFF0F1923),
@@ -186,7 +186,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withOpacity(0.12),
+                          color: const Color(0xFF3B82F6).withOpacity(0.12),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
@@ -194,7 +194,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF6366F1),
+                            color: Color(0xFF3B82F6),
                           ),
                         ),
                       ),
@@ -309,14 +309,14 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 ),
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6366F1).withOpacity(0.4),
+                    color: const Color(0xFF3B82F6).withOpacity(0.4),
                     blurRadius: 16,
                     offset: const Offset(0, 6),
                   ),

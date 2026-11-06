@@ -1,25 +1,28 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/shared/widgets/collapsible_list.dart';
 import 'package:starlink_app/features/end_user/ticket/ticket_modal.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/core/utils/file_download/file_downloader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 // import 'package:provider/provider.dart'; // notifications disabled
 // import 'package:starlink_app/providers/notification_provider.dart'; // notifications disabled
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _inProgress = Color(0xFF0F62FE);
-const _success = Color(0xFF24A148);
-const _warning = Color(0xFFFF832B);
+const _primary = Color(0xFF133341);
+const _inProgress = Color(0xFF3B82F6);
+const _success = Color(0xFF10B981);
+const _warning = Color(0xFFF59E0B);
 const _danger = Color(0xFFE57373);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 // ── Extended detail-screen tokens (matches CustomerViewScreen) ────────────────
 const _detailBg = Color(0xFFF5F7FA);
@@ -196,48 +199,48 @@ class _TicketScreenState extends State<TicketScreen> {
       );
 
       final loaded =
-      allTickets.map((ticket) {
-      final rawDate = ticket['created_at']?.toString();
-      final createdAt = _formatDate(rawDate);
+          allTickets.map((ticket) {
+            final rawDate = ticket['created_at']?.toString();
+            final createdAt = _formatDate(rawDate);
 
-      final contactId = ticket['contact']?.toString() ?? '';
-      final rawStatus =
-          (ticket['status'] ?? 'open').toString().toLowerCase().trim();
-      String displayStatus;
-      switch (rawStatus) {
-        case 'open':
-          displayStatus = 'OPEN';
-          break;
-        case 'in_progress':
-        case 'in progress':
-        case 'inprogress':
-          displayStatus = 'IN PROGRESS';
-          break;
-        case 'resolved':
-          displayStatus = 'RESOLVED';
-          break;
-        case 'closed':
-        case 'close':
-          displayStatus = 'CLOSED';
-          break;
-        default:
-          displayStatus = rawStatus.toUpperCase();
-      }
+            final contactId = ticket['contact']?.toString() ?? '';
+            final rawStatus =
+                (ticket['status'] ?? 'open').toString().toLowerCase().trim();
+            String displayStatus;
+            switch (rawStatus) {
+              case 'open':
+                displayStatus = 'OPEN';
+                break;
+              case 'in_progress':
+              case 'in progress':
+              case 'inprogress':
+                displayStatus = 'IN PROGRESS';
+                break;
+              case 'resolved':
+                displayStatus = 'RESOLVED';
+                break;
+              case 'closed':
+              case 'close':
+                displayStatus = 'CLOSED';
+                break;
+              default:
+                displayStatus = rawStatus.toUpperCase();
+            }
 
-      return {
-        'id': ticket['id'],
-        'type': ticket['ticket_type'] ?? ticket['type'] ?? 'N/A',
-        'contact': ticket['created_by'] ?? '',
-        'subject': ticket['subject'] ?? '',
-        'description': ticket['description'] ?? '',
-        'attachments': ticket['attachments'] ?? [],
-        'status': displayStatus,
-        'created_at': createdAt,
-        'created_at_raw': rawDate,
-        'user_id': ticket['user_id'],
-        'full_data': ticket,
-      };
-      }).toList();
+            return {
+              'id': ticket['id'],
+              'type': ticket['ticket_type'] ?? ticket['type'] ?? 'N/A',
+              'contact': ticket['created_by'] ?? '',
+              'subject': ticket['subject'] ?? '',
+              'description': ticket['description'] ?? '',
+              'attachments': ticket['attachments'] ?? [],
+              'status': displayStatus,
+              'created_at': createdAt,
+              'created_at_raw': rawDate,
+              'user_id': ticket['user_id'],
+              'full_data': ticket,
+            };
+          }).toList();
       if (!mounted) return;
       setState(() {
         _tickets = loaded;
@@ -716,69 +719,74 @@ class _TicketScreenState extends State<TicketScreen> {
               sliver: SliverToBoxAdapter(
                 child: SizedBox(
                   height: 34,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _filterOptions.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (context, i) {
-                      final option = _filterOptions[i];
-                      final isSelected = _selectedFilter == option;
-                      final dotColor =
-                          option == 'All' ? _primary : _filterDotColor(option);
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedFilter = option;
-                          });
-                          _handleSearch();
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color:
-                                isSelected
-                                    ? dotColor.withOpacity(0.1)
-                                    : _surface,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isSelected ? dotColor : _border,
-                              width: isSelected ? 1.5 : 1,
+                  child: EdgeFade(
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _filterOptions.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, i) {
+                        final option = _filterOptions[i];
+                        final isSelected = _selectedFilter == option;
+                        final dotColor =
+                            option == 'All'
+                                ? _primary
+                                : _filterDotColor(option);
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedFilter = option;
+                            });
+                            _handleSearch();
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (option != 'All') ...[
-                                Container(
-                                  width: 7,
-                                  height: 7,
-                                  decoration: BoxDecoration(
-                                    color: dotColor,
-                                    shape: BoxShape.circle,
+                            decoration: BoxDecoration(
+                              color:
+                                  isSelected
+                                      ? dotColor.withOpacity(0.1)
+                                      : _surface,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected ? dotColor : _border,
+                                width: isSelected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (option != 'All') ...[
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: BoxDecoration(
+                                      color: dotColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                ],
+                                Text(
+                                  option,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight:
+                                        isSelected
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                    color:
+                                        isSelected ? dotColor : _inkSecondary,
                                   ),
                                 ),
-                                const SizedBox(width: 5),
                               ],
-                              Text(
-                                option,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight:
-                                      isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                  color: isSelected ? dotColor : _inkSecondary,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -791,7 +799,7 @@ class _TicketScreenState extends State<TicketScreen> {
                 child: Row(
                   children: [
                     const Text(
-                      'MY TICKETS',
+                      'ALL TICKETS',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -884,6 +892,10 @@ class _EndUserTicketDetailsScreenState
   Map<String, dynamic>? _fetchedTicket;
   bool _isFetchingDetails = true;
   String? _fetchError;
+  bool _timelineShowAll = false;
+  bool _timelineCollapsed = false;
+  bool _attachShowAll = false;
+  bool _attachCollapsed = false;
 
   List<dynamic> _attachments = [];
   String? _attachmentsError;
@@ -1069,7 +1081,7 @@ class _EndUserTicketDetailsScreenState
     if (v.contains('resolv')) return _success;
     if (v.contains('close')) return _warning;
     if (v.contains('comment') || v.contains('note')) {
-      return const Color(0xFF6366F1);
+      return const Color(0xFF3B82F6);
     }
     if (v.contains('assign')) return _primary;
     if (v.contains('status') || v.contains('chang')) return _inProgress;
@@ -1174,7 +1186,7 @@ class _EndUserTicketDetailsScreenState
       case 'rar':
         return _warning;
       default:
-        return const Color(0xFF6366F1);
+        return const Color(0xFF3B82F6);
     }
   }
 
@@ -1311,14 +1323,11 @@ class _EndUserTicketDetailsScreenState
 
     final dynamic rawTimeline = data['timeline'];
     final List<dynamic> timeline = rawTimeline is List ? rawTimeline : [];
+    final shownTimeline = visibleNewestFirst(timeline, _timelineShowAll);
 
     return Scaffold(
       backgroundColor: _detailBg,
       appBar: AppBar(
-        backgroundColor: _surface,
-        foregroundColor: _ink,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1327,14 +1336,14 @@ class _EndUserTicketDetailsScreenState
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _ink,
+                color: Colors.white,
               ),
             ),
             Text(
               'Ticket #$ticketId',
-              style: const TextStyle(fontSize: 11, color: _inkTertiary),
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
             ),
           ],
         ),
@@ -1343,10 +1352,6 @@ class _EndUserTicketDetailsScreenState
           onPressed: () => Navigator.pop(context),
         ),
         actions: const [],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: _detailBorder),
-        ),
       ),
       body: RefreshIndicator(
         onRefresh: _loadTicketDetails,
@@ -1402,7 +1407,7 @@ class _EndUserTicketDetailsScreenState
                       icon: Icons.label_outline_rounded,
                       label: 'Type',
                       value: ticketType,
-                      color: const Color(0xFF6366F1),
+                      color: const Color(0xFF3B82F6),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1474,227 +1479,254 @@ class _EndUserTicketDetailsScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: _warning.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.attach_file_rounded,
-                            color: _warning,
-                            size: 17,
-                          ),
+                  InkWell(
+                    onTap:
+                        () => setState(
+                          () => _attachCollapsed = !_attachCollapsed,
                         ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'Attachments',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: _ink,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (_isFetchingDetails)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: _primary,
-                            ),
-                          )
-                        else if (_attachments.isNotEmpty)
-                          _CountBadge(
-                            count: _attachments.length,
-                            color: _warning,
-                          ),
-                      ],
-                    ),
-                  ),
-                  const _HDivider(),
-                  if (_isFetchingDetails)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: _primary,
-                        ),
-                      ),
-                    )
-                  else if (_attachmentsError != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: _danger,
-                            size: 16,
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: _warning.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.attach_file_rounded,
+                              color: _warning,
+                              size: 17,
+                            ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _attachmentsError!,
-                              style: const TextStyle(
-                                color: _inkSecondary,
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Attachments',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: _ink,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_isFetchingDetails)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _primary,
+                              ),
+                            )
+                          else if (_attachments.isNotEmpty)
+                            _CountBadge(
+                              count: _attachments.length,
+                              color: _warning,
+                            ),
+                          CollapseArrow(collapsed: _attachCollapsed),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (!_attachCollapsed) ...[
+                    const _HDivider(),
+                    if (_isFetchingDetails)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _primary,
+                          ),
+                        ),
+                      )
+                    else if (_attachmentsError != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: _danger,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _attachmentsError!,
+                                style: const TextStyle(
+                                  color: _inkSecondary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                setState(() => _attachmentsError = null);
+                                _loadTicketDetails();
+                              },
+                              child: const Text(
+                                'Retry',
+                                style: TextStyle(color: _primary, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (_attachments.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline_rounded,
+                              color: _inkTertiary,
+                              size: 16,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'No attachments',
+                              style: TextStyle(
+                                color: _inkTertiary,
                                 fontSize: 13,
                               ),
                             ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() => _attachmentsError = null);
-                              _loadTicketDetails();
-                            },
-                            child: const Text(
-                              'Retry',
-                              style: TextStyle(color: _primary, fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (_attachments.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline_rounded,
-                            color: _inkTertiary,
-                            size: 16,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'No attachments',
-                            style: TextStyle(color: _inkTertiary, fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                      itemCount: _attachments.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) {
-                        final att = _attachments[i];
-                        if (att is! Map) return const SizedBox.shrink();
-                        final name = _str(
-                          att['name'] ??
-                              att['filename'] ??
-                              att['file_name'] ??
-                              att['original_name'],
-                          fallback: 'Unknown file',
-                        );
-                        final ext =
-                            name.contains('.')
-                                ? name.split('.').last.toLowerCase()
-                                : '';
-                        final size = _str(
-                          att['size'] ?? att['file_size'],
-                          fallback: '',
-                        );
-                        final attId =
-                            att['id']?.toString() ??
-                            att['attachment_id']?.toString() ??
-                            '';
-                        final isDownloading =
-                            attId.isNotEmpty && _downloadingMap[attId] == true;
+                          ],
+                        ),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                        itemCount: visibleCount(
+                          _attachments.length,
+                          _attachShowAll,
+                        ),
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final att = _attachments[i];
+                          if (att is! Map) return const SizedBox.shrink();
+                          final name = _str(
+                            att['name'] ??
+                                att['filename'] ??
+                                att['file_name'] ??
+                                att['original_name'],
+                            fallback: 'Unknown file',
+                          );
+                          final ext =
+                              name.contains('.')
+                                  ? name.split('.').last.toLowerCase()
+                                  : '';
+                          final size = _str(
+                            att['size'] ?? att['file_size'],
+                            fallback: '',
+                          );
+                          final attId =
+                              att['id']?.toString() ??
+                              att['attachment_id']?.toString() ??
+                              '';
+                          final isDownloading =
+                              attId.isNotEmpty &&
+                              _downloadingMap[attId] == true;
 
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: _extColor(ext).withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    ext.isNotEmpty
-                                        ? ext.toUpperCase().substring(
-                                          0,
-                                          ext.length > 4 ? 4 : ext.length,
-                                        )
-                                        : 'FILE',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                      color: _extColor(ext),
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: _extColor(ext).withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      ext.isNotEmpty
+                                          ? ext.toUpperCase().substring(
+                                            0,
+                                            ext.length > 4 ? 4 : ext.length,
+                                          )
+                                          : 'FILE',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                        color: _extColor(ext),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: _ink,
-                                      ),
-                                    ),
-                                    if (size.isNotEmpty)
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
                                       Text(
-                                        size,
+                                        name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
-                                          fontSize: 11,
-                                          color: _inkTertiary,
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: _ink,
                                         ),
                                       ),
-                                  ],
-                                ),
-                              ),
-                              isDownloading
-                                  ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: _inkTertiary,
-                                    ),
-                                  )
-                                  : IconButton(
-                                    icon: const Icon(
-                                      Icons.download_outlined,
-                                      color: _inkTertiary,
-                                      size: 20,
-                                    ),
-                                    onPressed: () => _downloadAttachment(att),
+                                      if (size.isNotEmpty)
+                                        Text(
+                                          size,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: _inkTertiary,
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                            ],
-                          ),
-                        );
-                      },
+                                ),
+                                isDownloading
+                                    ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: _inkTertiary,
+                                      ),
+                                    )
+                                    : IconButton(
+                                      icon: const Icon(
+                                        Icons.download_outlined,
+                                        color: _inkTertiary,
+                                        size: 20,
+                                      ),
+                                      onPressed: () => _downloadAttachment(att),
+                                    ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ViewAllButton(
+                      total: _attachments.length,
+                      showAll: _attachShowAll,
+                      noun: 'attachments',
+                      onTap:
+                          () =>
+                              setState(() => _attachShowAll = !_attachShowAll),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -1706,173 +1738,200 @@ class _EndUserTicketDetailsScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: _primary.withOpacity(0.10),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.timeline_rounded,
-                            color: _primary,
-                            size: 17,
-                          ),
+                  InkWell(
+                    onTap:
+                        () => setState(
+                          () => _timelineCollapsed = !_timelineCollapsed,
                         ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'Activity Timeline',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: _ink,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (_isFetchingDetails)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: _primary,
-                            ),
-                          )
-                        else if (timeline.isNotEmpty)
-                          _CountBadge(count: timeline.length, color: _primary),
-                      ],
-                    ),
-                  ),
-                  const _HDivider(),
-                  if (_isFetchingDetails)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: _primary,
-                            ),
-                            SizedBox(height: 10),
-                            Text(
-                              'Loading timeline…',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: _inkTertiary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else if (_fetchError != null)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 11,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF1F0),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _primary.withOpacity(0.35)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.warning_amber_rounded,
-                              color: _primary,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _fetchError!,
-                                style: const TextStyle(
-                                  color: _primary,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else if (timeline.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.info_outline_rounded,
-                            color: _inkTertiary,
-                            size: 16,
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: _primary.withOpacity(0.10),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.timeline_rounded,
+                              color: _primary,
+                              size: 17,
+                            ),
                           ),
-                          SizedBox(width: 8),
-                          Text(
-                            'No activity yet',
-                            style: TextStyle(color: _inkTertiary, fontSize: 13),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Activity Timeline',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: _ink,
+                            ),
                           ),
+                          const Spacer(),
+                          if (_isFetchingDetails)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _primary,
+                              ),
+                            )
+                          else if (timeline.isNotEmpty)
+                            _CountBadge(
+                              count: timeline.length,
+                              color: _primary,
+                            ),
+                          CollapseArrow(collapsed: _timelineCollapsed),
                         ],
                       ),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                      child: Column(
-                        children: List.generate(timeline.length, (i) {
-                          final act = timeline[i];
-                          if (act is! Map) return const SizedBox.shrink();
-                          final action = _str(
-                            act['action'],
-                            fallback: 'Activity',
-                          );
-                          final userName = _str(
-                            act['user_name'] ??
-                                act['performed_by'] ??
-                                act['created_by'],
-                            fallback: '',
-                          );
-                          final oldVal = act['old_value']?.toString();
-                          final newVal = act['new_value']?.toString();
-                          final timestamp = act['created_at']?.toString();
-                          String? changeDesc;
-                          if (oldVal != null &&
-                              newVal != null &&
-                              oldVal != 'null' &&
-                              newVal != 'null') {
-                            changeDesc =
-                                '${_prettifyValue(oldVal)}  →  ${_prettifyValue(newVal)}';
-                          }
-                          final color = _activityColor(action);
-                          final icon = _activityIcon(action);
-                          final isLast = i == timeline.length - 1;
-                          return _TimelineRow(
-                            icon: icon,
-                            color: color,
-                            isLast: isLast,
-                            action: action,
-                            changeDesc: changeDesc,
-                            performedBy:
-                                (userName.isNotEmpty && userName != '—')
-                                    ? userName
-                                    : null,
-                            formattedDate:
-                                timestamp != null
-                                    ? _formatDate(timestamp)
-                                    : null,
-                            timeAgo: _timeAgo(timestamp),
-                          );
-                        }),
-                      ),
                     ),
+                  ),
+                  if (!_timelineCollapsed) ...[
+                    const _HDivider(),
+                    if (_isFetchingDetails)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _primary,
+                              ),
+                              SizedBox(height: 10),
+                              Text(
+                                'Loading timeline…',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _inkTertiary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (_fetchError != null)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 11,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F0F3),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _primary.withOpacity(0.35),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.warning_amber_rounded,
+                                color: _primary,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _fetchError!,
+                                  style: const TextStyle(
+                                    color: _primary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (timeline.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline_rounded,
+                              color: _inkTertiary,
+                              size: 16,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'No activity yet',
+                              style: TextStyle(
+                                color: _inkTertiary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                        child: Column(
+                          children: List.generate(shownTimeline.length, (i) {
+                            final act = shownTimeline[i];
+                            if (act is! Map) return const SizedBox.shrink();
+                            final action = _str(
+                              act['action'],
+                              fallback: 'Activity',
+                            );
+                            final userName = _str(
+                              act['user_name'] ??
+                                  act['performed_by'] ??
+                                  act['created_by'],
+                              fallback: '',
+                            );
+                            final oldVal = act['old_value']?.toString();
+                            final newVal = act['new_value']?.toString();
+                            final timestamp = act['created_at']?.toString();
+                            String? changeDesc;
+                            if (oldVal != null &&
+                                newVal != null &&
+                                oldVal != 'null' &&
+                                newVal != 'null') {
+                              changeDesc =
+                                  '${_prettifyValue(oldVal)}  →  ${_prettifyValue(newVal)}';
+                            }
+                            final color = _activityColor(action);
+                            final icon = _activityIcon(action);
+                            final isLast = i == shownTimeline.length - 1;
+                            return _TimelineRow(
+                              icon: icon,
+                              color: color,
+                              isLast: isLast,
+                              action: action,
+                              changeDesc: changeDesc,
+                              performedBy:
+                                  (userName.isNotEmpty && userName != '—')
+                                      ? userName
+                                      : null,
+                              formattedDate:
+                                  timestamp != null
+                                      ? _formatDate(timestamp)
+                                      : null,
+                              timeAgo: _timeAgo(timestamp),
+                            );
+                          }),
+                        ),
+                      ),
+                    if (!_isFetchingDetails && _fetchError == null)
+                      ViewAllButton(
+                        total: timeline.length,
+                        showAll: _timelineShowAll,
+                        noun: 'activities',
+                        onTap:
+                            () => setState(
+                              () => _timelineShowAll = !_timelineShowAll,
+                            ),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -2210,8 +2269,8 @@ class _HighlightText extends StatelessWidget {
       );
       start = idx + query.length;
     }
-    return RichText(
-      text: TextSpan(style: style, children: spans),
+    return Text.rich(
+      TextSpan(style: style, children: spans),
       maxLines: maxLines,
       overflow: overflow ?? TextOverflow.clip,
     );

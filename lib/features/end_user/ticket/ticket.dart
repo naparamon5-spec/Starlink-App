@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:starlink_app/shared/widgets/app_table.dart';
 import 'package:starlink_app/shared/widgets/resolve_remarks_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
@@ -435,7 +436,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               ),
                               child: const Icon(
                                 Icons.add_comment_outlined,
-                                color: Color(0xFF133343),
+                                color: Color(0xFF133341),
                                 size: 18,
                               ),
                             ),
@@ -497,16 +498,14 @@ class _TicketScreenState extends State<TicketScreen> {
                             ElevatedButton(
                               onPressed: canPost ? post : null,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFEB1E23),
+                                backgroundColor: AppColors.brand,
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
                                   vertical: 12,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
+                                shape: const StadiumBorder(),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -589,7 +588,7 @@ class _TicketScreenState extends State<TicketScreen> {
                         'Ticket Details',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF133343),
+                          color: const Color(0xFF133341),
                         ),
                       ),
                       IconButton(
@@ -617,9 +616,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 12,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                                shape: const StadiumBorder(),
                               ),
                               icon: const Icon(
                                 Icons.check_circle_outline_rounded,
@@ -638,17 +635,15 @@ class _TicketScreenState extends State<TicketScreen> {
                                   () =>
                                       _updateTicketStatus(ticketId, 'resolved'),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF24A148),
+                                foregroundColor: const Color(0xFF10B981),
                                 side: const BorderSide(
-                                  color: Color(0xFF24A148),
+                                  color: Color(0xFF10B981),
                                   width: 1.2,
                                 ),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 12,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                                shape: const StadiumBorder(),
                               ),
                               icon: const Icon(
                                 Icons.verified_outlined,
@@ -679,9 +674,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 12,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                                shape: const StadiumBorder(),
                               ),
                               icon: const Icon(
                                 Icons.lock_outline_rounded,
@@ -740,7 +733,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
-                                        color: Color(0xFF133343),
+                                        color: Color(0xFF133341),
                                       ),
                                     ),
                                     const SizedBox(height: 8),
@@ -801,7 +794,7 @@ class _TicketScreenState extends State<TicketScreen> {
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF133343),
+                              color: Color(0xFF133341),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -844,7 +837,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
-                                        color: Color(0xFF133343),
+                                        color: Color(0xFF133341),
                                       ),
                                     ),
                                     const SizedBox(height: 10),
@@ -899,7 +892,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                                     style: const TextStyle(
                                                       fontWeight:
                                                           FontWeight.bold,
-                                                      color: Color(0xFF133343),
+                                                      color: Color(0xFF133341),
                                                     ),
                                                   ),
                                                 ),
@@ -962,7 +955,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                         style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.bold,
-                                          color: Color(0xFF133343),
+                                          color: Color(0xFF133341),
                                         ),
                                       ),
                                     ),
@@ -1000,7 +993,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                               Icon(
                                                 Icons.add_comment_outlined,
                                                 size: 18,
-                                                color: Color(0xFF133343),
+                                                color: Color(0xFF133341),
                                               ),
                                               SizedBox(width: 6),
                                               Text(
@@ -1009,7 +1002,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                                   fontWeight: FontWeight.w800,
                                                   fontSize: 12,
                                                   letterSpacing: 0.2,
-                                                  color: Color(0xFF133343),
+                                                  color: Color(0xFF133341),
                                                 ),
                                               ),
                                             ],
@@ -1214,7 +1207,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF133343),
+                                color: Color(0xFF133341),
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -1293,7 +1286,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                               IconButton(
                                                 icon: const Icon(
                                                   Icons.download,
-                                                  color: Color(0xFF133343),
+                                                  color: Color(0xFF133341),
                                                 ),
                                                 onPressed:
                                                     () => _downloadAttachment(
@@ -1328,7 +1321,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                         IconButton(
                                           icon: const Icon(
                                             Icons.download,
-                                            color: Color(0xFF133343),
+                                            color: Color(0xFF133341),
                                           ),
                                           onPressed: () {
                                             ScaffoldMessenger.of(
@@ -1464,7 +1457,7 @@ class _TicketScreenState extends State<TicketScreen> {
           style: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF133343),
+            color: Color(0xFF133341),
           ),
         ),
         const SizedBox(height: 8),
@@ -1511,7 +1504,7 @@ class _TicketScreenState extends State<TicketScreen> {
         ),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: const Color(0xFF133343),
+        backgroundColor: const Color(0xFF133341),
         foregroundColor: Colors.white,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -1571,18 +1564,28 @@ class _TicketScreenState extends State<TicketScreen> {
                     height: 40,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[300]!, width: 1),
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _selectedFilter,
                         isExpanded: true,
-                        icon: const Icon(Icons.keyboard_arrow_down),
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Color(0xFF133341),
+                        ),
                         iconSize: 20,
-                        elevation: 16,
-                        style: TextStyle(color: Colors.grey[800], fontSize: 14),
+                        elevation: 8,
+                        dropdownColor: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        menuMaxHeight: 320,
+                        style: const TextStyle(
+                          color: Color(0xFF133341),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                         onChanged: (String? newValue) {
                           if (newValue != null) {
                             setState(() {
@@ -1693,7 +1696,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
           style: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF133343),
+            color: Color(0xFF133341),
           ),
         ),
         const SizedBox(height: 8),
@@ -1791,7 +1794,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
         ),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: const Color(0xFF133343),
+        backgroundColor: const Color(0xFF133341),
         foregroundColor: Colors.white,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -1814,7 +1817,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                           style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF133343),
+                            color: Color(0xFF133341),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -1864,7 +1867,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF133343),
+                          color: Color(0xFF133341),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -1919,7 +1922,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF133343),
+                color: Color(0xFF133341),
               ),
             ),
             const SizedBox(height: 24),
@@ -2002,7 +2005,7 @@ class _TicketDetailsScreenState extends State<TicketDetailsScreen> {
                               IconButton(
                                 icon: const Icon(
                                   Icons.download,
-                                  color: Color(0xFF133343),
+                                  color: Color(0xFF133341),
                                 ),
                                 onPressed: () => _downloadAttachment(fileId),
                                 tooltip: 'Download file',

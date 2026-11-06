@@ -8,5 +8,9 @@
 	<array>
 		<string>applinks:starlink.ardentnetworks.com.ph</string>
 	</array>
+	<!-- APNs (push notifications). "production" is required for TestFlight /
+	     App Store; Firebase's APNs .p8 key works for both environments. -->
+	<key>aps-environment</key>
+	<string>production</string>
 </dict>
 </plist>

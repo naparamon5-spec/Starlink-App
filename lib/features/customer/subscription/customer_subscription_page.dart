@@ -6,14 +6,14 @@ import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/customer/subscription/customer_subscription_detail_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _activeGreen = Color(0xFF00C48C);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _activeGreen = Color(0xFF10B981);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 /// Robust active-status resolver.
 bool _isActiveSub(Map<String, dynamic> sub) {
@@ -365,20 +365,13 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
                 title: const Text(
                   'Subscriptions',
                   style: TextStyle(
-                    color: _ink,
-                    fontSize: 16,
+                    color: Colors.white,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                   ),
                 ),
                 centerTitle: true,
-                backgroundColor: _surface,
-                elevation: 0,
-                iconTheme: const IconThemeData(color: _ink),
-                bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(1),
-                  child: Container(height: 1, color: _border),
-                ),
               )
               : null,
       body: RefreshIndicator(
@@ -546,7 +539,6 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
 
   // ── Stats banner ───────────────────────────────────────────────────────────
 
-
   Widget _buildError() => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
@@ -564,7 +556,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 13,
-            color: _inkSecondary,
+            color: Color(0xFFE90408),
             height: 1.5,
           ),
         ),
@@ -575,7 +567,10 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
           label: const Text('Try again'),
           style: TextButton.styleFrom(
             foregroundColor: _primary,
-            textStyle: const TextStyle(fontWeight: FontWeight.w600),
+            textStyle: const TextStyle(
+                fontFamily: 'Montserrat',
+                fontWeight: FontWeight.w600,
+              ),
           ),
         ),
       ],
@@ -837,7 +832,6 @@ class _SearchBar extends StatelessWidget {
   }
 }
 
-
 class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String message;
@@ -914,8 +908,8 @@ class _HighlightText extends StatelessWidget {
       );
       start = idx + query.length;
     }
-    return RichText(
-      text: TextSpan(style: style, children: spans),
+    return Text.rich(
+      TextSpan(style: style, children: spans),
       maxLines: maxLines,
       overflow: overflow ?? TextOverflow.clip,
     );

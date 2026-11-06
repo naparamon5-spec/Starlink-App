@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:starlink_app/services/api_service.dart';
 
@@ -7,14 +8,14 @@ const _bg = Color(0xFFF6F7F9);
 const _surface = Color(0xFFFFFFFF);
 const _heroTop = Color(0xFF0A1628);
 const _heroBot = Color(0xFF0D2444);
-const _accent = Color(0xFFEB1E23);
-const _accentBlue = Color(0xFF1A6FE8);
-const _paidGreen = Color(0xFF00C48C);
+const _accent = Color(0xFF133341);
+const _accentBlue = Color(0xFF3B82F6);
+const _paidGreen = Color(0xFF10B981);
 const _warningAmber = Color(0xFFF59E0B);
 const _inkDark = Color(0xFF0D1B2A);
 const _inkMid = Color(0xFF4A5568);
 const _inkLight = Color(0xFF9AA5B4);
-const _border = Color(0xFFEBEEF2);
+const _border = Color(0xFFD7D7D7);
 const _divider = Color(0xFFF0F4F8);
 
 class CustomerBillingDetailsPage extends StatefulWidget {
@@ -51,6 +52,7 @@ class _CustomerBillingDetailsPageState extends State<CustomerBillingDetailsPage>
   void initState() {
     super.initState();
     _animController = AnimationController(
+      value: 1.0,
       vsync: this,
       duration: const Duration(milliseconds: 650),
     );
@@ -123,7 +125,6 @@ class _CustomerBillingDetailsPageState extends State<CustomerBillingDetailsPage>
     }
   }
 
-
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   String _str(dynamic v) =>
@@ -162,7 +163,7 @@ class _CustomerBillingDetailsPageState extends State<CustomerBillingDetailsPage>
   String _fmtAmt(dynamic raw) {
     if (raw == null) return '0.00';
     final d = double.tryParse(raw.toString());
-    return d != null ? d.toStringAsFixed(2) : raw.toString();
+    return d != null ? NumberFormat('#,##0.00').format(d) : raw.toString();
   }
 
   double _parseAmt(dynamic raw) =>
@@ -562,12 +563,16 @@ class _HeroHeader extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Text(
-                      'CPO $cpoNumber',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.5),
-                        fontWeight: FontWeight.w500,
+                    Flexible(
+                      child: Text(
+                        'CPO $cpoNumber',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.5),
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
@@ -747,15 +752,18 @@ class _StatCard extends StatelessWidget {
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: color,
+          // Large amounts shrink to fit instead of being cut off.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 3),
           Text(

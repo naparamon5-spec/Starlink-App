@@ -13,7 +13,7 @@ class _AgentUserGuidePageState extends State<AgentUserGuidePage> {
   static const _sections = [
     _GuideSection(
       icon: Icons.dashboard_outlined,
-      color: Color(0xFF6366F1),
+      color: Color(0xFF3B82F6),
       title: 'Dashboard Overview',
       subtitle: 'Understand your performance metrics',
       steps: [
@@ -92,7 +92,7 @@ class _AgentUserGuidePageState extends State<AgentUserGuidePage> {
     ),
     _GuideSection(
       icon: Icons.subscriptions_outlined,
-      color: Color(0xFF6366F1),
+      color: Color(0xFF3B82F6),
       title: 'Subscriptions & Billing',
       subtitle: 'Monitor plans and invoices',
       steps: [
@@ -184,7 +184,7 @@ class _AgentUserGuidePageState extends State<AgentUserGuidePage> {
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: const Color(0xFF6366F1).withOpacity(0.25),
+                color: const Color(0xFF3B82F6).withOpacity(0.25),
               ),
             ),
             child: Row(
@@ -193,15 +193,15 @@ class _AgentUserGuidePageState extends State<AgentUserGuidePage> {
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withOpacity(0.15),
+                    color: const Color(0xFF3B82F6).withOpacity(0.15),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: const Color(0xFF6366F1).withOpacity(0.3),
+                      color: const Color(0xFF3B82F6).withOpacity(0.3),
                     ),
                   ),
                   child: const Icon(
                     Icons.menu_book_outlined,
-                    color: Color(0xFF6366F1),
+                    color: Color(0xFF3B82F6),
                     size: 26,
                   ),
                 ),

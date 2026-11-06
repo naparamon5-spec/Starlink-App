@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Add internet permission -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+ runtime permission for push notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Legacy storage permissions, scoped to the OS versions that need them.
          Android 10+ writes to the public Downloads folder without any permission,
          so these do not apply on modern devices. MANAGE_EXTERNAL_STORAGE ("All
@@ -64,6 +66,15 @@
         <meta-data
             android:name="flutter_deeplinking_enabled"
             android:value="false" />
+
+        <!-- FCM: default channel + icon for notifications delivered while the
+             app is in the background (must match push_service.dart). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="starlink_notifications" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
 
         <meta-data
             android:name="flutterEmbedding"

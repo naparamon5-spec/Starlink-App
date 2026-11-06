@@ -20,7 +20,7 @@ class CustomerDetailsScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 72, 24, 48),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF133343), Color(0xFF1E4B5F)],
+                  colors: [Color(0xFF133341), Color(0xFF1E4B5F)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -173,7 +173,7 @@ class CustomerDetailsScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF133343),
+                      color: Color(0xFF133341),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -233,10 +233,10 @@ class CustomerDetailsScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF133343).withOpacity(0.1),
+              color: const Color(0xFF133341).withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: const Color(0xFF133343), size: 24),
+            child: Icon(icon, color: const Color(0xFF133341), size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -253,7 +253,7 @@ class CustomerDetailsScreen extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF133343),
+                    color: Color(0xFF133341),
                   ),
                 ),
               ],

@@ -8,10 +8,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:starlink_app/core/config/ssl_config.dart';
 import 'package:starlink_app/main.dart';
+import 'package:starlink_app/services/push_service.dart';
+import 'package:starlink_app/shared/widgets/whats_new_dialog.dart';
 
 class ApiService {
   static String get baseUrl =>
-      '${dotenv.env['API_BASE_URL'] /* ?? 'https://starlink-api.ardentnetworks.com.ph/api' */}';
+      '${dotenv.env['API_BASE_URL'] /* ?? 'https://startlink-sandbox-api.ardentnetworks.com.ph/api' */}';
   static bool _isRefreshingToken = false;
 
   static http.Client get _client {
@@ -633,47 +635,71 @@ class ApiService {
     }
   }
 
-  static Future<dynamic> verifyOtp(String email, String otp) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/v1/auth/verify-otp'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'otp': otp}),
-    );
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
-      _injectRefreshToken(response, decoded);
-      return decoded;
-    }
-    throw Exception('Failed to verify OTP');
-  }
-
-  static Future<Map<String, dynamic>> resendOtp(
-    Map<String, dynamic> payload,
+  /// Second sign-in step: checks the 6-digit code from the user's
+  /// authenticator app (Google / Microsoft Authenticator) for the login that
+  /// just passed the password step. When the login returned `setupRequired`,
+  /// a correct code also finishes linking the authenticator.
+  ///
+  /// Returns the decoded body with `ok: true` (tokens in `data`), or
+  /// `{ok: false, message}` with the backend's reason.
+  static Future<Map<String, dynamic>> verifyOtp(
+    String email,
+    String otp,
   ) async {
     try {
       final response = await _client
           .post(
-            Uri.parse('$baseUrl/v1/auth/resend-otp'),
+            Uri.parse('$baseUrl/v1/auth/verify-otp'),
             headers: {'Content-Type': 'application/json'},
-            body: json.encode(payload),
+            body: jsonEncode({'email': email, 'otp': otp}),
           )
           .timeout(const Duration(seconds: 15));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') return data;
-        return {
-          'status': 'error',
-          'message': data['message'] ?? 'Failed to resend OTP',
-        };
+      dynamic decoded;
+      try {
+        decoded = jsonDecode(response.body);
+      } catch (_) {
+        decoded = null;
       }
+      if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
+        _injectRefreshToken(response, decoded);
+        return {...decoded, 'ok': true};
+      }
+      final msg = decoded is Map ? decoded['message']?.toString() : null;
       return {
-        'status': 'error',
-        'message': 'Server error: ${response.statusCode}',
+        'ok': false,
+        'statusCode': response.statusCode,
+        'message':
+            (msg != null && msg.isNotEmpty)
+                ? msg
+                : 'Invalid code. Please try again.',
       };
-    } catch (e) {
-      return {'status': 'error', 'message': 'Failed to resend OTP: $e'};
+    } catch (_) {
+      return {
+        'ok': false,
+        'message':
+            'Cannot reach the server. Check your connection and try again.',
+      };
     }
   }
+
+  // ─── Two-factor authentication (authenticator app / TOTP) ────────────────
+
+  /// `{enabled, required}` for the signed-in user.
+  static Future<Map<String, dynamic>> getTwoFactorStatus() =>
+      _authorizedGet('/v1/auth/2fa/status');
+
+  /// Starts linking an authenticator app. `data` holds `otpauthUrl`, `secret`,
+  /// `issuer` and `account`. 2FA isn't on until [confirmTwoFactorSetup].
+  static Future<Map<String, dynamic>> startTwoFactorSetup() =>
+      _authorizedWrite('POST', '/v1/auth/2fa/setup');
+
+  /// Confirms setup with a code from the app and turns 2FA on.
+  static Future<Map<String, dynamic>> confirmTwoFactorSetup(String code) =>
+      _authorizedWrite('POST', '/v1/auth/2fa/verify', body: {'code': code});
+
+  /// Turns 2FA off (needs a current code). Refused for roles where it's required.
+  static Future<Map<String, dynamic>> disableTwoFactor(String code) =>
+      _authorizedWrite('POST', '/v1/auth/2fa/disable', body: {'code': code});
 
   static Future<Map<String, dynamic>> forgotPassword(String email) async {
     try {
@@ -1921,6 +1947,42 @@ class ApiService {
     );
   }
 
+  // ─── Announcements (notification feed) ─────────────────────────────────────
+
+  /// Backend: GET /v1/announcements/feed — live announcements for my role,
+  /// each with `read`. Fields: id, title, body, category, audience, pinned,
+  /// starts_at, ends_at, created_at, updated_at.
+  static Future<Map<String, dynamic>> getAnnouncementFeed() async {
+    final res = await _authorizedGet('/v1/announcements/feed');
+    if (res['status'] != 'success') return res;
+    final data = res['data'];
+    return {
+      'status': 'success',
+      'data':
+          data is List
+              ? data
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+              : <Map<String, dynamic>>[],
+    };
+  }
+
+  /// Backend: POST /v1/announcements/read { ids } (max 100 per call).
+  static Future<Map<String, dynamic>> markAnnouncementsRead(List<int> ids) {
+    if (ids.isEmpty) {
+      return Future.value({
+        'status': 'success',
+        'data': {'marked': []},
+      });
+    }
+    return _authorizedWrite(
+      'POST',
+      '/v1/announcements/read',
+      body: {'ids': ids.take(100).toList()},
+    );
+  }
+
   static Future<Map<String, dynamic>> getTicketAttachments(
     String ticketId,
   ) async {
@@ -2556,6 +2618,9 @@ class ApiService {
 
   static Future<Map<String, dynamic>> logout() async {
     try {
+      // Stop pushes to this phone; needs the access token, so do it first.
+      await PushService.instance.unregisterFromBackend();
+      WhatsNew.reset();
       final accessToken = await getAccessToken();
       // The backend revokes the session named by the refreshToken cookie.
       final refresh = await getRefreshToken();
@@ -2749,6 +2814,183 @@ class ApiService {
       };
     }
   }
+
+  // ─── Web portal parity (ardent_starlink_api routes used by the website) ───
+  // Each returns the usual {status, message, data} map.
+
+  static String _seg(String v) => Uri.encodeComponent(v);
+
+  // End users
+  static Future<Map<String, dynamic>> renameEndUser(String id, String name) =>
+      _authorizedWrite(
+        'PUT',
+        '/v1/end-user/name/${_seg(id)}',
+        body: {'eu_name': name},
+      );
+  static Future<Map<String, dynamic>> activateEndUser(String id) =>
+      _authorizedWrite('PUT', '/v1/end-user/activate/${_seg(id)}');
+  static Future<Map<String, dynamic>> deactivateEndUser(String id) =>
+      _authorizedWrite('PUT', '/v1/end-user/deactivate/${_seg(id)}');
+  static Future<Map<String, dynamic>> getEndUsersByCustomer(String code) =>
+      _authorizedGet('/v1/end-user/customer/${_seg(code)}');
+
+  // Account limits (admins, agents): {code, limit, isDefault, used}
+  static Future<Map<String, dynamic>> getAccountLimit(String code) =>
+      _authorizedGet('/v1/account-limits/${_seg(code)}');
+  static Future<Map<String, dynamic>> setAccountLimit(
+    String code,
+    int? maxUsers,
+  ) => _authorizedWrite(
+    'PUT',
+    '/v1/account-limits/${_seg(code)}',
+    body: {'max_users': maxUsers},
+  );
+
+  // Subscriptions
+  static Future<Map<String, dynamic>> updateSubscriptionEndDate(
+    String serviceLineNumber,
+    String endDate,
+  ) => _authorizedWrite(
+    'PUT',
+    '/v1/subscriptions/end-date/${_seg(serviceLineNumber)}',
+    body: {'endDate': endDate},
+  );
+  static Future<Map<String, dynamic>> unlinkSubscription(
+    String serviceLineNumber,
+  ) => _authorizedWrite(
+    'PUT',
+    '/v1/subscriptions/unlink/${_seg(serviceLineNumber)}',
+  );
+
+  /// Links service lines to a customer; each item {serviceLineNumber, eu_code}.
+  static Future<Map<String, dynamic>> linkSubscriptions(
+    String customerCode,
+    List<Map<String, dynamic>> data,
+  ) => _authorizedWrite(
+    'PUT',
+    '/v1/subscriptions/link/${_seg(customerCode)}',
+    body: {'data': data},
+  );
+  static Future<Map<String, dynamic>> getUnlinkedSubscriptions({
+    int page = 1,
+    int limit = 20,
+    String search = '',
+  }) => _authorizedGet(
+    '/v1/subscriptions/none/customer',
+    queryParameters: {
+      'page': '$page',
+      'limit': '$limit',
+      if (search.isNotEmpty) 'search': search,
+    },
+  );
+  static Future<Map<String, dynamic>> searchSubscriptions(
+    String search, {
+    int limit = 10,
+  }) => _authorizedGet(
+    '/v1/subscriptions/paginated',
+    queryParameters: {'page': '1', 'limit': '$limit', 'search': search},
+  );
+  static Future<Map<String, dynamic>> moveKit(
+    String serviceLineNumber,
+    String kitNumber,
+    String toServiceLine,
+  ) => _authorizedWrite(
+    'PUT',
+    '/v1/subscriptions/${_seg(serviceLineNumber)}/kits/${_seg(kitNumber)}',
+    body: {'serviceLineNumber': toServiceLine},
+  );
+  static Future<Map<String, dynamic>> removeKit(
+    String serviceLineNumber,
+    String kitNumber,
+  ) => _authorizedWrite(
+    'DELETE',
+    '/v1/subscriptions/${_seg(serviceLineNumber)}/kits/${_seg(kitNumber)}',
+  );
+
+  // Starlink router (admin, agent, engineer)
+  static Future<Map<String, dynamic>> getRouterConfig(String routerId) =>
+      _authorizedGet(
+        '/v1/starlink/routers/${_seg(routerId)}',
+        timeout: const Duration(seconds: 40),
+      );
+
+  /// changes: [{network, bss, ssid?, password?}];
+  /// settings: {band2ghz?, band5ghz?, bypassMode?}
+  static Future<Map<String, dynamic>> updateRouterWifi(
+    String routerId,
+    List<Map<String, dynamic>> changes,
+    Map<String, bool> settings,
+  ) => _authorizedWrite(
+    'PUT',
+    '/v1/starlink/routers/${_seg(routerId)}/wifi',
+    body: {'changes': changes, 'settings': settings},
+    timeout: const Duration(seconds: 60),
+  );
+  static Future<Map<String, dynamic>> rebootRouter(String routerId) =>
+      _authorizedWrite(
+        'POST',
+        '/v1/starlink/routers/${_seg(routerId)}/reboot',
+        timeout: const Duration(seconds: 40),
+      );
+
+  // Usage reports (admins, agents) — current billing cycle
+  static Future<Map<String, dynamic>> getUsageSummary() =>
+      _authorizedGet('/v1/usage/summary', timeout: const Duration(seconds: 60));
+  static Future<Map<String, dynamic>> getUsageDaily({
+    String? serviceLineNumber,
+  }) => _authorizedGet(
+    '/v1/usage/daily',
+    queryParameters: {
+      if (serviceLineNumber != null) 'serviceLineNumber': serviceLineNumber,
+    },
+    timeout: const Duration(seconds: 60),
+  );
+
+  // Report builder (admins, agents)
+  static Future<Map<String, dynamic>> getReportSources() =>
+      _authorizedGet('/v1/reports/sources');
+  static Future<Map<String, dynamic>> runReport(Map<String, dynamic> request) =>
+      _authorizedWrite(
+        'POST',
+        '/v1/reports/run',
+        body: request,
+        timeout: const Duration(seconds: 90),
+      );
+
+  // Announcements management (admins, agents)
+  static Future<Map<String, dynamic>> getAnnouncements() =>
+      _authorizedGet('/v1/announcements');
+  static Future<Map<String, dynamic>> createAnnouncement(
+    Map<String, dynamic> body,
+  ) => _authorizedWrite('POST', '/v1/announcements', body: body);
+  static Future<Map<String, dynamic>> updateAnnouncement(
+    int id,
+    Map<String, dynamic> body,
+  ) => _authorizedWrite('PUT', '/v1/announcements/$id', body: body);
+  static Future<Map<String, dynamic>> deleteAnnouncement(int id) =>
+      _authorizedWrite('DELETE', '/v1/announcements/$id');
+
+  // Billing import (admins, billers): rows are header->value maps from the
+  // sheet; dryRun only reports what saving would do.
+  static Future<Map<String, dynamic>> importBilling(
+    List<Map<String, dynamic>> rows, {
+    required bool dryRun,
+  }) => _authorizedWrite(
+    'POST',
+    '/v1/billing/import',
+    body: {'rows': rows, 'dryRun': dryRun},
+    timeout: const Duration(seconds: 120),
+  );
+
+  // Admin sets a user's password directly
+  static Future<Map<String, dynamic>> setUserPassword(
+    String id,
+    String password,
+  ) => _authorizedWrite(
+    'PUT',
+    '/v1/auth/user/set-password/${_seg(id)}',
+    body: {'password': password},
+  );
 }
 
 class TimeoutException implements Exception {

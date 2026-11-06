@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/collapsible_list.dart';
 import 'package:starlink_app/shared/widgets/resolve_remarks_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/core/utils/file_download/file_downloader.dart';
@@ -24,6 +25,12 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   String? _error;
   bool _isActionLoading = false;
   bool _isCommentPosting = false;
+  bool _timelineShowAll = false;
+  bool _commentsShowAll = false;
+  bool _timelineCollapsed = false;
+  bool _commentsCollapsed = false;
+  bool _attachShowAll = false;
+  bool _attachCollapsed = false;
 
   Map<String, dynamic>? _ticket;
   List<dynamic> _activities = [];
@@ -35,7 +42,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
 
   final Map<String, bool> _downloadingMap = {};
 
-  static const _brandRed = Color(0xFFEB1E23);
+  static const _brandRed = Color(0xFF133341);
 
   @override
   void initState() {
@@ -562,7 +569,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   Color _statusColor(String s) {
     final v = s.toLowerCase();
     if (v.contains('open')) return const Color(0xFF64748B);
-    if (v.contains('progress')) return const Color(0xFF0F62FE);
+    if (v.contains('progress')) return const Color(0xFF3B82F6);
     if (v.contains('resolved')) return const Color(0xFF10B981);
     if (v.contains('closed')) return const Color(0xFFF59E0B);
     return const Color(0xFF94A3B8);
@@ -571,7 +578,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   Color _priorityColor(String p) {
     final v = p.toLowerCase();
     if (v.contains('high') || v.contains('urgent')) {
-      return const Color(0xFFEB1E23);
+      return const Color(0xFF133341);
     }
     if (v.contains('medium') || v.contains('normal')) {
       return const Color(0xFFF59E0B);
@@ -599,7 +606,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     if (v.contains('resolv')) return const Color(0xFF10B981);
     if (v.contains('close')) return const Color(0xFFF59E0B);
     if (v.contains('comment') || v.contains('note')) {
-      return const Color(0xFF6366F1);
+      return const Color(0xFF3B82F6);
     }
     if (v.contains('assign')) return _brandRed;
     return const Color(0xFF94A3B8);
@@ -719,9 +726,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                     backgroundColor: const Color(0xFF10B981),
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   icon:
@@ -756,9 +761,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                       color: Color(0xFF10B981),
                       width: 1.2,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   icon: const Icon(Icons.verified_outlined),
@@ -779,9 +782,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                     backgroundColor: const Color.fromARGB(255, 240, 136, 67),
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   icon: const Icon(Icons.lock_outline_rounded),
@@ -810,10 +811,6 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF000000),
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -822,14 +819,14 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF000000),
+                color: Colors.white,
               ),
             ),
             Text(
               'Ticket #${widget.ticketId}',
-              style: const TextStyle(fontSize: 11, color: Color(0xFF8A96A3)),
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
             ),
           ],
         ),
@@ -839,10 +836,6 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
         //     onPressed: _loading ? null : _load,
         //   ),
         // ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: const Color(0xFFE8ECF0)),
-        ),
       ),
       bottomNavigationBar:
           (_ticket != null && !_loading) ? _buildActionBar() : null,
@@ -914,7 +907,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               _error!,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Color(0xFF000000),
+                color: Color(0xFFE90408),
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
@@ -925,9 +918,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: _brandRed,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: const StadiumBorder(),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 12,
@@ -1019,7 +1010,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                     icon: Icons.label_outline_rounded,
                     label: 'Type',
                     value: ticketType,
-                    color: const Color(0xFF6366F1),
+                    color: const Color(0xFF3B82F6),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1099,208 +1090,221 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.attach_file_rounded,
-                    color: Color(0xFFF59E0B),
-                    size: 17,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                const Text(
-                  'Attachments',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF000000),
-                  ),
-                ),
-                const Spacer(),
-                if (_attachments.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF59E0B).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${_attachments.length}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFF59E0B),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const _HDivider(),
-          if (_attachmentsError != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: _ErrorCard(message: _attachmentsError!),
-            )
-          else if (_attachments.isEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+          InkWell(
+            onTap: () => setState(() => _attachCollapsed = !_attachCollapsed),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    color: Color(0xFF8A96A3),
-                    size: 16,
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.attach_file_rounded,
+                      color: Color(0xFFF59E0B),
+                      size: 17,
+                    ),
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    'No attachments',
-                    style: TextStyle(color: Color(0xFF8A96A3), fontSize: 13),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Attachments',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF000000),
+                    ),
                   ),
+                  const Spacer(),
+                  if (_attachments.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${_attachments.length}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFF59E0B),
+                        ),
+                      ),
+                    ),
+                  CollapseArrow(collapsed: _attachCollapsed),
                 ],
               ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              itemCount: _attachments.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (_, i) {
-                final att = _attachments[i];
-                final attachmentId =
+            ),
+          ),
+          if (!_attachCollapsed) ...[
+            const _HDivider(),
+            if (_attachmentsError != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: _ErrorCard(message: _attachmentsError!),
+              )
+            else if (_attachments.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: Color(0xFF8A96A3),
+                      size: 16,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'No attachments',
+                      style: TextStyle(color: Color(0xFF8A96A3), fontSize: 13),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                itemCount: visibleCount(_attachments.length, _attachShowAll),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) {
+                  final att = _attachments[i];
+                  final attachmentId =
+                      att is Map
+                          ? _str(
+                            att['id'] ??
+                                att['attachment_id'] ??
+                                att['attachmentId'],
+                          )
+                          : '—';
+                  final name = _str(
                     att is Map
-                        ? _str(
-                          att['id'] ??
-                              att['attachment_id'] ??
-                              att['attachmentId'],
-                        )
-                        : '—';
-                final name = _str(
-                  att is Map
-                      ? (att['original_name'] ??
-                          att['name'] ??
-                          att['filename'] ??
-                          att['file_name'])
-                      : att,
-                );
-                String size = '—';
-                if (att is Map && att['size'] != null) {
-                  try {
-                    final bytes = double.parse(att['size'].toString());
-                    size = '${(bytes / 1024).toStringAsFixed(1)} KB';
-                  } catch (_) {
-                    size = _str(att['size']);
+                        ? (att['original_name'] ??
+                            att['name'] ??
+                            att['filename'] ??
+                            att['file_name'])
+                        : att,
+                  );
+                  String size = '—';
+                  if (att is Map && att['size'] != null) {
+                    try {
+                      final bytes = double.parse(att['size'].toString());
+                      size = '${(bytes / 1024).toStringAsFixed(1)} KB';
+                    } catch (_) {
+                      size = _str(att['size']);
+                    }
+                  } else if (att is Map && att['file_size'] != null) {
+                    try {
+                      final bytes = double.parse(att['file_size'].toString());
+                      size = '${(bytes / 1024).toStringAsFixed(1)} KB';
+                    } catch (_) {
+                      size = _str(att['file_size']);
+                    }
                   }
-                } else if (att is Map && att['file_size'] != null) {
-                  try {
-                    final bytes = double.parse(att['file_size'].toString());
-                    size = '${(bytes / 1024).toStringAsFixed(1)} KB';
-                  } catch (_) {
-                    size = _str(att['file_size']);
-                  }
-                }
-                final type =
-                    att is Map
-                        ? _str(
-                          att['type'] ?? att['mime_type'] ?? att['file_type'],
-                        )
-                        : '—';
-                final ext =
-                    name.contains('.')
-                        ? name.split('.').last.toLowerCase()
-                        : '';
-                final isDownloading = _downloadingMap[attachmentId] == true;
+                  final type =
+                      att is Map
+                          ? _str(
+                            att['type'] ?? att['mime_type'] ?? att['file_type'],
+                          )
+                          : '—';
+                  final ext =
+                      name.contains('.')
+                          ? name.split('.').last.toLowerCase()
+                          : '';
+                  final isDownloading = _downloadingMap[attachmentId] == true;
 
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: _extColor(ext).withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Center(
-                          child: Text(
-                            ext.isNotEmpty
-                                ? ext.toUpperCase().substring(
-                                  0,
-                                  ext.length > 4 ? 4 : ext.length,
-                                )
-                                : 'FILE',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: _extColor(ext),
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: _extColor(ext).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Text(
+                              ext.isNotEmpty
+                                  ? ext.toUpperCase().substring(
+                                    0,
+                                    ext.length > 4 ? 4 : ext.length,
+                                  )
+                                  : 'FILE',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: _extColor(ext),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF000000),
-                              ),
-                            ),
-                            if (size != '—' || type != '—')
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                [
-                                  if (type != '—') type,
-                                  if (size != '—') size,
-                                ].join(' · '),
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFF8A96A3),
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF000000),
                                 ),
                               ),
-                          ],
+                              if (size != '—' || type != '—')
+                                Text(
+                                  [
+                                    if (type != '—') type,
+                                    if (size != '—') size,
+                                  ].join(' · '),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF8A96A3),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      _AttachmentDownloadButton(
-                        isDownloading: isDownloading,
-                        hasId: attachmentId != '—',
-                        brandRed: _brandRed,
-                        onTap: () => _downloadAttachment(att),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                        const SizedBox(width: 8),
+                        _AttachmentDownloadButton(
+                          isDownloading: isDownloading,
+                          hasId: attachmentId != '—',
+                          brandRed: _brandRed,
+                          onTap: () => _downloadAttachment(att),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            if (true)
+              ViewAllButton(
+                total: _attachments.length,
+                showAll: _attachShowAll,
+                noun: 'attachments',
+                onTap: () => setState(() => _attachShowAll = !_attachShowAll),
+              ),
+          ],
         ],
       ),
     );
@@ -1309,7 +1313,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   Color _extColor(String ext) {
     switch (ext) {
       case 'pdf':
-        return const Color(0xFFEB1E23);
+        return const Color(0xFF133341);
       case 'png':
       case 'jpg':
       case 'jpeg':
@@ -1318,7 +1322,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
         return const Color(0xFF10B981);
       case 'doc':
       case 'docx':
-        return const Color(0xFF0F62FE);
+        return const Color(0xFF3B82F6);
       case 'xls':
       case 'xlsx':
         return const Color(0xFF10B981);
@@ -1326,7 +1330,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
       case 'rar':
         return const Color(0xFFF59E0B);
       default:
-        return const Color(0xFF6366F1);
+        return const Color(0xFF3B82F6);
     }
   }
 
@@ -1335,171 +1339,187 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   Widget _buildActivitiesCard() {
     final timelineItems =
         _activities.where((a) => !_isCommentActivity(a)).toList();
+    final shownTimeline = visibleNewestFirst(timelineItems, _timelineShowAll);
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: _brandRed.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.timeline_rounded,
-                    color: _brandRed,
-                    size: 17,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                const Text(
-                  'Activity Timeline',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF000000),
-                  ),
-                ),
-                const Spacer(),
-                if (timelineItems.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _brandRed.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${timelineItems.length}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _brandRed,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const _HDivider(),
-          if (_activitiesError != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: _ErrorCard(message: _activitiesError!),
-            )
-          else if (timelineItems.isEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+          InkWell(
+            onTap:
+                () => setState(() => _timelineCollapsed = !_timelineCollapsed),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    color: Color(0xFF8A96A3),
-                    size: 16,
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: _brandRed.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.timeline_rounded,
+                      color: _brandRed,
+                      size: 17,
+                    ),
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    'No activity yet',
-                    style: TextStyle(color: Color(0xFF8A96A3), fontSize: 13),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Activity Timeline',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF000000),
+                    ),
                   ),
+                  const Spacer(),
+                  if (timelineItems.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _brandRed.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${timelineItems.length}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _brandRed,
+                        ),
+                      ),
+                    ),
+                  CollapseArrow(collapsed: _timelineCollapsed),
                 ],
               ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
-                children: List.generate(timelineItems.length, (i) {
-                  final act = timelineItems[i];
-                  final isLast = i == timelineItems.length - 1;
-
-                  String field(List<String> keys) {
-                    if (act is! Map) return '—';
-                    for (final k in keys) {
-                      final v = act[k];
-                      if (v != null &&
-                          v.toString().isNotEmpty &&
-                          v.toString() != 'null') {
-                        return v.toString();
-                      }
-                    }
-                    return '—';
-                  }
-
-                  // Activities API uses: { date, comment, name, status }
-                  // Ticket timeline API uses: { action, user_name, new_value, ... }
-                  final rawStatus = field(['status']);
-                  final action =
-                      rawStatus != '—' && rawStatus.isNotEmpty
-                          ? _normalizeStatus(rawStatus)
-                          : field(['action', 'type', 'event', 'title']) != '—'
-                          ? field(['action', 'type', 'event', 'title'])
-                          : 'COMMENT';
-
-                  final description = field([
-                    'comment', // activities API key
-                    'description',
-                    'message',
-                    'note',
-                    'content',
-                    'details',
-                    'body',
-                    'remarks',
-                    'new_value',
-                  ]);
-
-                  final performedBy = field([
-                    'name', // activities API key
-                    'user_name',
-                    'performed_by',
-                    'user',
-                    'created_by',
-                    'actor',
-                    'performed_by_name',
-                    'username',
-                    'agent',
-                    'agent_name',
-                  ]);
-                  final timestamp =
-                      act is Map
-                          ? (act['created_at'] ??
-                                  act['timestamp'] ??
-                                  act['performed_at'] ??
-                                  act['updated_at'] ??
-                                  act['date'])
-                              ?.toString()
-                          : null;
-
-                  final color = _activityColor(action);
-                  final icon = _activityIcon(action);
-
-                  return _TimelineRow(
-                    icon: icon,
-                    color: color,
-                    isLast: isLast,
-                    action: action,
-                    description:
-                        (description != '—' && description.isNotEmpty)
-                            ? description
-                            : null,
-                    performedBy:
-                        (performedBy != '—' && performedBy.isNotEmpty)
-                            ? performedBy
-                            : null,
-                    formattedDate:
-                        timestamp != null ? _formatDate(timestamp) : null,
-                    timeAgo: _timeAgo(timestamp),
-                  );
-                }),
-              ),
             ),
+          ),
+          if (!_timelineCollapsed) ...[
+            const _HDivider(),
+            if (_activitiesError != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: _ErrorCard(message: _activitiesError!),
+              )
+            else if (timelineItems.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: Color(0xFF8A96A3),
+                      size: 16,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'No activity yet',
+                      style: TextStyle(color: Color(0xFF8A96A3), fontSize: 13),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  children: List.generate(shownTimeline.length, (i) {
+                    final act = shownTimeline[i];
+                    final isLast = i == shownTimeline.length - 1;
+
+                    String field(List<String> keys) {
+                      if (act is! Map) return '—';
+                      for (final k in keys) {
+                        final v = act[k];
+                        if (v != null &&
+                            v.toString().isNotEmpty &&
+                            v.toString() != 'null') {
+                          return v.toString();
+                        }
+                      }
+                      return '—';
+                    }
+
+                    // Activities API uses: { date, comment, name, status }
+                    // Ticket timeline API uses: { action, user_name, new_value, ... }
+                    final rawStatus = field(['status']);
+                    final action =
+                        rawStatus != '—' && rawStatus.isNotEmpty
+                            ? _normalizeStatus(rawStatus)
+                            : field(['action', 'type', 'event', 'title']) != '—'
+                            ? field(['action', 'type', 'event', 'title'])
+                            : 'COMMENT';
+
+                    final description = field([
+                      'comment', // activities API key
+                      'description',
+                      'message',
+                      'note',
+                      'content',
+                      'details',
+                      'body',
+                      'remarks',
+                      'new_value',
+                    ]);
+
+                    final performedBy = field([
+                      'name', // activities API key
+                      'user_name',
+                      'performed_by',
+                      'user',
+                      'created_by',
+                      'actor',
+                      'performed_by_name',
+                      'username',
+                      'agent',
+                      'agent_name',
+                    ]);
+                    final timestamp =
+                        act is Map
+                            ? (act['created_at'] ??
+                                    act['timestamp'] ??
+                                    act['performed_at'] ??
+                                    act['updated_at'] ??
+                                    act['date'])
+                                ?.toString()
+                            : null;
+
+                    final color = _activityColor(action);
+                    final icon = _activityIcon(action);
+
+                    return _TimelineRow(
+                      icon: icon,
+                      color: color,
+                      isLast: isLast,
+                      action: action,
+                      description:
+                          (description != '—' && description.isNotEmpty)
+                              ? description
+                              : null,
+                      performedBy:
+                          (performedBy != '—' && performedBy.isNotEmpty)
+                              ? performedBy
+                              : null,
+                      formattedDate:
+                          timestamp != null ? _formatDate(timestamp) : null,
+                      timeAgo: _timeAgo(timestamp),
+                    );
+                  }),
+                ),
+              ),
+            if (_activitiesError == null)
+              ViewAllButton(
+                total: timelineItems.length,
+                showAll: _timelineShowAll,
+                noun: 'activities',
+                onTap:
+                    () => setState(() => _timelineShowAll = !_timelineShowAll),
+              ),
+          ],
         ],
       ),
     );
@@ -1508,202 +1528,220 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   Widget _buildCommentsCard() {
     final canComment = _currentStatus == 'IN PROGRESS';
     final commentItems = _activities.where(_isCommentActivity).toList();
+    final shownComments = visibleNewestFirst(commentItems, _commentsShowAll);
 
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.comment_outlined,
-                    color: Color(0xFF6366F1),
-                    size: 17,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                const Text(
-                  'Comments',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF000000),
-                  ),
-                ),
-                const Spacer(),
-                if (canComment)
-                  InkWell(
-                    onTap:
-                        (_isCommentPosting || _loading)
-                            ? null
-                            : _showAddCommentDialog,
-                    borderRadius: BorderRadius.circular(999),
-                    child: Ink(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _brandRed.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: _brandRed.withOpacity(0.18)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _isCommentPosting
-                              ? SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    _brandRed,
-                                  ),
-                                ),
-                              )
-                              : Icon(
-                                Icons.add_comment_outlined,
-                                color: _brandRed,
-                                size: 18,
-                              ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Add',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              color: _brandRed,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (commentItems.isNotEmpty) ...[
-                  const SizedBox(width: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6366F1).withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${commentItems.length}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF6366F1),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const _HDivider(),
-          if (_activitiesError != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: _ErrorCard(message: _activitiesError!),
-            )
-          else if (commentItems.isEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+          InkWell(
+            onTap:
+                () => setState(() => _commentsCollapsed = !_commentsCollapsed),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    color: Color(0xFF8A96A3),
-                    size: 16,
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6).withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.comment_outlined,
+                      color: Color(0xFF3B82F6),
+                      size: 17,
+                    ),
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    'No comments yet',
-                    style: TextStyle(color: Color(0xFF8A96A3), fontSize: 13),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Comments',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF000000),
+                    ),
                   ),
+                  const Spacer(),
+                  if (canComment)
+                    InkWell(
+                      onTap:
+                          (_isCommentPosting || _loading)
+                              ? null
+                              : _showAddCommentDialog,
+                      borderRadius: BorderRadius.circular(999),
+                      child: Ink(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _brandRed.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: _brandRed.withOpacity(0.18),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _isCommentPosting
+                                ? SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      _brandRed,
+                                    ),
+                                  ),
+                                )
+                                : Icon(
+                                  Icons.add_comment_outlined,
+                                  color: _brandRed,
+                                  size: 18,
+                                ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Add',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                color: _brandRed,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (commentItems.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withOpacity(0.10),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${commentItems.length}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF3B82F6),
+                        ),
+                      ),
+                    ),
+                  ],
+                  CollapseArrow(collapsed: _commentsCollapsed),
                 ],
               ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
-                children: List.generate(commentItems.length, (i) {
-                  final act = commentItems[i];
-                  final isLast = i == commentItems.length - 1;
-                  if (act is! Map) return const SizedBox.shrink();
-
-                  String field(List<String> keys) {
-                    for (final k in keys) {
-                      final v = act[k];
-                      if (v != null &&
-                          v.toString().isNotEmpty &&
-                          v.toString() != 'null') {
-                        return v.toString();
-                      }
-                    }
-                    return '—';
-                  }
-
-                  final comment = field([
-                    'comment',
-                    'message',
-                    'note',
-                    'remarks',
-                    'body',
-                    'content',
-                    'details',
-                    'description',
-                    'new_value',
-                  ]);
-                  final by = field([
-                    'name',
-                    'user_name',
-                    'performed_by',
-                    'user',
-                    'created_by',
-                    'actor',
-                    'performed_by_name',
-                    'username',
-                    'agent',
-                    'agent_name',
-                  ]);
-                  final timestamp =
-                      (act['created_at'] ??
-                              act['timestamp'] ??
-                              act['performed_at'] ??
-                              act['updated_at'] ??
-                              act['date'])
-                          ?.toString();
-
-                  return _TimelineRow(
-                    icon: Icons.comment_outlined,
-                    color: const Color(0xFF6366F1),
-                    isLast: isLast,
-                    action: by != '—' && by.isNotEmpty ? by : 'Unknown',
-                    description: comment != '—' ? comment : null,
-                    performedBy: null,
-                    formattedDate:
-                        timestamp != null ? _formatDate(timestamp) : null,
-                    timeAgo: _timeAgo(timestamp),
-                  );
-                }),
-              ),
             ),
+          ),
+          if (!_commentsCollapsed) ...[
+            const _HDivider(),
+            if (_activitiesError != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: _ErrorCard(message: _activitiesError!),
+              )
+            else if (commentItems.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: Color(0xFF8A96A3),
+                      size: 16,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'No comments yet',
+                      style: TextStyle(color: Color(0xFF8A96A3), fontSize: 13),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  children: List.generate(shownComments.length, (i) {
+                    final act = shownComments[i];
+                    final isLast = i == shownComments.length - 1;
+                    if (act is! Map) return const SizedBox.shrink();
+
+                    String field(List<String> keys) {
+                      for (final k in keys) {
+                        final v = act[k];
+                        if (v != null &&
+                            v.toString().isNotEmpty &&
+                            v.toString() != 'null') {
+                          return v.toString();
+                        }
+                      }
+                      return '—';
+                    }
+
+                    final comment = field([
+                      'comment',
+                      'message',
+                      'note',
+                      'remarks',
+                      'body',
+                      'content',
+                      'details',
+                      'description',
+                      'new_value',
+                    ]);
+                    final by = field([
+                      'name',
+                      'user_name',
+                      'performed_by',
+                      'user',
+                      'created_by',
+                      'actor',
+                      'performed_by_name',
+                      'username',
+                      'agent',
+                      'agent_name',
+                    ]);
+                    final timestamp =
+                        (act['created_at'] ??
+                                act['timestamp'] ??
+                                act['performed_at'] ??
+                                act['updated_at'] ??
+                                act['date'])
+                            ?.toString();
+
+                    return _TimelineRow(
+                      icon: Icons.comment_outlined,
+                      color: const Color(0xFF3B82F6),
+                      isLast: isLast,
+                      action: by != '—' && by.isNotEmpty ? by : 'Unknown',
+                      description: comment != '—' ? comment : null,
+                      performedBy: null,
+                      formattedDate:
+                          timestamp != null ? _formatDate(timestamp) : null,
+                      timeAgo: _timeAgo(timestamp),
+                    );
+                  }),
+                ),
+              ),
+            if (_activitiesError == null)
+              ViewAllButton(
+                total: commentItems.length,
+                showAll: _commentsShowAll,
+                noun: 'comments',
+                onTap:
+                    () => setState(() => _commentsShowAll = !_commentsShowAll),
+              ),
+          ],
         ],
       ),
     );
@@ -1858,9 +1896,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                                   horizontal: 16,
                                   vertical: 12,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
+                                shape: const StadiumBorder(),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -2205,7 +2241,7 @@ class _InfoChip extends StatelessWidget {
                 ),
                 Text(
                   value,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 12,
@@ -2268,22 +2304,22 @@ class _ErrorCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF1F0),
+        color: const Color(0xFFE8F0F3),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEB1E23).withOpacity(0.35)),
+        border: Border.all(color: const Color(0xFF133341).withOpacity(0.35)),
       ),
       child: Row(
         children: [
           const Icon(
             Icons.warning_amber_rounded,
-            color: Color(0xFFEB1E23),
+            color: Color(0xFF133341),
             size: 18,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: Color(0xFFEB1E23), fontSize: 12),
+              style: const TextStyle(color: Color(0xFF133341), fontSize: 12),
             ),
           ),
         ],

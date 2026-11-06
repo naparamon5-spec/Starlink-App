@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:starlink_app/services/api_service.dart';
 
-const _primary = Color(0xFFEB1E23);
-const _success = Color(0xFF24A148);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _success = Color(0xFF10B981);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class AdminChangePasswordPage extends StatefulWidget {
   const AdminChangePasswordPage({super.key});
@@ -88,52 +89,13 @@ class _AdminChangePasswordPageState extends State<AdminChangePasswordPage> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
+        // Same navy app bar as the other pages (from the app theme).
+        appBar: AppBar(title: const Text('Change Password')),
         backgroundColor: _surfaceSubtle,
         body: SafeArea(
           top: false,
           child: Column(
             children: [
-              // ── Gradient AppBar ──────────────────────────────────────────
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Expanded(
-                          child: Text(
-                            'Change Password',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
               // ── Content ──────────────────────────────────────────────────
               Expanded(
                 child: SingleChildScrollView(
@@ -207,7 +169,7 @@ class _AdminChangePasswordPageState extends State<AdminChangePasswordPage> {
                                 validator:
                                     (v) =>
                                         (v == null || v.trim().isEmpty)
-                                            ? 'Required'
+                                            ? 'Enter your current password.'
                                             : null,
                               ),
                               const SizedBox(height: 4),
@@ -222,10 +184,10 @@ class _AdminChangePasswordPageState extends State<AdminChangePasswordPage> {
                                     () => setState(() => _showNew = !_showNew),
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) {
-                                    return 'Required';
+                                    return 'Enter a new password.';
                                   }
                                   if (v.trim().length < 8) {
-                                    return 'At least 8 characters';
+                                    return 'Use at least 8 characters.';
                                   }
                                   return null;
                                 },
@@ -244,10 +206,10 @@ class _AdminChangePasswordPageState extends State<AdminChangePasswordPage> {
                                     ),
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) {
-                                    return 'Required';
+                                    return 'Re-enter your new password.';
                                   }
                                   if (v.trim() != _newCtrl.text.trim()) {
-                                    return 'Passwords do not match';
+                                    return 'Passwords don\'t match.';
                                   }
                                   return null;
                                 },
@@ -265,17 +227,17 @@ class _AdminChangePasswordPageState extends State<AdminChangePasswordPage> {
                               vertical: 10,
                             ),
                             decoration: BoxDecoration(
-                              color: _primary.withOpacity(0.05),
+                              color: AppColors.brand.withValues(alpha: 0.06),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: _primary.withOpacity(0.2),
+                                color: AppColors.brand.withValues(alpha: 0.25),
                               ),
                             ),
                             child: Row(
                               children: [
                                 const Icon(
                                   Icons.error_outline_rounded,
-                                  color: _primary,
+                                  color: AppColors.dangerInk,
                                   size: 16,
                                 ),
                                 const SizedBox(width: 8),
@@ -284,7 +246,7 @@ class _AdminChangePasswordPageState extends State<AdminChangePasswordPage> {
                                     _errorMessage!,
                                     style: const TextStyle(
                                       fontSize: 12,
-                                      color: _primary,
+                                      color: AppColors.dangerInk,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -302,16 +264,13 @@ class _AdminChangePasswordPageState extends State<AdminChangePasswordPage> {
                           child: ElevatedButton(
                             onPressed: _loading ? null : _submit,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _primary,
+                              backgroundColor: AppColors.brand,
                               foregroundColor: Colors.white,
-                              disabledBackgroundColor: _primary.withOpacity(
-                                0.5,
-                              ),
+                              disabledBackgroundColor: AppColors.brand
+                                  .withOpacity(0.5),
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
+                              shape: const StadiumBorder(),
                             ),
                             child:
                                 _loading
@@ -384,6 +343,8 @@ class _PasswordField extends StatelessWidget {
           obscureText: !show,
           style: const TextStyle(fontSize: 14, color: _ink),
           validator: validator,
+          // After the first submit, each error clears as soon as it's fixed.
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(fontSize: 13, color: _inkTertiary),
@@ -404,32 +365,45 @@ class _PasswordField extends StatelessWidget {
               splashRadius: 18,
             ),
             filled: true,
-            fillColor: _surfaceSubtle,
+            fillColor: AppColors.paper,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 12,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _border),
+              borderSide: const BorderSide(color: _border, width: 1.5),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _border),
+              borderSide: const BorderSide(color: _border, width: 1.5),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _primary, width: 1.5),
+              borderSide: const BorderSide(color: AppColors.brand, width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _primary),
+              borderSide: const BorderSide(
+                color: Color(0xFFE90408),
+                width: 1.5,
+              ),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _primary, width: 1.5),
+              borderSide: const BorderSide(
+                color: Color(0xFFE90408),
+                width: 1.5,
+              ),
             ),
-            errorStyle: const TextStyle(fontSize: 11),
+            // Web portal error text: small, medium weight, dark red.
+            errorStyle: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+              color: AppColors.dangerInk,
+              height: 1.3,
+            ),
+            errorMaxLines: 2,
           ),
         ),
       ],

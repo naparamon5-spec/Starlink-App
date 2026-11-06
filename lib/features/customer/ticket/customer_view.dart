@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/collapsible_list.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:starlink_app/shared/widgets/resolve_remarks_dialog.dart';
@@ -7,15 +8,15 @@ import 'package:starlink_app/core/utils/file_download/file_downloader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Design tokens — MATCHING home screen exactly ──────────────────────────────
-const _brandRed = Color(0xFFEB1E23);
-const _inProgress = Color(0xFF0F62FE);
-const _success = Color(0xFF24A148); // matches home _success
-const _warning = Color(0xFFFF832B); // matches home _warning (orange)
-const _ink = Color(0xFF000000);
+const _brandRed = Color(0xFF133341);
+const _inProgress = Color(0xFF3B82F6);
+const _success = Color(0xFF10B981); // matches home _success
+const _warning = Color(0xFFF59E0B); // matches home _warning (orange)
+const _ink = Color(0xFF111111);
 const _inkSecondary = Color(0xFF374151);
 const _inkTertiary = Color(0xFF8A96A3);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF5F7FA);
+const _surfaceSubtle = Color(0xFFF8F8F8);
 const _border = Color(0xFFE8ECF0);
 
 class CustomerViewScreen extends StatefulWidget {
@@ -41,6 +42,14 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
 
   final TextEditingController _commentCtrl = TextEditingController();
   bool _postingComment = false;
+
+  bool _timelineShowAll = false;
+  bool _commentsShowAll = false;
+  bool _timelineCollapsed = false;
+  bool _commentsCollapsed = false;
+  bool _attachShowAll = false;
+  bool _attachCollapsed = false;
+
   String? _activitiesError;
 
   bool _canManageTickets = false;
@@ -340,7 +349,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
     if (v.contains('resolv')) return _success;
     if (v.contains('close')) return _warning;
     if (v.contains('comment') || v.contains('note')) {
-      return const Color(0xFF6366F1);
+      return const Color(0xFF3B82F6);
     }
     if (v.contains('assign')) return _brandRed;
     if (v.contains('status') || v.contains('chang')) return _inProgress;
@@ -492,7 +501,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
       case 'rar':
         return _warning;
       default:
-        return const Color(0xFF6366F1);
+        return const Color(0xFF3B82F6);
     }
   }
 
@@ -670,9 +679,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                     backgroundColor: const Color(0xFF10B981),
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   icon:
@@ -701,9 +708,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: _success,
                     side: const BorderSide(color: _success, width: 1.2),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   icon: const Icon(Icons.verified_outlined),
@@ -721,9 +726,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                     backgroundColor: const Color.fromARGB(255, 240, 136, 67),
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   icon: const Icon(Icons.lock_outline_rounded),
@@ -808,10 +811,6 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
     return Scaffold(
       backgroundColor: _surfaceSubtle,
       appBar: AppBar(
-        backgroundColor: _surface,
-        foregroundColor: _ink,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -820,14 +819,14 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _ink,
+                color: Colors.white,
               ),
             ),
             Text(
               'Ticket #$ticketId',
-              style: const TextStyle(fontSize: 11, color: _inkTertiary),
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
             ),
           ],
         ),
@@ -842,10 +841,6 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
         //     tooltip: 'Refresh',
         //   ),
         // ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: _border),
-        ),
       ),
       body: Stack(
         children: [
@@ -910,7 +905,7 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                           icon: Icons.label_outline_rounded,
                           label: 'Type',
                           value: ticketType,
-                          color: const Color(0xFF6366F1),
+                          color: const Color(0xFF3B82F6),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -983,191 +978,214 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                color: _warning.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.attach_file_rounded,
-                                color: _warning,
-                                size: 17,
-                              ),
+                      InkWell(
+                        onTap:
+                            () => setState(
+                              () => _attachCollapsed = !_attachCollapsed,
                             ),
-                            const SizedBox(width: 10),
-                            const Text(
-                              'Attachments',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: _ink,
-                              ),
-                            ),
-                            const Spacer(),
-                            if (attachments.isNotEmpty)
-                              _CountBadge(
-                                count: attachments.length,
-                                color: _warning,
-                              ),
-                          ],
-                        ),
-                      ),
-                      const _HDivider(),
-                      if (attachments.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                           child: Row(
                             children: [
-                              Icon(
-                                Icons.info_outline_rounded,
-                                color: _inkTertiary,
-                                size: 16,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'No attachments',
-                                style: TextStyle(
-                                  color: _inkTertiary,
-                                  fontSize: 13,
+                              Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: _warning.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.attach_file_rounded,
+                                  color: _warning,
+                                  size: 17,
                                 ),
                               ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Attachments',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: _ink,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (attachments.isNotEmpty)
+                                _CountBadge(
+                                  count: attachments.length,
+                                  color: _warning,
+                                ),
+                              CollapseArrow(collapsed: _attachCollapsed),
                             ],
                           ),
-                        )
-                      else
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                          itemCount: attachments.length,
-                          separatorBuilder:
-                              (_, __) => const SizedBox(height: 8),
-                          itemBuilder: (_, i) {
-                            final att = attachments[i];
-                            if (att is! Map) return const SizedBox.shrink();
-                            final name = _str(
-                              att['original_name'] ??
-                                  att['name'] ??
-                                  att['filename'] ??
-                                  att['file_name'],
-                              fallback: 'Unknown file',
-                            );
-                            final ext =
-                                name.contains('.')
-                                    ? name.split('.').last.toLowerCase()
-                                    : '';
-                            final sizeStr = _str(
-                              att['size'] ?? att['file_size'],
-                              fallback: '0',
-                            );
-                            final sizeInBytes = double.tryParse(sizeStr) ?? 0.0;
-                            final sizeDisplay =
-                                '${(sizeInBytes / 1024).toStringAsFixed(1)}KB';
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      if (!_attachCollapsed) ...[
+                        const _HDivider(),
+                        if (attachments.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  color: _inkTertiary,
+                                  size: 16,
                                 ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: _extColor(ext).withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        ext.isNotEmpty
-                                            ? ext.toUpperCase().substring(
-                                              0,
-                                              ext.length > 4 ? 4 : ext.length,
-                                            )
-                                            : 'FILE',
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w800,
-                                          color: _extColor(ext),
+                                SizedBox(width: 8),
+                                Text(
+                                  'No attachments',
+                                  style: TextStyle(
+                                    color: _inkTertiary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                            itemCount: visibleCount(
+                              attachments.length,
+                              _attachShowAll,
+                            ),
+                            separatorBuilder:
+                                (_, __) => const SizedBox(height: 8),
+                            itemBuilder: (_, i) {
+                              final att = attachments[i];
+                              if (att is! Map) return const SizedBox.shrink();
+                              final name = _str(
+                                att['original_name'] ??
+                                    att['name'] ??
+                                    att['filename'] ??
+                                    att['file_name'],
+                                fallback: 'Unknown file',
+                              );
+                              final ext =
+                                  name.contains('.')
+                                      ? name.split('.').last.toLowerCase()
+                                      : '';
+                              final sizeStr = _str(
+                                att['size'] ?? att['file_size'],
+                                fallback: '0',
+                              );
+                              final sizeInBytes =
+                                  double.tryParse(sizeStr) ?? 0.0;
+                              final sizeDisplay =
+                                  '${(sizeInBytes / 1024).toStringAsFixed(1)}KB';
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: _extColor(ext).withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          ext.isNotEmpty
+                                              ? ext.toUpperCase().substring(
+                                                0,
+                                                ext.length > 4 ? 4 : ext.length,
+                                              )
+                                              : 'FILE',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w800,
+                                            color: _extColor(ext),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: _ink,
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: _ink,
+                                            ),
                                           ),
-                                        ),
-                                        Text(
-                                          sizeDisplay,
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: _inkTertiary,
+                                          Text(
+                                            sizeDisplay,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: _inkTertiary,
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  Builder(
-                                    builder: (_) {
-                                      final attId =
-                                          att['id']?.toString() ??
-                                          att['attachment_id']?.toString() ??
-                                          att['attachmentId']?.toString() ??
-                                          '';
-                                      final isDownloading =
-                                          attId.isNotEmpty &&
-                                          _downloadingMap[attId] == true;
-                                      if (isDownloading) {
-                                        return const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
+                                    Builder(
+                                      builder: (_) {
+                                        final attId =
+                                            att['id']?.toString() ??
+                                            att['attachment_id']?.toString() ??
+                                            att['attachmentId']?.toString() ??
+                                            '';
+                                        final isDownloading =
+                                            attId.isNotEmpty &&
+                                            _downloadingMap[attId] == true;
+                                        if (isDownloading) {
+                                          return const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: _inkTertiary,
+                                            ),
+                                          );
+                                        }
+                                        return IconButton(
+                                          icon: const Icon(
+                                            Icons.download_outlined,
                                             color: _inkTertiary,
+                                            size: 20,
                                           ),
+                                          onPressed:
+                                              () => _downloadAttachment(att),
                                         );
-                                      }
-                                      return IconButton(
-                                        icon: const Icon(
-                                          Icons.download_outlined,
-                                          color: _inkTertiary,
-                                          size: 20,
-                                        ),
-                                        onPressed:
-                                            () => _downloadAttachment(att),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        if (true)
+                          ViewAllButton(
+                            total: attachments.length,
+                            showAll: _attachShowAll,
+                            noun: 'attachments',
+                            onTap:
+                                () => setState(
+                                  () => _attachShowAll = !_attachShowAll,
+                                ),
+                          ),
+                      ],
                     ],
                   ),
                 ),
@@ -1179,225 +1197,258 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                color: _brandRed.withOpacity(0.10),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.timeline_rounded,
-                                color: _brandRed,
-                                size: 17,
-                              ),
+                      InkWell(
+                        onTap:
+                            () => setState(
+                              () => _timelineCollapsed = !_timelineCollapsed,
                             ),
-                            const SizedBox(width: 10),
-                            const Text(
-                              'Activity Timeline',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: _ink,
-                              ),
-                            ),
-                            const Spacer(),
-                            if (_isFetchingDetails)
-                              const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: _brandRed,
-                                ),
-                              )
-                            else if (timelineEvents.isNotEmpty)
-                              _CountBadge(
-                                count: timelineEvents.length,
-                                color: _brandRed,
-                              ),
-                          ],
-                        ),
-                      ),
-                      const _HDivider(),
-
-                      if (_isFetchingDetails)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: _brandRed,
-                                ),
-                                SizedBox(height: 10),
-                                Text(
-                                  'Loading timeline…',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _inkTertiary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else if (_fetchError != null)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 11,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF1F0),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _brandRed.withOpacity(0.35),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: _brandRed,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _fetchError!,
-                                    style: const TextStyle(
-                                      color: _brandRed,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else if (_activitiesError != null)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 11,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF1F0),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _brandRed.withOpacity(0.35),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: _brandRed,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _activitiesError!,
-                                    style: const TextStyle(
-                                      color: _brandRed,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else if (timelineEvents.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                           child: Row(
                             children: [
-                              Icon(
-                                Icons.info_outline_rounded,
-                                color: _inkTertiary,
-                                size: 16,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'No activity yet',
-                                style: TextStyle(
-                                  color: _inkTertiary,
-                                  fontSize: 13,
+                              Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: _brandRed.withOpacity(0.10),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.timeline_rounded,
+                                  color: _brandRed,
+                                  size: 17,
                                 ),
                               ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Activity Timeline',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: _ink,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (_isFetchingDetails)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: _brandRed,
+                                  ),
+                                )
+                              else if (timelineEvents.isNotEmpty)
+                                _CountBadge(
+                                  count: timelineEvents.length,
+                                  color: _brandRed,
+                                ),
+                              CollapseArrow(collapsed: _timelineCollapsed),
                             ],
                           ),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                          child: Column(
-                            children: List.generate(timelineEvents.length, (i) {
-                              final act = timelineEvents[i];
-                              if (act is! Map) return const SizedBox.shrink();
-                              final rawStatus = act['status']?.toString();
-                              final action =
-                                  rawStatus != null && rawStatus.isNotEmpty
-                                      ? _normalizeStatus(rawStatus)
-                                      : _str(
-                                        act['action'],
-                                        fallback: 'COMMENT',
-                                      );
-
-                              final userName = _str(
-                                act['name'] ??
-                                    act['user_name'] ??
-                                    act['performed_by'],
-                                fallback: '',
-                              );
-
-                              final comment = _str(
-                                act['comment'] ??
-                                    act['message'] ??
-                                    act['note'] ??
-                                    act['new_value'],
-                                fallback: '',
-                              );
-
-                              final timestamp =
-                                  (act['date'] ?? act['created_at'])
-                                      ?.toString();
-
-                              final color = _activityColor(action);
-                              final icon = _activityIcon(action);
-                              final isLast = i == timelineEvents.length - 1;
-                              return _TimelineRow(
-                                icon: Icons.comment_outlined,
-                                color: const Color(0xFF6366F1),
-                                isLast: isLast,
-                                action:
-                                    (userName.isNotEmpty && userName != '—')
-                                        ? userName
-                                        : 'Unknown',
-                                changeDesc: comment.isNotEmpty ? comment : null,
-                                performedBy: null,
-                                formattedDate:
-                                    timestamp != null
-                                        ? _formatDate(timestamp)
-                                        : null,
-                                timeAgo: _timeAgo(timestamp),
-                              );
-                            }),
-                          ),
                         ),
+                      ),
+                      if (!_timelineCollapsed) ...[
+                        const _HDivider(),
+
+                        if (_isFetchingDetails)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: _brandRed,
+                                  ),
+                                  SizedBox(height: 10),
+                                  Text(
+                                    'Loading timeline…',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: _inkTertiary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else if (_fetchError != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 11,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F0F3),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _brandRed.withOpacity(0.35),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.warning_amber_rounded,
+                                    color: _brandRed,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _fetchError!,
+                                      style: const TextStyle(
+                                        color: _brandRed,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else if (_activitiesError != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 11,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F0F3),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _brandRed.withOpacity(0.35),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.warning_amber_rounded,
+                                    color: _brandRed,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _activitiesError!,
+                                      style: const TextStyle(
+                                        color: _brandRed,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else if (timelineEvents.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  color: _inkTertiary,
+                                  size: 16,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'No activity yet',
+                                  style: TextStyle(
+                                    color: _inkTertiary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                            child: Column(
+                              children: List.generate(
+                                visibleNewestFirst(
+                                  timelineEvents,
+                                  _timelineShowAll,
+                                ).length,
+                                (i) {
+                                  final shown = visibleNewestFirst(
+                                    timelineEvents,
+                                    _timelineShowAll,
+                                  );
+                                  final act = shown[i];
+                                  if (act is! Map)
+                                    return const SizedBox.shrink();
+                                  final rawStatus = act['status']?.toString();
+                                  final action =
+                                      rawStatus != null && rawStatus.isNotEmpty
+                                          ? _normalizeStatus(rawStatus)
+                                          : _str(
+                                            act['action'],
+                                            fallback: 'COMMENT',
+                                          );
+
+                                  final userName = _str(
+                                    act['name'] ??
+                                        act['user_name'] ??
+                                        act['performed_by'],
+                                    fallback: '',
+                                  );
+
+                                  final comment = _str(
+                                    act['comment'] ??
+                                        act['message'] ??
+                                        act['note'] ??
+                                        act['new_value'],
+                                    fallback: '',
+                                  );
+
+                                  final timestamp =
+                                      (act['date'] ?? act['created_at'])
+                                          ?.toString();
+
+                                  final color = _activityColor(action);
+                                  final icon = _activityIcon(action);
+                                  final isLast = i == shown.length - 1;
+                                  return _TimelineRow(
+                                    icon: Icons.comment_outlined,
+                                    color: const Color(0xFF3B82F6),
+                                    isLast: isLast,
+                                    action:
+                                        (userName.isNotEmpty && userName != '—')
+                                            ? userName
+                                            : 'Unknown',
+                                    changeDesc:
+                                        comment.isNotEmpty ? comment : null,
+                                    performedBy: null,
+                                    formattedDate:
+                                        timestamp != null
+                                            ? _formatDate(timestamp)
+                                            : null,
+                                    timeAgo: _timeAgo(timestamp),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        if (!_isFetchingDetails &&
+                            _fetchError == null &&
+                            _activitiesError == null)
+                          ViewAllButton(
+                            total: timelineEvents.length,
+                            showAll: _timelineShowAll,
+                            noun: 'activities',
+                            onTap:
+                                () => setState(
+                                  () => _timelineShowAll = !_timelineShowAll,
+                                ),
+                          ),
+                      ],
                     ],
                   ),
                 ),
@@ -1409,212 +1460,246 @@ class _CustomerViewScreenState extends State<CustomerViewScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF6366F1,
-                                ).withOpacity(0.10),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.comment_outlined,
-                                color: Color(0xFF6366F1),
-                                size: 17,
-                              ),
+                      InkWell(
+                        onTap:
+                            () => setState(
+                              () => _commentsCollapsed = !_commentsCollapsed,
                             ),
-                            const SizedBox(width: 10),
-                            const Text(
-                              'Comments',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: _ink,
-                              ),
-                            ),
-                            const Spacer(),
-                            if (!_isFetchingDetails && commentItems.isNotEmpty)
-                              _CountBadge(
-                                count: commentItems.length,
-                                color: const Color(0xFF6366F1),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const _HDivider(),
-                      if (_isFetchingDetails)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: _brandRed,
-                                ),
-                                SizedBox(height: 10),
-                                Text(
-                                  'Loading comments…',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _inkTertiary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else if (_fetchError != null)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 11,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF1F0),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _brandRed.withOpacity(0.35),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: _brandRed,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _fetchError!,
-                                    style: const TextStyle(
-                                      color: _brandRed,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else if (_activitiesError != null)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 11,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF1F0),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _brandRed.withOpacity(0.35),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: _brandRed,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _activitiesError!,
-                                    style: const TextStyle(
-                                      color: _brandRed,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else if (commentItems.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                           child: Row(
                             children: [
-                              Icon(
-                                Icons.info_outline_rounded,
-                                color: _inkTertiary,
-                                size: 16,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'No comments yet',
-                                style: TextStyle(
-                                  color: _inkTertiary,
-                                  fontSize: 13,
+                              Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFF6366F1,
+                                  ).withOpacity(0.10),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.comment_outlined,
+                                  color: Color(0xFF3B82F6),
+                                  size: 17,
                                 ),
                               ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Comments',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: _ink,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (!_isFetchingDetails &&
+                                  commentItems.isNotEmpty)
+                                _CountBadge(
+                                  count: commentItems.length,
+                                  color: const Color(0xFF3B82F6),
+                                ),
+                              CollapseArrow(collapsed: _commentsCollapsed),
                             ],
                           ),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                          child: Column(
-                            children: List.generate(commentItems.length, (i) {
-                              final act = commentItems[i];
-                              if (act is! Map) return const SizedBox.shrink();
-
-                              final userName = _str(
-                                act['name'] ??
-                                    act['user_name'] ??
-                                    act['performed_by'],
-                                fallback: '',
-                              );
-
-                              final comment = _str(
-                                act['comment'] ??
-                                    act['message'] ??
-                                    act['note'] ??
-                                    act['new_value'],
-                                fallback: '',
-                              );
-
-                              final timestamp =
-                                  (act['date'] ?? act['created_at'])
-                                      ?.toString();
-
-                              final isLast = i == commentItems.length - 1;
-                              return _TimelineRow(
-                                icon: Icons.comment_outlined,
-                                color: const Color(0xFF6366F1),
-                                isLast: isLast,
-                                action: 'COMMENT',
-                                changeDesc: comment.isNotEmpty ? comment : null,
-                                performedBy:
-                                    (userName.isNotEmpty && userName != '—')
-                                        ? userName
-                                        : null,
-                                formattedDate:
-                                    timestamp != null
-                                        ? _formatDate(timestamp)
-                                        : null,
-                                timeAgo: _timeAgo(timestamp),
-                              );
-                            }),
-                          ),
                         ),
-                      // ── Add comment (POST /v1/activities) ─────────────────
-                      // Same rule as the admin and end-user screens: comments while the
-                      // ticket is in progress.
-                      if (_currentStatus == 'IN PROGRESS')
-                        _buildCommentComposer(),
+                      ),
+                      if (!_commentsCollapsed) ...[
+                        const _HDivider(),
+                        if (_isFetchingDetails)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: _brandRed,
+                                  ),
+                                  SizedBox(height: 10),
+                                  Text(
+                                    'Loading comments…',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: _inkTertiary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else if (_fetchError != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 11,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F0F3),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _brandRed.withOpacity(0.35),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.warning_amber_rounded,
+                                    color: _brandRed,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _fetchError!,
+                                      style: const TextStyle(
+                                        color: _brandRed,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else if (_activitiesError != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 11,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F0F3),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _brandRed.withOpacity(0.35),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.warning_amber_rounded,
+                                    color: _brandRed,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _activitiesError!,
+                                      style: const TextStyle(
+                                        color: _brandRed,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else if (commentItems.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  color: _inkTertiary,
+                                  size: 16,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'No comments yet',
+                                  style: TextStyle(
+                                    color: _inkTertiary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                            child: Column(
+                              children: List.generate(
+                                visibleNewestFirst(
+                                  commentItems,
+                                  _commentsShowAll,
+                                ).length,
+                                (i) {
+                                  final shown = visibleNewestFirst(
+                                    commentItems,
+                                    _commentsShowAll,
+                                  );
+                                  final act = shown[i];
+                                  if (act is! Map)
+                                    return const SizedBox.shrink();
+
+                                  final userName = _str(
+                                    act['name'] ??
+                                        act['user_name'] ??
+                                        act['performed_by'],
+                                    fallback: '',
+                                  );
+
+                                  final comment = _str(
+                                    act['comment'] ??
+                                        act['message'] ??
+                                        act['note'] ??
+                                        act['new_value'],
+                                    fallback: '',
+                                  );
+
+                                  final timestamp =
+                                      (act['date'] ?? act['created_at'])
+                                          ?.toString();
+
+                                  final isLast = i == shown.length - 1;
+                                  return _TimelineRow(
+                                    icon: Icons.comment_outlined,
+                                    color: const Color(0xFF3B82F6),
+                                    isLast: isLast,
+                                    action: 'COMMENT',
+                                    changeDesc:
+                                        comment.isNotEmpty ? comment : null,
+                                    performedBy:
+                                        (userName.isNotEmpty && userName != '—')
+                                            ? userName
+                                            : null,
+                                    formattedDate:
+                                        timestamp != null
+                                            ? _formatDate(timestamp)
+                                            : null,
+                                    timeAgo: _timeAgo(timestamp),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        // ── Add comment (POST /v1/activities) ─────────────────
+                        // Same rule as the admin and end-user screens: comments while the
+                        // ticket is in progress.
+                        if (!_isFetchingDetails &&
+                            _fetchError == null &&
+                            _activitiesError == null)
+                          ViewAllButton(
+                            total: commentItems.length,
+                            showAll: _commentsShowAll,
+                            noun: 'comments',
+                            onTap:
+                                () => setState(
+                                  () => _commentsShowAll = !_commentsShowAll,
+                                ),
+                          ),
+                        if (_currentStatus == 'IN PROGRESS')
+                          _buildCommentComposer(),
+                      ],
                     ],
                   ),
                 ),

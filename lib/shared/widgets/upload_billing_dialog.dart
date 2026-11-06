@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' hide Border, BorderStyle;
 import 'package:starlink_app/services/api_service.dart';
@@ -27,15 +28,15 @@ class UploadBillingDialog extends StatefulWidget {
 }
 
 class _UploadBillingDialogState extends State<UploadBillingDialog> {
-  static const _primary = Color(0xFFEB1E23);
-  static const _success = Color(0xFF24A148);
-  static const _warning = Color(0xFFFF832B);
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _primary = Color(0xFF133341);
+  static const _success = Color(0xFF10B981);
+  static const _warning = Color(0xFFF59E0B);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   // State
   _UploadStep _step = _UploadStep.idle;
@@ -460,9 +461,7 @@ class _UploadBillingDialogState extends State<UploadBillingDialog> {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 side: const BorderSide(color: _border),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: const StadiumBorder(),
                 foregroundColor: _inkSecondary,
               ),
               child: const Text(
@@ -514,7 +513,7 @@ class _UploadBillingDialogState extends State<UploadBillingDialog> {
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: _primary,
+                          color: Color(0xFFE90408),
                         ),
                       ),
                     ),
@@ -579,9 +578,7 @@ class _UploadBillingDialogState extends State<UploadBillingDialog> {
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     side: const BorderSide(color: _border),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                     foregroundColor: _inkSecondary,
                   ),
                   child: const Text(
@@ -600,12 +597,10 @@ class _UploadBillingDialogState extends State<UploadBillingDialog> {
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
+                    backgroundColor: AppColors.brand,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                   ),
                 ),
               ),
@@ -692,9 +687,7 @@ class _UploadBillingDialogState extends State<UploadBillingDialog> {
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     side: const BorderSide(color: _border),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                     foregroundColor: _inkSecondary,
                   ),
                   child: const Text(
@@ -709,13 +702,11 @@ class _UploadBillingDialogState extends State<UploadBillingDialog> {
                 child: ElevatedButton(
                   onPressed: _submitting ? null : _submitRecords,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
+                    backgroundColor: AppColors.brand,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    disabledBackgroundColor: _primary.withOpacity(0.5),
+                    shape: const StadiumBorder(),
+                    disabledBackgroundColor: AppColors.brand.withOpacity(0.5),
                   ),
                   child:
                       _submitting
@@ -947,9 +938,7 @@ class _UploadBillingDialogState extends State<UploadBillingDialog> {
                 backgroundColor: allFailed ? _inkSecondary : _primary,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: const StadiumBorder(),
               ),
               child: const Text(
                 'Done',
@@ -980,12 +969,12 @@ class _DialogHeader extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFFEB1E23).withOpacity(0.1),
+              color: const Color(0xFF133341).withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
               Icons.upload_file_rounded,
-              color: Color(0xFFEB1E23),
+              color: Color(0xFF133341),
               size: 18,
             ),
           ),

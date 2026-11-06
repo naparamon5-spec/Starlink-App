@@ -1,5 +1,6 @@
 // ignore: file_names
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
 
 class ReusableTable extends StatefulWidget {
   final List<String> headers;
@@ -150,101 +151,103 @@ class _ReusableTableState extends State<ReusableTable> {
     return Column(
       children: [
         Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: MediaQuery.of(context).size.width - 32,
-              ),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  dividerTheme: const DividerThemeData(
-                    color: Color(0xFFE0E0E0),
-                    thickness: 1,
-                  ),
+          child: EdgeFade(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: MediaQuery.of(context).size.width - 32,
                 ),
-                child: DataTable(
-                  columnSpacing: 24,
-                  horizontalMargin: 16,
-                  headingRowHeight: 56,
-                  dataRowHeight: 64,
-                  sortColumnIndex:
-                      _sortColumnIndex != null ? _sortColumnIndex! + 1 : null,
-                  sortAscending: _sortAscending,
-                  headingRowColor: WidgetStateProperty.all(
-                    const Color(0xFFF5F7FA),
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    dividerTheme: const DividerThemeData(
+                      color: Color(0xFFE0E0E0),
+                      thickness: 1,
+                    ),
                   ),
-                  dataRowColor: WidgetStateProperty.resolveWith<Color?>((
-                    Set<WidgetState> states,
-                  ) {
-                    if (states.contains(WidgetState.selected)) {
-                      return const Color(0xFFE3F2FD);
-                    }
-                    return null;
-                  }),
-                  columns: [
-                    const DataColumn(
-                      label: SizedBox(
-                        width: 50,
-                        child: Text(
-                          'No.',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF133343),
-                            fontSize: 14,
+                  child: DataTable(
+                    columnSpacing: 24,
+                    horizontalMargin: 16,
+                    headingRowHeight: 56,
+                    dataRowHeight: 64,
+                    sortColumnIndex:
+                        _sortColumnIndex != null ? _sortColumnIndex! + 1 : null,
+                    sortAscending: _sortAscending,
+                    headingRowColor: WidgetStateProperty.all(
+                      const Color(0xFFF5F7FA),
+                    ),
+                    dataRowColor: WidgetStateProperty.resolveWith<Color?>((
+                      Set<WidgetState> states,
+                    ) {
+                      if (states.contains(WidgetState.selected)) {
+                        return const Color(0xFFE3F2FD);
+                      }
+                      return null;
+                    }),
+                    columns: [
+                      const DataColumn(
+                        label: SizedBox(
+                          width: 50,
+                          child: Text(
+                            'No.',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF133341),
+                              fontSize: 14,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    ...widget.headers.asMap().entries.map((entry) {
-                      return DataColumn(
-                        label: SizedBox(
-                          width: 150,
-                          child: _buildSortableHeader(entry.value, entry.key),
-                        ),
-                        onSort:
-                            (columnIndex, ascending) =>
-                                _sort(columnIndex - 1, ascending),
-                      );
-                    }),
-                  ],
-                  rows:
-                      _paginatedData.asMap().entries.map((entry) {
-                        final rowData = entry.value;
-                        return DataRow(
-                          onSelectChanged:
-                              widget.onRowTap != null
-                                  ? (_) => widget.onRowTap!(rowData)
-                                  : null,
-                          cells: [
-                            DataCell(
-                              SizedBox(
-                                width: 50,
-                                child: Text(
-                                  '${(_currentPage * _rowsPerPage) + entry.key + 1}',
-                                  style: const TextStyle(
-                                    color: Color(0xFF133343),
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            ...widget.headers.map(
-                              (header) => DataCell(
-                                SizedBox(
-                                  width: 150,
-                                  child: _buildTableCell(
-                                    rowData[header]?.toString() ?? '',
-                                    header,
-                                    context,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                      ...widget.headers.asMap().entries.map((entry) {
+                        return DataColumn(
+                          label: SizedBox(
+                            width: 150,
+                            child: _buildSortableHeader(entry.value, entry.key),
+                          ),
+                          onSort:
+                              (columnIndex, ascending) =>
+                                  _sort(columnIndex - 1, ascending),
                         );
-                      }).toList(),
+                      }),
+                    ],
+                    rows:
+                        _paginatedData.asMap().entries.map((entry) {
+                          final rowData = entry.value;
+                          return DataRow(
+                            onSelectChanged:
+                                widget.onRowTap != null
+                                    ? (_) => widget.onRowTap!(rowData)
+                                    : null,
+                            cells: [
+                              DataCell(
+                                SizedBox(
+                                  width: 50,
+                                  child: Text(
+                                    '${(_currentPage * _rowsPerPage) + entry.key + 1}',
+                                    style: const TextStyle(
+                                      color: Color(0xFF133341),
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              ...widget.headers.map(
+                                (header) => DataCell(
+                                  SizedBox(
+                                    width: 150,
+                                    child: _buildTableCell(
+                                      rowData[header]?.toString() ?? '',
+                                      header,
+                                      context,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                  ),
                 ),
               ),
             ),
@@ -265,7 +268,7 @@ class _ReusableTableState extends State<ReusableTable> {
                   onPressed: _currentPage > 0 ? _previousPage : null,
                   color:
                       _currentPage > 0
-                          ? const Color(0xFF133343)
+                          ? const Color(0xFF133341)
                           : Colors.grey[400],
                   tooltip: 'Previous page',
                 ),
@@ -276,7 +279,7 @@ class _ReusableTableState extends State<ReusableTable> {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      color: Color(0xFF133343),
+                      color: Color(0xFF133341),
                     ),
                   ),
                 ),
@@ -285,7 +288,7 @@ class _ReusableTableState extends State<ReusableTable> {
                   onPressed: _currentPage < _pageCount - 1 ? _nextPage : null,
                   color:
                       _currentPage < _pageCount - 1
-                          ? const Color(0xFF133343)
+                          ? const Color(0xFF133341)
                           : Colors.grey[400],
                   tooltip: 'Next page',
                 ),
@@ -306,7 +309,7 @@ class _ReusableTableState extends State<ReusableTable> {
             text,
             style: const TextStyle(
               fontWeight: FontWeight.w600,
-              color: Color(0xFF133343),
+              color: Color(0xFF133341),
               fontSize: 14,
             ),
           ),
@@ -315,7 +318,7 @@ class _ReusableTableState extends State<ReusableTable> {
           Icon(
             _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
             size: 16,
-            color: const Color(0xFF133343),
+            color: const Color(0xFF133341),
           )
         else
           Icon(Icons.swap_vert, size: 16, color: Colors.grey[400]),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/account_limit_card.dart';
 import 'package:starlink_app/features/admin/profile/admin_manage_users_page.dart';
 import 'package:starlink_app/features/admin/sections/subscription/admin_subscription_details_page.dart';
 import 'package:starlink_app/features/admin/profile/view-user/admin_view_user_details_page.dart';
@@ -30,16 +32,14 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
   List<Map<String, dynamic>> _subscriptions = [];
   List<Map<String, dynamic>> _users = [];
 
-  static const _primary = Color(0xFFEB1E23);
-  static const _primaryDark = Color(0xFF760F12);
-  static const _success = Color(0xFF24A148);
-  static const _danger = Color(0xFFEB1E23);
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _primary = Color(0xFF133341);
+  static const _primaryDark = Color(0xFF0C2029);
+  static const _success = Color(0xFF10B981);
+  static const _danger = Color(0xFFE90408);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
   static const _purple = Color(0xFF6929C4);
 
   @override
@@ -135,12 +135,108 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
     }
   }
 
-  void _toggleStatus(bool newActiveValue) {
+  String get _euCode =>
+      _str(_endUser?['eu_code'] ?? widget.endUserCode) == '—'
+          ? widget.endUserCode
+          : _str(_endUser?['eu_code'] ?? widget.endUserCode);
+
+  String get _displayName =>
+      _str(_endUser?['eu_name'] ?? widget.endUserName) == '—'
+          ? 'End User Details'
+          : _str(_endUser?['eu_name'] ?? widget.endUserName);
+
+  void _snack(String msg) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+
+  /// Activates / deactivates the end user (PUT /end-user/(de)activate/:eu_code).
+  Future<void> _toggleStatus(bool newActiveValue) async {
+    if (!newActiveValue) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder:
+            (ctx) => AlertDialog(
+              title: const Text('Deactivate end user?'),
+              content: Text(
+                '$_displayName will be marked inactive. You can activate it again later.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Deactivate'),
+                ),
+              ],
+            ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    setState(() => _isTogglingStatus = true);
+    final res =
+        newActiveValue
+            ? await ApiService.activateEndUser(_euCode)
+            : await ApiService.deactivateEndUser(_euCode);
+    if (!mounted) return;
+    final ok = res['status'] == 'success';
     setState(() {
       _isTogglingStatus = false;
-      _endUser = Map<String, dynamic>.from(_endUser ?? {})
-        ..['inactive'] = newActiveValue ? 'N' : 'Y';
+      if (ok) {
+        _endUser = Map<String, dynamic>.from(_endUser ?? {})
+          ..['inactive'] = newActiveValue ? 'N' : 'Y';
+      }
     });
+    _snack(
+      ok
+          ? 'Status updated'
+          : res['message']?.toString() ?? 'Could not update the status',
+    );
+  }
+
+  /// Renames the end user (PUT /end-user/name/:eu_code).
+  Future<void> _rename() async {
+    final ctrl = TextEditingController(
+      text: _displayName == 'End User Details' ? '' : _displayName,
+    );
+    final name = await showDialog<String>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Rename end user'),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(labelText: 'End user name'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+    );
+    ctrl.dispose();
+    if (name == null || name.isEmpty || !mounted) return;
+    final res = await ApiService.renameEndUser(_euCode, name);
+    if (!mounted) return;
+    final ok = res['status'] == 'success';
+    if (ok) {
+      setState(
+        () =>
+            _endUser = Map<String, dynamic>.from(_endUser ?? {})
+              ..['eu_name'] = name,
+      );
+    }
+    _snack(
+      ok ? 'Name updated' : res['message']?.toString() ?? 'Could not rename',
+    );
   }
 
   String _str(dynamic v) =>
@@ -237,48 +333,27 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
     return Scaffold(
       backgroundColor: _surfaceSubtle,
       appBar: AppBar(
-        backgroundColor: _surface,
-        foregroundColor: _ink,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        centerTitle: false,
         title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(_displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
             Text(
-              widget.endUserName.isNotEmpty
-                  ? widget.endUserName
-                  : 'End User Details',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              _euCode,
               style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: _ink,
-                letterSpacing: -0.3,
+                fontSize: 11,
+                color: Colors.white70,
+                fontWeight: FontWeight.w500,
               ),
-            ),
-            Text(
-              widget.endUserCode,
-              style: const TextStyle(fontSize: 11, color: _inkTertiary),
             ),
           ],
         ),
-        // actions: [
-        //   IconButton(
-        //     icon: Icon(
-        //       Icons.refresh_rounded,
-        //       color: _loading ? _inkTertiary : _primary,
-        //       size: 20,
-        //     ),
-        //     onPressed: _loading ? null : _loadAll,
-        //   ),
-        //   const SizedBox(width: 4),
-        // ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: _border),
-        ),
+        actions: [
+          if (!_loading && _error == null)
+            IconButton(
+              tooltip: 'Rename',
+              icon: const Icon(Icons.edit_outlined, size: 20),
+              onPressed: _rename,
+            ),
+        ],
       ),
       body:
           _loading
@@ -293,6 +368,8 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                   children: [
                     _buildEndUserCard(),
+                    const SizedBox(height: 12),
+                    AccountLimitCard(code: _euCode),
                     const SizedBox(height: 12),
                     _buildSubscriptionsCard(),
                     const SizedBox(height: 12),
@@ -334,7 +411,6 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
             child: Switch(
               value: isActive,
               onChanged: _isTogglingStatus ? null : _toggleStatus,
-              activeThumbColor: _primary,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
@@ -742,7 +818,7 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 13,
-              color: _inkSecondary,
+              color: Color(0xFFE90408),
               height: 1.5,
             ),
           ),
@@ -750,12 +826,10 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
           ElevatedButton.icon(
             onPressed: _loadAll,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _primary,
+              backgroundColor: AppColors.brand,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: const StadiumBorder(),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             icon: const Icon(Icons.refresh_rounded, size: 16),
@@ -787,10 +861,10 @@ class _SectionCard extends StatelessWidget {
     this.trailing,
   });
 
-  static const _ink = Color(0xFF000000);
+  static const _ink = Color(0xFF111111);
   static const _surface = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFE0E0E0);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
+  static const _border = Color(0xFFD7D7D7);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
 
   @override
   Widget build(BuildContext context) {

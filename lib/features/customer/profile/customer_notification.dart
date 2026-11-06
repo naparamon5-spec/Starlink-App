@@ -6,13 +6,13 @@ import 'package:starlink_app/providers/notification_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 Color parseColor(dynamic color) {
   if (color is int) return Color(color);
@@ -214,7 +214,7 @@ class _CustomerNotificationScreenState extends State<CustomerNotificationScreen>
   Widget _buildAppBar() => Container(
     decoration: const BoxDecoration(
       gradient: LinearGradient(
-        colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+        colors: [Color(0xFF133341), Color(0xFF0C2029)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),

@@ -29,7 +29,7 @@ class AgentApp extends StatelessWidget {
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF0F1923),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF6366F1),
+          primary: Color(0xFF3B82F6),
           surface: Color(0xFF162032),
         ),
       ),
@@ -232,12 +232,12 @@ class _AgentAppBarDelegate extends SliverPersistentHeaderDelegate {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                    colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   border: Border.all(
-                    color: const Color(0xFF6366F1).withOpacity(0.5),
+                    color: const Color(0xFF3B82F6).withOpacity(0.5),
                     width: 2,
                   ),
                 ),
@@ -278,7 +278,7 @@ class _AgentAppBarDelegate extends SliverPersistentHeaderDelegate {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withOpacity(0.15),
+                  color: const Color(0xFF3B82F6).withOpacity(0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
@@ -286,7 +286,7 @@ class _AgentAppBarDelegate extends SliverPersistentHeaderDelegate {
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF6366F1),
+                    color: Color(0xFF3B82F6),
                     letterSpacing: 1.0,
                   ),
                 ),
@@ -327,7 +327,7 @@ class _AgentAppBarDelegate extends SliverPersistentHeaderDelegate {
                   width: 8,
                   height: 8,
                   decoration: const BoxDecoration(
-                    color: Color(0xFF6366F1),
+                    color: Color(0xFF3B82F6),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -412,7 +412,7 @@ class _AgentQuickBubblesState extends State<_AgentQuickBubbles>
         type: AgentQuickAction.subscriptions,
         icon: Icons.subscriptions_outlined,
         label: 'Subs',
-        color: const Color(0xFF6366F1),
+        color: const Color(0xFF3B82F6),
         targetDx: 0.0,
         targetDy: -155.0,
         delay: 0.07,
@@ -614,11 +614,11 @@ class _AgentFloatingNav extends StatelessWidget {
                   color:
                       quickMenuOpen
                           ? const Color(0xFF1E2A40)
-                          : const Color(0xFF6366F1),
+                          : const Color(0xFF3B82F6),
                   shape: BoxShape.circle,
                   border:
                       quickMenuOpen
-                          ? Border.all(color: const Color(0xFF6366F1), width: 2)
+                          ? Border.all(color: const Color(0xFF3B82F6), width: 2)
                           : null,
                   boxShadow: [
                     BoxShadow(
@@ -638,7 +638,7 @@ class _AgentFloatingNav extends StatelessWidget {
                       quickMenuOpen
                           ? Icon(
                             Icons.close,
-                            color: const Color(0xFF6366F1),
+                            color: const Color(0xFF3B82F6),
                             size: 28,
                           )
                           : (quickAction != null
@@ -698,7 +698,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFF6366F1) : const Color(0xFF94A3B8);
+    final color = selected ? const Color(0xFF3B82F6) : const Color(0xFF94A3B8);
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -738,10 +738,10 @@ class _AgentStatsHero extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.25)),
+        border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.25)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6366F1).withOpacity(0.1),
+            color: const Color(0xFF3B82F6).withOpacity(0.1),
             blurRadius: 24,
             offset: const Offset(0, 6),
           ),
@@ -793,7 +793,7 @@ class _AgentStatsHero extends StatelessWidget {
               _HeroStat(
                 value: '12',
                 label: 'Assigned',
-                color: const Color(0xFF6366F1),
+                color: const Color(0xFF3B82F6),
               ),
               const SizedBox(width: 24),
               _HeroStat(
@@ -811,7 +811,7 @@ class _AgentStatsHero extends StatelessWidget {
               _CircularProgress(
                 resolved: 7,
                 total: 12,
-                color: const Color(0xFF6366F1),
+                color: const Color(0xFF3B82F6),
               ),
             ],
           ),
@@ -826,7 +826,7 @@ class _AgentStatsHero extends StatelessWidget {
                 ),
                 Flexible(
                   flex: 7,
-                  child: Container(height: 6, color: const Color(0xFF6366F1)),
+                  child: Container(height: 6, color: const Color(0xFF3B82F6)),
                 ),
               ],
             ),
@@ -978,10 +978,10 @@ class _TicketOverviewCard extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                  color: const Color(0xFF3B82F6).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: const Color(0xFF6366F1).withOpacity(0.25),
+                    color: const Color(0xFF3B82F6).withOpacity(0.25),
                   ),
                 ),
                 child: Text(
@@ -989,7 +989,7 @@ class _TicketOverviewCard extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF6366F1),
+                    color: Color(0xFF3B82F6),
                   ),
                 ),
               ),
@@ -1006,7 +1006,7 @@ class _TicketOverviewCard extends StatelessWidget {
                 ),
                 Flexible(
                   flex: inProgress,
-                  child: Container(height: 8, color: const Color(0xFF6366F1)),
+                  child: Container(height: 8, color: const Color(0xFF3B82F6)),
                 ),
                 Flexible(
                   flex: resolved,
@@ -1029,7 +1029,7 @@ class _TicketOverviewCard extends StatelessWidget {
                 count: open,
               ),
               _TicketLegend(
-                color: const Color(0xFF6366F1),
+                color: const Color(0xFF3B82F6),
                 label: 'In Progress',
                 count: inProgress,
               ),
@@ -1119,7 +1119,7 @@ class _MyPerformanceSection extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF6366F1),
+                color: Color(0xFF3B82F6),
               ),
             ),
           ],
@@ -1130,7 +1130,7 @@ class _MyPerformanceSection extends StatelessWidget {
             Expanded(
               child: _StatCard(
                 icon: Icons.timer_outlined,
-                iconColor: const Color(0xFF6366F1),
+                iconColor: const Color(0xFF3B82F6),
                 label: 'Avg Response',
                 value: '1h 24m',
               ),
@@ -1230,7 +1230,7 @@ class _RecentActivitySection extends StatelessWidget {
         const SizedBox(height: 12),
         _ActivityTile(
           icon: Icons.add_circle_outline,
-          iconColor: const Color(0xFF6366F1),
+          iconColor: const Color(0xFF3B82F6),
           title: 'New ticket assigned to you',
           subtitle: 'TKT-2041 · Acme Corp · 10 min ago',
         ),
@@ -1329,7 +1329,7 @@ class _ActivityTile extends StatelessWidget {
 //       statusColor: Color(0xFF22C55E),
 //       tickets: 12,
 //       resolved: 7,
-//       gradA: Color(0xFF6366F1),
+//       gradA: Color(0xFF3B82F6),
 //       gradB: Color(0xFF8B5CF6),
 //     ),
 //     _AgentData(
@@ -1363,7 +1363,7 @@ class _ActivityTile extends StatelessWidget {
 //       tickets: 6,
 //       resolved: 5,
 //       gradA: Color(0xFF0EA5E9),
-//       gradB: Color(0xFF6366F1),
+//       gradB: Color(0xFF3B82F6),
 //     ),
 //   ];
 
@@ -1399,7 +1399,7 @@ class _ActivityTile extends StatelessWidget {
 //                     _TStat(
 //                       value: '${_agents.length}',
 //                       label: 'Total',
-//                       color: const Color(0xFF6366F1),
+//                       color: const Color(0xFF3B82F6),
 //                     ),
 //                     Container(
 //                       width: 1,
@@ -1606,7 +1606,7 @@ class _ActivityTile extends StatelessWidget {
 //                           children: [
 //                             Container(
 //                               height: 4,
-//                               color: const Color(0xFF6366F1).withOpacity(0.15),
+//                               color: const Color(0xFF3B82F6).withOpacity(0.15),
 //                             ),
 //                             FractionallySizedBox(
 //                               widthFactor: pct,
@@ -1677,7 +1677,7 @@ class _ActivityTile extends StatelessWidget {
 //       status: 'In Progress',
 //       time: '45 min ago',
 //       priorityColor: Color(0xFFF59E0B),
-//       statusColor: Color(0xFF6366F1),
+//       statusColor: Color(0xFF3B82F6),
 //     ),
 //     _TicketItem(
 //       id: 'TKT-2039',
@@ -1717,7 +1717,7 @@ class _ActivityTile extends StatelessWidget {
 //       status: 'In Progress',
 //       time: '5 hours ago',
 //       priorityColor: Color(0xFFF59E0B),
-//       statusColor: Color(0xFF6366F1),
+//       statusColor: Color(0xFF3B82F6),
 //     ),
 //   ];
 
@@ -1755,7 +1755,7 @@ class _ActivityTile extends StatelessWidget {
 //                         vertical: 7,
 //                       ),
 //                       decoration: BoxDecoration(
-//                         color: const Color(0xFF6366F1),
+//                         color: const Color(0xFF3B82F6),
 //                         borderRadius: BorderRadius.circular(10),
 //                       ),
 //                       child: Row(
@@ -1794,13 +1794,13 @@ class _ActivityTile extends StatelessWidget {
 //                             decoration: BoxDecoration(
 //                               color:
 //                                   sel
-//                                       ? const Color(0xFF6366F1)
+//                                       ? const Color(0xFF3B82F6)
 //                                       : const Color(0xFF162032),
 //                               borderRadius: BorderRadius.circular(20),
 //                               border: Border.all(
 //                                 color:
 //                                     sel
-//                                         ? const Color(0xFF6366F1)
+//                                         ? const Color(0xFF3B82F6)
 //                                         : const Color(0xFF1E3050),
 //                               ),
 //                             ),
@@ -2041,7 +2041,7 @@ class _ActivityTile extends StatelessWidget {
 //                   ),
 //                   borderRadius: BorderRadius.circular(14),
 //                   border: Border.all(
-//                     color: const Color(0xFF6366F1).withOpacity(0.2),
+//                     color: const Color(0xFF3B82F6).withOpacity(0.2),
 //                   ),
 //                 ),
 //                 child: Row(
@@ -2139,7 +2139,7 @@ class _ActivityTile extends StatelessWidget {
 
 //   Color get _planColor =>
 //       data.plan == 'Enterprise'
-//           ? const Color(0xFF6366F1)
+//           ? const Color(0xFF3B82F6)
 //           : data.plan == 'Pro'
 //           ? const Color(0xFF0EA5E9)
 //           : const Color(0xFF64748B);
@@ -2274,10 +2274,10 @@ class _ActivityTile extends StatelessWidget {
 //                   vertical: 5,
 //                 ),
 //                 decoration: BoxDecoration(
-//                   color: const Color(0xFF6366F1).withOpacity(0.08),
+//                   color: const Color(0xFF3B82F6).withOpacity(0.08),
 //                   borderRadius: BorderRadius.circular(8),
 //                   border: Border.all(
-//                     color: const Color(0xFF6366F1).withOpacity(0.25),
+//                     color: const Color(0xFF3B82F6).withOpacity(0.25),
 //                   ),
 //                 ),
 //                 child: const Text(
@@ -2285,7 +2285,7 @@ class _ActivityTile extends StatelessWidget {
 //                   style: TextStyle(
 //                     fontSize: 11,
 //                     fontWeight: FontWeight.w600,
-//                     color: Color(0xFF6366F1),
+//                     color: Color(0xFF3B82F6),
 //                   ),
 //                 ),
 //               ),
@@ -2370,7 +2370,7 @@ class _ActivityTile extends StatelessWidget {
 //                     child: _BillStat(
 //                       label: 'Total',
 //                       value: '\$10,710',
-//                       color: const Color(0xFF6366F1),
+//                       color: const Color(0xFF3B82F6),
 //                     ),
 //                   ),
 //                   const SizedBox(width: 10),
@@ -2479,12 +2479,12 @@ class _ActivityTile extends StatelessWidget {
 //             width: 40,
 //             height: 40,
 //             decoration: BoxDecoration(
-//               color: const Color(0xFF6366F1).withOpacity(0.08),
+//               color: const Color(0xFF3B82F6).withOpacity(0.08),
 //               borderRadius: BorderRadius.circular(10),
 //             ),
 //             child: const Icon(
 //               Icons.description_outlined,
-//               color: Color(0xFF6366F1),
+//               color: Color(0xFF3B82F6),
 //               size: 20,
 //             ),
 //           ),
@@ -2574,7 +2574,7 @@ class _ActivityTile extends StatelessWidget {
 //       plan: 'Enterprise',
 //       tickets: 3,
 //       initials: 'LH',
-//       color: Color(0xFF6366F1),
+//       color: Color(0xFF3B82F6),
 //     ),
 //     _UserItem(
 //       name: 'Carlos Mendes',
@@ -2712,7 +2712,7 @@ class _ActivityTile extends StatelessWidget {
 
 //   Color get _planColor =>
 //       data.plan == 'Enterprise'
-//           ? const Color(0xFF6366F1)
+//           ? const Color(0xFF3B82F6)
 //           : data.plan == 'Pro'
 //           ? const Color(0xFF0EA5E9)
 //           : const Color(0xFF64748B);
@@ -2820,10 +2820,10 @@ class _ActivityTile extends StatelessWidget {
 //             child: Container(
 //               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
 //               decoration: BoxDecoration(
-//                 color: const Color(0xFF6366F1).withOpacity(0.1),
+//                 color: const Color(0xFF3B82F6).withOpacity(0.1),
 //                 borderRadius: BorderRadius.circular(10),
 //                 border: Border.all(
-//                   color: const Color(0xFF6366F1).withOpacity(0.3),
+//                   color: const Color(0xFF3B82F6).withOpacity(0.3),
 //                 ),
 //               ),
 //               child: const Text(
@@ -2831,7 +2831,7 @@ class _ActivityTile extends StatelessWidget {
 //                 style: TextStyle(
 //                   fontSize: 11,
 //                   fontWeight: FontWeight.w700,
-//                   color: Color(0xFF6366F1),
+//                   color: Color(0xFF3B82F6),
 //                 ),
 //               ),
 //             ),
@@ -2864,7 +2864,7 @@ class _AgentSettingsPage extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: const Color(0xFF6366F1).withOpacity(0.2),
+                color: const Color(0xFF3B82F6).withOpacity(0.2),
               ),
             ),
             child: Row(
@@ -2875,7 +2875,7 @@ class _AgentSettingsPage extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                      colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -2919,7 +2919,7 @@ class _AgentSettingsPage extends StatelessWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withOpacity(0.12),
+                          color: const Color(0xFF3B82F6).withOpacity(0.12),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
@@ -2927,7 +2927,7 @@ class _AgentSettingsPage extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF6366F1),
+                            color: Color(0xFF3B82F6),
                           ),
                         ),
                       ),
@@ -3081,10 +3081,10 @@ class _SettingsTile extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withOpacity(0.1),
+                color: const Color(0xFF3B82F6).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: const Color(0xFF6366F1), size: 20),
+              child: Icon(icon, color: const Color(0xFF3B82F6), size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(

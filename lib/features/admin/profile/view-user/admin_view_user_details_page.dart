@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:starlink_app/services/api_service.dart';
 
 // ── Design Tokens (match AdminManageUsersPage) ────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _success = Color(0xFF24A148);
-const _warning = Color(0xFFFF832B);
-const _info = Color(0xFF0043CE);
+const _primary = Color(0xFF133341);
+const _success = Color(0xFF10B981);
+const _warning = Color(0xFFF59E0B);
+const _info = Color(0xFF3B82F6);
 const _purple = Color(0xFF8A3FFC);
 const _teal = Color(0xFF009D9A);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminUserDetailPage
@@ -193,9 +194,7 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
                   backgroundColor: isActive ? _primary : _success,
                   foregroundColor: Colors.white,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  shape: const StadiumBorder(),
                 ),
                 onPressed: () => Navigator.pop(ctx, true),
                 child: Text(
@@ -261,9 +260,7 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
                   backgroundColor: _info,
                   foregroundColor: Colors.white,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  shape: const StadiumBorder(),
                 ),
                 onPressed: () => Navigator.pop(ctx, true),
                 child: const Text(
@@ -441,7 +438,7 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
                 Text(
                   _errorMessage ?? '',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: _inkSecondary),
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFE90408)),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
@@ -449,12 +446,10 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
                   icon: const Icon(Icons.refresh_rounded, size: 16),
                   label: const Text('Retry'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
+                    backgroundColor: AppColors.brand,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    shape: const StadiumBorder(),
                   ),
                 ),
               ],
@@ -595,7 +590,7 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
   }) => Container(
     decoration: const BoxDecoration(
       gradient: LinearGradient(
-        colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+        colors: [Color(0xFF133341), Color(0xFF0C2029)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
@@ -935,13 +930,11 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
+                    backgroundColor: AppColors.brand,
                     foregroundColor: Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                   ),
                   onPressed: _isSaving ? null : _saveEdits,
                   child:
@@ -1020,9 +1013,7 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
             foregroundColor: Colors.white,
             elevation: 0,
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
+            shape: const StadiumBorder(),
           ),
           onPressed: _toggleActivation,
           icon: Icon(
@@ -1048,9 +1039,7 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
             foregroundColor: Colors.white,
             elevation: 0,
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
+            shape: const StadiumBorder(),
           ),
           onPressed: _sendResetPasswordEmail,
           icon: const Icon(Icons.lock_reset_outlined, size: 18),
@@ -1070,9 +1059,7 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage>
             foregroundColor: _ink,
             side: const BorderSide(color: _border),
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
+            shape: const StadiumBorder(),
           ),
           onPressed: () => setState(() => _isEditing = true),
           icon: const Icon(Icons.edit_outlined, size: 18),

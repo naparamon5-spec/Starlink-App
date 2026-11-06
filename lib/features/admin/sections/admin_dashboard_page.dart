@@ -150,12 +150,8 @@ class _AdminScaffoldSection extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 36,
-                backgroundColor: const Color(0xFF133343).withOpacity(0.08),
-                child: Icon(
-                  icon,
-                  size: 36,
-                  color: const Color(0xFF133343),
-                ),
+                backgroundColor: const Color(0xFF133341).withOpacity(0.08),
+                child: Icon(icon, size: 36, color: const Color(0xFF133341)),
               ),
               const SizedBox(height: 16),
               Text(
@@ -163,27 +159,21 @@ class _AdminScaffoldSection extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF133343),
+                  color: Color(0xFF133341),
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               Text(
                 description,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[700],
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               Text(
                 'This is a placeholder screen for the admin "$title" section.\n'
                 'You can wire it to the actual API and tables later.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -193,5 +183,3 @@ class _AdminScaffoldSection extends StatelessWidget {
     );
   }
 }
-
-

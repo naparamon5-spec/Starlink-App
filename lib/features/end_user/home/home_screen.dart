@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/whats_new_dialog.dart';
+import 'package:starlink_app/shared/widgets/notifications.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:starlink_app/shared/widgets/modern_nav.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:provider/provider.dart'; // notifications disabled
 import 'package:http/http.dart' as http;
@@ -17,17 +20,17 @@ import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/end_user/subscription/end_user_subscription_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _inProgress = Color(0xFF0F62FE);
-const _success = Color(0xFF24A148);
-const _warning = Color(0xFFFF832B);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
+const _inProgress = Color(0xFF3B82F6);
+const _success = Color(0xFF10B981);
+const _warning = Color(0xFFF59E0B);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 enum _QuickActionType { tickets, subscriptions }
 
@@ -71,6 +74,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // "What's new": unseen announcements, once after sign-in.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => WhatsNew.maybeShow(context),
+    );
     _loadAll();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Notifications disabled: the backend has no /v1/notifications route.
@@ -196,9 +203,10 @@ class _HomeScreenState extends State<HomeScreen> {
   // ── Helper ───────────────────────────────────────────────────────────────
 
   http.Client get _httpClient {
-    final httpClient = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 15)
-      ..badCertificateCallback = (cert, host, port) => true;
+    final httpClient =
+        HttpClient()
+          ..connectionTimeout = const Duration(seconds: 15)
+          ..badCertificateCallback = (cert, host, port) => true;
     return IOClient(httpClient);
   }
 
@@ -218,18 +226,21 @@ class _HomeScreenState extends State<HomeScreen> {
         final token = await ApiService.getValidAccessToken();
         if (token != null && token.isNotEmpty) {
           final uri = Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/');
-          final res = await _httpClient.get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          ).timeout(const Duration(seconds: 15));
+          final res = await _httpClient
+              .get(
+                uri,
+                headers: {
+                  'Accept': 'application/json',
+                  'Authorization': 'Bearer $token',
+                },
+              )
+              .timeout(const Duration(seconds: 15));
 
           if (res.statusCode == 200) {
             final decoded = json.decode(res.body);
             if (decoded is Map<String, dynamic>) {
-              final extraData = (decoded['data'] as Map<String, dynamic>?) ?? decoded;
+              final extraData =
+                  (decoded['data'] as Map<String, dynamic>?) ?? decoded;
               merged.addAll(extraData);
             }
           }
@@ -252,7 +263,12 @@ class _HomeScreenState extends State<HomeScreen> {
         final prefs = await SharedPreferences.getInstance();
         final profileStr = prefs.getString('userProfile');
         if (profileStr != null) {
-          setState(() => _userProfile = Map<String, dynamic>.from(json.decode(profileStr)));
+          setState(
+            () =>
+                _userProfile = Map<String, dynamic>.from(
+                  json.decode(profileStr),
+                ),
+          );
         }
       } catch (_) {}
     }
@@ -308,8 +324,24 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _quickMenuOpen = true);
     _overlayEntry = OverlayEntry(
       builder:
-          (_) => _QuickMenuOverlay(
-            activeAction: _quickAction,
+          (_) => ModernQuickMenu<_QuickActionType>(
+            items: const [
+              QuickMenuItem(
+                value: _QuickActionType.tickets,
+                icon: Icons.confirmation_number_outlined,
+                label: 'Tickets',
+                subtitle: 'Create and track support tickets',
+                color: _warning,
+              ),
+              QuickMenuItem(
+                value: _QuickActionType.subscriptions,
+                icon: Icons.subscriptions_outlined,
+                label: 'Subscriptions',
+                subtitle: 'View your service lines',
+                color: Color(0xFF133341),
+              ),
+            ],
+            active: _quickAction,
             onDismiss: _closeQuickMenu,
             onSelect: _selectQuickAction,
           ),
@@ -346,7 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_currentIndex == 2) return 'Profile';
     switch (_quickAction) {
       case _QuickActionType.tickets:
-        return 'My Tickets';
+        return 'Tickets';
       case _QuickActionType.subscriptions:
         return 'Subscriptions';
       default:
@@ -680,7 +712,7 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+          colors: [Color(0xFF133341), Color(0xFF0C2029)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -733,6 +765,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 2),
                 Text(
                   first,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -743,19 +777,26 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.18),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              position.toUpperCase(),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5,
+          const SizedBox(width: 8),
+          // Long positions are cut off so the greeting keeps its width.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 112),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                position.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
           ),
@@ -909,109 +950,52 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBottomNav() {
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        border: const Border(top: BorderSide(color: _border, width: 1)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.only(
-        left: 8,
-        right: 8,
-        top: 8,
-        bottom: bottomInset > 0 ? bottomInset : 10,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _NavItem(
-            icon: Icons.dashboard_outlined,
-            label: 'Dashboard',
-            selected: _currentIndex == 0,
-            onTap: () {
-              _closeQuickMenu();
-              setState(() {
-                _currentIndex = 0;
-                _quickAction = null;
-              });
-            },
-          ),
-          GestureDetector(
-            onTap: () => _onNavTap(1),
-            child: Transform.translate(
-              offset: const Offset(0, -12),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: _quickMenuOpen ? _surfaceSubtle : _primary,
-                  shape: BoxShape.circle,
-                  border:
-                      _quickMenuOpen
-                          ? Border.all(color: _primary, width: 2)
-                          : null,
-                  boxShadow: [
-                    BoxShadow(
-                      color: _primaryDark.withOpacity(
-                        _quickMenuOpen ? 0.15 : 0.40,
-                      ),
-                      blurRadius: 14,
-                      offset: const Offset(0, 5),
+    return ModernNavBar(
+      children: [
+        ModernNavItem(
+          icon: Icons.dashboard_outlined,
+          activeIcon: Icons.dashboard_rounded,
+          label: 'Dashboard',
+          selected: _currentIndex == 0,
+          onTap: () {
+            _closeQuickMenu();
+            setState(() {
+              _currentIndex = 0;
+              _quickAction = null;
+            });
+          },
+        ),
+        ModernCenterButton(
+          open: _quickMenuOpen,
+          onTap: () => _onNavTap(1),
+          child:
+              _quickAction != null
+                  ? Icon(_quickActionIcon(), color: Colors.white, size: 24)
+                  : SvgPicture.asset(
+                    'assets/images/logo.svg',
+                    width: 20,
+                    height: 20,
+                    fit: BoxFit.contain,
+                    colorFilter: const ColorFilter.mode(
+                      Colors.white,
+                      BlendMode.srcIn,
                     ),
-                  ],
-                ),
-                child: AnimatedRotation(
-                  turns: _quickMenuOpen ? 0.125 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child:
-                      _quickMenuOpen
-                          ? Icon(Icons.close, color: _primary, size: 24)
-                          : (_quickAction != null
-                              ? Icon(
-                                _quickActionIcon(),
-                                color: Colors.white,
-                                size: 24,
-                              )
-                              : Center(
-                                child: SvgPicture.asset(
-                                  'assets/images/logo.svg',
-                                  width: 18,
-                                  height: 18,
-                                  fit: BoxFit.contain,
-                                  colorFilter: const ColorFilter.mode(
-                                    Colors.white,
-                                    BlendMode.srcIn,
-                                  ),
-                                ),
-                              )),
-                ),
-              ),
-            ),
-          ),
-          _NavItem(
-            icon: Icons.person_outline,
-            label: 'Profile',
-            selected: _currentIndex == 2,
-            onTap: () {
-              _closeQuickMenu();
-              setState(() {
-                _currentIndex = 2;
-                _quickAction = null;
-              });
-            },
-          ),
-        ],
-      ),
+                  ),
+        ),
+        ModernNavItem(
+          icon: Icons.person_outline,
+          activeIcon: Icons.person_rounded,
+          label: 'Profile',
+          selected: _currentIndex == 2,
+          onTap: () {
+            _closeQuickMenu();
+            setState(() {
+              _currentIndex = 2;
+              _quickAction = null;
+            });
+          },
+        ),
+      ],
     );
   }
 
@@ -1020,22 +1004,30 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: _surfaceSubtle,
       appBar: AppBar(
-        backgroundColor: _surface,
+        backgroundColor: const Color(0xFF133341),
+        surfaceTintColor: const Color(0xFF133341),
+        foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         title: Text(
           _getAppBarTitle(),
           style: const TextStyle(
-            color: _ink,
-            fontSize: 16,
+            color: Colors.white,
+            fontSize: 18,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.3,
           ),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: _border),
+          preferredSize: const Size.fromHeight(3),
+          child: Container(height: 3, color: const Color(0xFF1E4A5E)),
         ),
+        actions: [
+          const Padding(
+            padding: EdgeInsets.only(right: 6),
+            child: NotificationBell(),
+          ),
+        ],
         // actions: [
         //   if (_currentIndex == 0)
         //     Padding(
@@ -1070,188 +1062,6 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // ── Quick Menu Overlay ─────────────────────────────────────────────────────────
-
-class _QuickMenuOverlay extends StatefulWidget {
-  final _QuickActionType? activeAction;
-  final VoidCallback onDismiss;
-  final ValueChanged<_QuickActionType> onSelect;
-
-  const _QuickMenuOverlay({
-    required this.activeAction,
-    required this.onDismiss,
-    required this.onSelect,
-  });
-
-  @override
-  State<_QuickMenuOverlay> createState() => _QuickMenuOverlayState();
-}
-
-class _QuickMenuOverlayState extends State<_QuickMenuOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    )..forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    final sw = mq.size.width;
-    final sh = mq.size.height;
-    final bi = mq.padding.bottom;
-    const navH = 60.0;
-    final totalNavH = navH + (bi > 0 ? bi : 10);
-    final fcx = sw / 2;
-    final fcy = sh - totalNavH / 2 - 12;
-    const bs = 56.0;
-    const lh = 20.0;
-    const gap = 6.0;
-    const totalH = bs + gap + lh;
-
-    final actions = [
-      _BubbleSpec(
-        type: _QuickActionType.tickets,
-        icon: Icons.confirmation_number_outlined,
-        label: 'Ticket',
-        color: _warning,
-        dx: -52.0,
-        dy: -90.0,
-        delay: 0.0,
-      ),
-      _BubbleSpec(
-        type: _QuickActionType.subscriptions,
-        icon: Icons.subscriptions_outlined,
-        label: 'Subs',
-        color: _primary,
-        dx: 52.0,
-        dy: -90.0,
-        delay: 0.07,
-      ),
-    ];
-
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: widget.onDismiss,
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder:
-                  (_, __) => Container(
-                    color: Colors.black.withOpacity(0.55 * _controller.value),
-                  ),
-            ),
-          ),
-        ),
-        ...actions.map((spec) {
-          final anim = CurvedAnimation(
-            parent: _controller,
-            curve: Interval(
-              spec.delay,
-              math.min(spec.delay + 0.65, 1.0),
-              curve: Curves.elasticOut,
-            ),
-          );
-          return AnimatedBuilder(
-            animation: anim,
-            builder: (_, child) {
-              final t = anim.value.clamp(0.0, 1.0);
-              return Positioned(
-                left: fcx + spec.dx * t - bs / 2,
-                top: fcy + spec.dy * t - bs / 2,
-                width: bs,
-                height: totalH,
-                child: Opacity(
-                  opacity: t,
-                  child: Transform.scale(
-                    scale: t,
-                    alignment: Alignment.bottomCenter,
-                    child: child,
-                  ),
-                ),
-              );
-            },
-            child: GestureDetector(
-              onTap: () => widget.onSelect(spec.type),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: bs,
-                    height: bs,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color:
-                          widget.activeAction == spec.type
-                              ? spec.color
-                              : _surface,
-                      border: Border.all(
-                        color: spec.color.withOpacity(0.5),
-                        width: widget.activeAction == spec.type ? 0 : 1.5,
-                      ),
-                    ),
-                    child: Icon(
-                      spec.icon,
-                      color:
-                          widget.activeAction == spec.type
-                              ? Colors.white
-                              : spec.color,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(height: gap),
-                  Text(
-                    spec.label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color:
-                          widget.activeAction == spec.type
-                              ? spec.color
-                              : Colors.white.withOpacity(0.9),
-                      letterSpacing: 0.2,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
-
-class _BubbleSpec {
-  final _QuickActionType type;
-  final IconData icon;
-  final String label;
-  final Color color;
-  final double dx, dy, delay;
-
-  const _BubbleSpec({
-    required this.type,
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.dx,
-    required this.dy,
-    required this.delay,
-  });
-}
 
 // ── Reusable small widgets ────────────────────────────────────────────────────
 
@@ -1448,47 +1258,6 @@ class _SkeletonTile extends StatelessWidget {
           ),
           const SizedBox(width: 16),
         ],
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected ? _primary : _inkTertiary;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: color,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

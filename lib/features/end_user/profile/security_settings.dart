@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/features/auth/two_factor/two_factor_settings_card.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _success = Color(0xFF24A148);
-const _ink = Color(0xFF1A1A1A);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _success = Color(0xFF10B981);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF7F7F7);
-const _border = Color(0xFFEAEAEA);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
@@ -45,6 +47,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
   void initState() {
     super.initState();
     _fadeController = AnimationController(
+      value: 1.0,
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
@@ -150,7 +153,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF24A148), Color(0xFF1A7A35)],
+                        colors: [Color(0xFF10B981), Color(0xFF1A7A35)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -206,9 +209,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                         foregroundColor: Colors.white,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                        shape: const StadiumBorder(),
                       ),
                       child: const Text(
                         'Continue to Login',
@@ -284,10 +285,10 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
-              color: _surface,
+              color: isActive ? _surface : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isActive ? _primary : _border,
+                color: isActive ? _primary : const Color(0xFFE2E8F0),
                 width: isActive ? 1.5 : 1,
               ),
               boxShadow:
@@ -421,7 +422,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
-                color: _ink,
+                color: _primary,
                 letterSpacing: 0.2,
               ),
             ),
@@ -433,12 +434,12 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
           decoration: BoxDecoration(
             color: _surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _border),
+            border: Border.all(color: const Color(0xFFEDF1F5)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+                color: const Color(0xFF133341).withOpacity(0.06),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
@@ -460,7 +461,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFFEB1E23), Color(0xFF9B1215)],
+                  colors: [Color(0xFF133341), Color(0xFF0C2029)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -482,6 +483,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                       const Expanded(
                         child: Text(
                           'Security Settings',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 17,
@@ -490,6 +492,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                           ),
                         ),
                       ),
+                      const SizedBox(width: 52),
                       Padding(
                         padding: const EdgeInsets.only(right: 12),
                         child: Container(
@@ -533,8 +536,8 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
                                   colors: [
-                                    Color(0xFFEB1E23),
-                                    Color(0xFF760F12),
+                                    Color(0xFF133341),
+                                    Color(0xFF0C2029),
                                   ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
@@ -594,6 +597,13 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Two-factor authentication (authenticator app)
+                              _buildSectionCard(
+                                title: 'Two-Factor Authentication',
+                                child: const TwoFactorSettingsCard(),
+                              ),
+                              const SizedBox(height: 20),
+
                               // Current password section
                               _buildSectionCard(
                                 title: 'Verify Identity',
@@ -679,14 +689,12 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
                                   onPressed:
                                       _isSaving ? null : _saveSecuritySettings,
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: _primary,
+                                    backgroundColor: AppColors.brand,
                                     foregroundColor: Colors.white,
                                     disabledBackgroundColor: _primary
                                         .withOpacity(0.5),
                                     elevation: 0,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
+                                    shape: const StadiumBorder(),
                                   ),
                                   child:
                                       _isSaving

@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/utils/status_labels.dart';
 import 'dart:async';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/admin/sections/subscription/admin_subscription_details_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _success = Color(0xFF24A148);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
+const _success = Color(0xFF10B981);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class AdminSubscriptionsPage extends StatefulWidget {
   const AdminSubscriptionsPage({super.key});
@@ -226,7 +227,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
   }
 
   Color _activeColor(String? active) {
-    final a = (active ?? '').toString().toUpperCase();
+    final a = subscriptionStatusLabel(active);
     if (a == 'ACTIVE') return _success;
     if (a == 'EXPIRED' || a == 'CANCELLED') return _primaryDark;
     return _inkTertiary;
@@ -247,9 +248,6 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
       color: _surface,
       child: Column(
         children: [
-          // Stats banner
-          if (!_loading) _buildStatsBanner(),
-
           // Search bar
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -392,7 +390,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                               padding: const EdgeInsets.symmetric(vertical: 20),
                               child: Center(
                                 child: Text(
-                                  'All $_totalItems subscriptions loaded',
+                                  'All ${_totalItems > filtered.length ? _totalItems : filtered.length} subscriptions loaded',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     color: _inkTertiary,
@@ -432,64 +430,6 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
 
   // ── Stats banner ───────────────────────────────────────────────────────────
 
-  Widget _buildStatsBanner() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.subscriptions_outlined,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Total Subscriptions',
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.4,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '$_totalItems',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildError() => Center(
     child: Padding(
       padding: const EdgeInsets.all(32),
@@ -515,7 +455,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 13,
-              color: _inkSecondary,
+              color: Color(0xFFE90408),
               height: 1.5,
             ),
           ),
@@ -526,7 +466,10 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
             label: const Text('Try again'),
             style: TextButton.styleFrom(
               foregroundColor: _primary,
-              textStyle: const TextStyle(fontWeight: FontWeight.w600),
+              textStyle: const TextStyle(
+                fontFamily: 'Montserrat',
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -573,7 +516,7 @@ class _SkeletonListState extends State<_SkeletonList>
   late final AnimationController _ctrl;
   late final Animation<double> _anim;
 
-  static const _border = Color(0xFFE0E0E0);
+  static const _border = Color(0xFFD7D7D7);
   static const _surface = Color(0xFFFFFFFF);
 
   @override
@@ -706,12 +649,12 @@ class _SubscriptionCard extends StatelessWidget {
   final String formattedStart;
   final String formattedEnd;
 
-  static const _primary = Color(0xFFEB1E23);
-  static const _ink = Color(0xFF000000);
-  static const _inkSecondary = Color(0xFF6F6F6F);
-  static const _inkTertiary = Color(0xFFA8A8A8);
+  static const _primary = Color(0xFF133341);
+  static const _ink = Color(0xFF111111);
+  static const _inkSecondary = Color(0xFF666666);
+  static const _inkTertiary = Color(0xFF888888);
   static const _surface = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFE0E0E0);
+  static const _border = Color(0xFFD7D7D7);
 
   const _SubscriptionCard({
     required this.sub,
@@ -724,7 +667,7 @@ class _SubscriptionCard extends StatelessWidget {
   String get _nickname => (sub['nickname'] ?? '—').toString();
   String get _id => (sub['id'] ?? '—').toString();
   String get _serviceLineNumber => (sub['serviceLineNumber'] ?? '—').toString();
-  String get _active => (sub['active'] ?? '—').toString();
+  String get _active => subscriptionStatusLabel(sub['active']);
   String get _subscriptionPlan => (sub['subscriptionPlan'] ?? '—').toString();
   String get _dataplan => (sub['dataplan'] ?? '—').toString();
   String get _endUserName =>
@@ -888,9 +831,9 @@ class _SubscriptionCard extends StatelessWidget {
 
 class _MetaTag extends StatelessWidget {
   final String label, value;
-  static const _inkTertiary = Color(0xFFA8A8A8);
-  static const _surfaceSubtle = Color(0xFFF4F4F4);
-  static const _border = Color(0xFFE0E0E0);
+  static const _inkTertiary = Color(0xFF888888);
+  static const _surfaceSubtle = Color(0xFFF8F8F8);
+  static const _border = Color(0xFFD7D7D7);
 
   const _MetaTag({required this.label, required this.value});
 

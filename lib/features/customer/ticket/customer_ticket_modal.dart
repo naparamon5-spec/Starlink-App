@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -9,14 +10,14 @@ import 'package:starlink_app/services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _primary = Color(0xFF133341);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
-const _errorColor = Color(0xFFEB1E23);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
+const _errorColor = Color(0xFFE90408);
 
 const _allowedExtensions = [
   'jpg',
@@ -96,6 +97,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
   void initState() {
     super.initState();
     _animController = AnimationController(
+      value: 1.0,
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
@@ -277,7 +279,9 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
       try {
         final r = await _client
             .get(
-              Uri.parse('${ApiService.baseUrl}/v1/subscriptions/end-user/$_euCode'),
+              Uri.parse(
+                '${ApiService.baseUrl}/v1/subscriptions/end-user/$_euCode',
+              ),
               headers: headers,
             )
             .timeout(const Duration(seconds: 20));
@@ -316,7 +320,10 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
 
     try {
       final r = await _client
-          .get(Uri.parse('${ApiService.baseUrl}/v1/subscriptions/'), headers: headers)
+          .get(
+            Uri.parse('${ApiService.baseUrl}/v1/subscriptions/'),
+            headers: headers,
+          )
           .timeout(const Duration(seconds: 30));
       final list = _parseSubscriptionResponse(r);
       if (list.isNotEmpty) return list;
@@ -538,7 +545,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                           style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
-                            color: _ink,
+                            color: _primary,
                             letterSpacing: -0.3,
                           ),
                         ),
@@ -569,8 +576,8 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: _surfaceSubtle,
-                        borderRadius: BorderRadius.circular(12),
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: _border),
                       ),
                       child: TextField(
@@ -610,8 +617,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Container(height: 1, color: _border),
+                  const SizedBox(height: 6),
 
                   // List
                   Expanded(
@@ -643,14 +649,27 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                                     Navigator.pop(ctx);
                                   },
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 13,
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 4,
                                     ),
-                                    color:
-                                        isSelected
-                                            ? _primary.withOpacity(0.05)
-                                            : Colors.transparent,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          isSelected
+                                              ? _primary.withOpacity(0.06)
+                                              : const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color:
+                                            isSelected
+                                                ? _primary.withOpacity(0.5)
+                                                : const Color(0xFFE2E8F0),
+                                      ),
+                                    ),
                                     child: Row(
                                       children: [
                                         Container(
@@ -659,26 +678,23 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                                           decoration: BoxDecoration(
                                             color:
                                                 isSelected
-                                                    ? _primary.withOpacity(0.12)
-                                                    : _surfaceSubtle,
+                                                    ? _primary
+                                                    : _primary.withOpacity(
+                                                      0.08,
+                                                    ),
                                             borderRadius: BorderRadius.circular(
-                                              10,
+                                              12,
                                             ),
                                           ),
-                                          child: Center(
-                                            child: Text(
-                                              label.isNotEmpty
-                                                  ? label[0].toUpperCase()
-                                                  : '?',
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w800,
-                                                color:
-                                                    isSelected
-                                                        ? _primary
-                                                        : _inkTertiary,
-                                              ),
-                                            ),
+                                          child: Icon(
+                                            _optionIcon(label),
+
+                                            size: 20,
+
+                                            color:
+                                                isSelected
+                                                    ? Colors.white
+                                                    : _primary,
                                           ),
                                         ),
                                         const SizedBox(width: 12),
@@ -713,12 +729,18 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                                             ],
                                           ),
                                         ),
-                                        if (isSelected)
-                                          const Icon(
-                                            Icons.check_circle_rounded,
-                                            color: _primary,
-                                            size: 20,
-                                          ),
+                                        Icon(
+                                          isSelected
+                                              ? Icons.check_circle_rounded
+                                              : Icons.chevron_right_rounded,
+
+                                          color:
+                                              isSelected
+                                                  ? _primary
+                                                  : const Color(0xFF94A3B8),
+
+                                          size: 20,
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -736,6 +758,22 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
   }
 
   // ── Tap-to-open selector tile (matches admin _selectorTile) ──────────────
+
+  IconData _optionIcon(String label) {
+    final l = label.toLowerCase();
+    if (l.contains('ssid') || l.contains('password')) {
+      return Icons.wifi_password_rounded;
+    }
+    if (l.contains('connection')) return Icons.wifi_rounded;
+    if (l.contains('billing')) return Icons.receipt_long_rounded;
+    if (l.contains('device') || l.contains('router') || l.contains('kit')) {
+      return Icons.router_rounded;
+    }
+    if (l.contains('top') && l.contains('up')) return Icons.data_usage_rounded;
+    if (l.contains('account')) return Icons.person_add_alt_1_rounded;
+    if (l.contains('request')) return Icons.assignment_outlined;
+    return Icons.label_outline_rounded;
+  }
 
   Widget _selectorTile({
     required String hint,
@@ -756,10 +794,10 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
-              color: _surfaceSubtle,
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: hasError ? _errorColor : _border,
+                color: hasError ? _errorColor : const Color(0xFFE2E8F0),
                 width: hasError ? 1.5 : 1,
               ),
             ),
@@ -817,16 +855,22 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
           ),
         ),
         if (hasError) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.only(left: 4),
-            child: Text(
-              errorText,
-              style: const TextStyle(
-                color: _errorColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, size: 14, color: _errorColor),
+                const SizedBox(width: 4),
+                Text(
+                  errorText,
+                  style: const TextStyle(
+                    color: _errorColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -861,8 +905,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
         return;
       }
 
-      final ticketTypeValue =
-          ApiService.ticketTypeValue(_selectedTicketType!);
+      final ticketTypeValue = ApiService.ticketTypeValue(_selectedTicketType!);
 
       final subscriptionId = _extractSubscriptionId(_selectedSubscription!);
       if (subscriptionId.isEmpty) {
@@ -1182,15 +1225,28 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
   // ── UI helpers ────────────────────────────────────────────────────────────
 
   Widget _sectionLabel(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(
-      t,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: _inkTertiary,
-        letterSpacing: 1.1,
-      ),
+    padding: const EdgeInsets.only(bottom: 10, left: 2),
+    child: Row(
+      children: [
+        Container(
+          width: 4,
+          height: 14,
+          decoration: BoxDecoration(
+            color: _primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          t,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: _primary,
+            letterSpacing: 1.1,
+          ),
+        ),
+      ],
     ),
   );
 
@@ -1198,13 +1254,13 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: _surface,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFFEDF1F5)),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.03),
-          blurRadius: 8,
-          offset: const Offset(0, 3),
+          color: const Color(0xFF133341).withOpacity(0.06),
+          blurRadius: 18,
+          offset: const Offset(0, 6),
         ),
       ],
     ),
@@ -1220,8 +1276,8 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 24),
             decoration: BoxDecoration(
-              color: _surfaceSubtle,
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: _border),
             ),
             child: Column(
@@ -1263,9 +1319,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
               foregroundColor: _primary,
               side: const BorderSide(color: _primary),
               padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: const StadiumBorder(),
             ),
             icon: const Icon(Icons.add, size: 16),
             label: const Text(
@@ -1363,7 +1417,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
+                  colors: [Color(0xFF133341), Color(0xFF0C2029)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -1386,6 +1440,20 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                         ),
                       ),
                       const SizedBox(width: 4),
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.confirmation_number_outlined,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1517,19 +1585,17 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
           Text(
             _loadError!,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: _inkSecondary, fontSize: 14),
+            style: const TextStyle(color: Color(0xFFE90408), fontSize: 14),
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: _loadAllData,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _primary,
+              backgroundColor: AppColors.brand,
               foregroundColor: Colors.white,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: const StadiumBorder(),
             ),
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text(
@@ -1711,34 +1777,15 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (_descriptionError)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: const [
-                          Icon(
-                            Icons.error_outline,
-                            size: 14,
-                            color: _errorColor,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Description is required',
-                            style: TextStyle(
-                              color: _errorColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   Container(
                     decoration: BoxDecoration(
-                      color: _surfaceSubtle,
-                      borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: _descriptionError ? _errorColor : _border,
+                        color:
+                            _descriptionError
+                                ? _errorColor
+                                : const Color(0xFFE2E8F0),
                         width: _descriptionError ? 1.5 : 1,
                       ),
                     ),
@@ -1765,6 +1812,28 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                       ),
                     ),
                   ),
+                  if (_descriptionError)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, left: 4),
+                      child: Row(
+                        children: const [
+                          Icon(
+                            Icons.error_outline,
+                            size: 14,
+                            color: _errorColor,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Description is required',
+                            style: TextStyle(
+                              color: _errorColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1789,9 +1858,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                       foregroundColor: _inkSecondary,
                       side: const BorderSide(color: _border),
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      shape: const StadiumBorder(),
                     ),
                     icon: const Icon(Icons.close, size: 16),
                     label: const Text(
@@ -1809,14 +1876,12 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
                   child: ElevatedButton.icon(
                     onPressed: _isSubmitting ? null : _submitTicket,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _primary,
+                      backgroundColor: AppColors.brand,
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: _primary.withOpacity(0.5),
+                      disabledBackgroundColor: AppColors.brand.withOpacity(0.5),
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      shape: const StadiumBorder(),
                     ),
                     icon:
                         _isSubmitting

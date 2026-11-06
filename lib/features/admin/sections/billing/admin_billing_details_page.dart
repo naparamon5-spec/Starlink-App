@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:starlink_app/services/api_service.dart';
 
 class AdminBillingDetailsPage extends StatefulWidget {
@@ -27,7 +28,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
   Map<String, dynamic>? _billing;
 
   // ── Brand colors ───────────────────────────────────────────────────────────
-  static const _brandRed = Color(0xFFEB1E23);
+  static const _brandRed = Color(0xFF133341);
 
   @override
   void initState() {
@@ -139,7 +140,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
   String _formatAmount(dynamic raw) {
     if (raw == null) return '0.00';
     final d = double.tryParse(raw.toString());
-    return d != null ? d.toStringAsFixed(2) : raw.toString();
+    return d != null ? NumberFormat('#,##0.00').format(d) : raw.toString();
   }
 
   double _parseAmount(dynamic raw) =>
@@ -204,10 +205,6 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
   }
 
   PreferredSizeWidget _buildAppBar(String title) => AppBar(
-    backgroundColor: Colors.white,
-    foregroundColor: const Color(0xFF000000),
-    elevation: 0,
-    surfaceTintColor: Colors.transparent,
     title: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -216,14 +213,14 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontSize: 15,
+            fontSize: 18,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF000000),
+            color: Colors.white,
           ),
         ),
         Text(
           'CPO: ${widget.cpoNumber} · SIDR: ${widget.sidrNumber}',
-          style: const TextStyle(fontSize: 11, color: Color(0xFF8A96A3)),
+          style: const TextStyle(fontSize: 11, color: Colors.white70),
         ),
       ],
     ),
@@ -233,10 +230,6 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
     //     onPressed: _loading ? null : _reload,
     //   ),
     // ],
-    bottom: PreferredSize(
-      preferredSize: const Size.fromHeight(1),
-      child: Container(height: 1, color: const Color(0xFFE8ECF0)),
-    ),
   );
 
   Widget _buildMakePaymentButton() {
@@ -280,9 +273,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
             backgroundColor: isPaid ? const Color(0xFFE8ECF0) : _brandRed,
             foregroundColor: isPaid ? const Color(0xFF8A96A3) : Colors.white,
             elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
+            shape: const StadiumBorder(),
           ),
           icon: Icon(
             isPaid ? Icons.verified_rounded : Icons.payment_rounded,
@@ -565,9 +556,7 @@ class _AdminBillingDetailsPageState extends State<AdminBillingDetailsPage> {
                           disabledBackgroundColor: _brandRed.withOpacity(0.6),
                           disabledForegroundColor: Colors.white,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
+                          shape: const StadiumBorder(),
                         ),
                         child:
                             submitting
@@ -903,15 +892,18 @@ class _StatBox extends StatelessWidget {
           child: Icon(icon, color: color, size: 18),
         ),
         const SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            color: color,
+        // Large amounts shrink to fit instead of being cut off.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 3),
         Text(

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 3.1.11+18
+version: 4.1.11+18
 
 environment:
   sdk: ^3.7.2
@@ -54,6 +54,12 @@ dependencies:
   flutter_image_compress: ^2.1.0
   flutter_dotenv: ^6.0.1
   android_intent_plus: ^6.0.0
+  # Push notifications (FCM) — same setup as eforward_app / hris_mobile.
+  firebase_core: ^4.10.0
+  firebase_messaging: ^16.3.0
+  flutter_local_notifications: ^17.2.4
+  # QR code for linking Google / Microsoft Authenticator (2FA).
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
@@ -86,6 +92,19 @@ flutter:
 
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
+
+  # Montserrat (SIL Open Font License) — same font as the Starlink web portal.
+  fonts:
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Montserrat-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Montserrat-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Montserrat-Bold.ttf
+          weight: 700
 
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a

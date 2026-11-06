@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/core/theme/app_theme.dart';
+import 'package:starlink_app/shared/widgets/picker_option_tile.dart';
 import 'package:flutter/services.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/admin/profile/view-user/admin_view_user_details_page.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFFEB1E23);
-const _primaryDark = Color(0xFF760F12);
-const _success = Color(0xFF24A148);
-const _warning = Color(0xFFFF832B);
-const _info = Color(0xFF0043CE);
+const _primary = Color(0xFF133341);
+const _primaryDark = Color(0xFF0C2029);
+const _success = Color(0xFF10B981);
+const _warning = Color(0xFFF59E0B);
+const _info = Color(0xFF3B82F6);
 const _purple = Color(0xFF8A3FFC);
 const _teal = Color(0xFF009D9A);
-const _ink = Color(0xFF000000);
-const _inkSecondary = Color(0xFF6F6F6F);
-const _inkTertiary = Color(0xFFA8A8A8);
+const _ink = Color(0xFF111111);
+const _inkSecondary = Color(0xFF666666);
+const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF4F4F4);
-const _border = Color(0xFFE0E0E0);
+const _surfaceSubtle = Color(0xFFF8F8F8);
+const _border = Color(0xFFD7D7D7);
 
 class AdminManageUsersPage extends StatefulWidget {
   const AdminManageUsersPage({super.key});
@@ -157,7 +160,6 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
     }
   }
 
-
   Color _roleColor(String rawRole) {
     switch (rawRole.toLowerCase()) {
       case 'admin':
@@ -271,6 +273,8 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
+        // Same navy app bar as the other pages (from the app theme).
+        appBar: AppBar(title: const Text('Manage Users')),
         backgroundColor: _surfaceSubtle,
         floatingActionButton: FloatingActionButton(
           onPressed: _showAddUserDialog,
@@ -284,69 +288,6 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
         ),
         body: Column(
           children: [
-            // ── Gradient AppBar ────────────────────────────────────────────
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFEB1E23), Color(0xFF760F12)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Manage Users',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                            Text(
-                              _isLoading
-                                  ? 'Loading...'
-                                  : '${_allUsers.length} users total',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // IconButton(
-                      //   onPressed: _fetchUsers,
-                      //   icon: const Icon(
-                      //     Icons.refresh_rounded,
-                      //     color: Colors.white70,
-                      //     size: 20,
-                      //   ),
-                      // ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
             // ── Body ──────────────────────────────────────────────────────
             Expanded(
               child:
@@ -465,57 +406,62 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
                                   20,
                                   0,
                                 ),
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Row(
-                                    children:
-                                        _roleFilters.map((r) {
-                                          final isSelected = _selectedRole == r;
-                                          return GestureDetector(
-                                            onTap: () {
-                                              setState(() => _selectedRole = r);
-                                              _filter();
-                                            },
-                                            child: AnimatedContainer(
-                                              duration: const Duration(
-                                                milliseconds: 200,
-                                              ),
-                                              margin: const EdgeInsets.only(
-                                                right: 8,
-                                              ),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 16,
-                                                    vertical: 8,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color:
-                                                    isSelected
-                                                        ? _primary
-                                                        : _surface,
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
-                                                border: Border.all(
+                                child: EdgeFade(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children:
+                                          _roleFilters.map((r) {
+                                            final isSelected =
+                                                _selectedRole == r;
+                                            return GestureDetector(
+                                              onTap: () {
+                                                setState(
+                                                  () => _selectedRole = r,
+                                                );
+                                                _filter();
+                                              },
+                                              child: AnimatedContainer(
+                                                duration: const Duration(
+                                                  milliseconds: 200,
+                                                ),
+                                                margin: const EdgeInsets.only(
+                                                  right: 8,
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                      vertical: 8,
+                                                    ),
+                                                decoration: BoxDecoration(
                                                   color:
                                                       isSelected
                                                           ? _primary
-                                                          : _border,
+                                                          : _surface,
+                                                  borderRadius:
+                                                      BorderRadius.circular(20),
+                                                  border: Border.all(
+                                                    color:
+                                                        isSelected
+                                                            ? _primary
+                                                            : _border,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  r,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color:
+                                                        isSelected
+                                                            ? Colors.white
+                                                            : _inkSecondary,
+                                                  ),
                                                 ),
                                               ),
-                                              child: Text(
-                                                r,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w700,
-                                                  color:
-                                                      isSelected
-                                                          ? Colors.white
-                                                          : _inkSecondary,
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        }).toList(),
+                                            );
+                                          }).toList(),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -696,7 +642,7 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
           Text(
             _errorMessage ?? '',
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: _inkSecondary),
+            style: const TextStyle(fontSize: 12, color: Color(0xFFE90408)),
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
@@ -704,12 +650,10 @@ class _AdminManageUsersPageState extends State<AdminManageUsersPage> {
             icon: const Icon(Icons.refresh_rounded, size: 16),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _primary,
+              backgroundColor: AppColors.brand,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: const StadiumBorder(),
             ),
           ),
         ],
@@ -965,8 +909,8 @@ class _UserCard extends StatelessWidget {
                 ),
               ],
             ),
-            content: RichText(
-              text: TextSpan(
+            content: Text.rich(
+              TextSpan(
                 style: const TextStyle(
                   fontSize: 13,
                   color: _inkSecondary,
@@ -992,9 +936,7 @@ class _UserCard extends StatelessWidget {
                 onPressed: () => Navigator.pop(ctx, false),
                 style: TextButton.styleFrom(
                   foregroundColor: _inkSecondary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  shape: const StadiumBorder(),
                 ),
                 child: const Text(
                   'Cancel',
@@ -1007,12 +949,10 @@ class _UserCard extends StatelessWidget {
                   onDelete();
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _primary,
+                  backgroundColor: AppColors.brand,
                   foregroundColor: Colors.white,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  shape: const StadiumBorder(),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 18,
                     vertical: 10,
@@ -1045,7 +985,6 @@ class _UserCard extends StatelessWidget {
 }
 
 // ── Stat Pill ──────────────────────────────────────────────────────────────────
-
 
 // ── Create User Bottom Sheet ───────────────────────────────────────────────────
 
@@ -1599,9 +1538,7 @@ class _CreateUserSheetState extends State<CreateUserSheet> {
                         foregroundColor: Colors.white,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: const StadiumBorder(),
                       ),
                       onPressed: _isSaving ? null : _save,
                       icon:
@@ -1927,40 +1864,14 @@ class _PickerBottomSheetState extends State<_PickerBottomSheet> {
                 final value = item['value'];
                 final isSelected =
                     value.toString() == (widget.selectedValue ?? '');
-                return InkWell(
+                return PickerOptionTile(
+                  label: label,
+                  icon: pickerOptionIcon('${widget.title} $label'),
+                  selected: isSelected,
                   onTap: () {
                     Navigator.pop(context);
                     widget.onSelect(label, value);
                   },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 13,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            label,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight:
-                                  isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w400,
-                              color: isSelected ? _primary : _ink,
-                            ),
-                          ),
-                        ),
-                        if (isSelected)
-                          const Icon(
-                            Icons.check_rounded,
-                            size: 18,
-                            color: _primary,
-                          ),
-                      ],
-                    ),
-                  ),
                 );
               },
             ),
