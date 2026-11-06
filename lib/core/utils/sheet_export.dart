@@ -1,6 +1,8 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/utils/file_download/file_downloader.dart';
 
@@ -19,7 +21,7 @@ Future<void> exportSheets(
   String filename,
   List<ExportSheet> sheets,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final toast = AppToast.of(context);
   try {
     final excel = Excel.createExcel();
     final defaultSheet = excel.getDefaultSheet();
@@ -41,17 +43,15 @@ Future<void> exportSheets(
       mimeType:
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          path == null ? 'Export downloaded' : 'Saved $filename to $path',
-        ),
-      ),
-    );
+    // The web build downloads and returns no path; on a phone no path means
+    // the file couldn't be written.
+    toast.showResult(path != null
+              ? 'Saved $filename to $path'
+              : kIsWeb
+              ? 'Export downloaded'
+              : "Couldn't save $filename. Check storage access and try again.", ok: path != null || kIsWeb);
   } catch (e) {
-    messenger.showSnackBar(
-      SnackBar(content: Text('Export failed: ${e.toString()}')),
-    );
+    toast.showError('Export failed: ${e.toString()}');
   }
 }
 

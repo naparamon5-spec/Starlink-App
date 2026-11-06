@@ -105,7 +105,10 @@ class ModernNavItem extends StatelessWidget {
                 color: color,
                 letterSpacing: 0.1,
               ),
-              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(label, maxLines: 1),
+              ),
             ),
           ],
         ),

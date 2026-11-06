@@ -1,1075 +1,649 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
-import 'package:flutter/services.dart';
+import 'package:starlink_app/features/admin/profile/admin_manage_users_page.dart';
+import 'package:starlink_app/features/auth/change_password.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/account_detail_parts.dart';
+import 'package:starlink_app/shared/widgets/password_checklist.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 
-// ── Design Tokens (match AdminManageUsersPage) ────────────────────────────────
-const _primary = Color(0xFF133341);
-const _success = Color(0xFF10B981);
-const _warning = Color(0xFFF59E0B);
-const _info = Color(0xFF3B82F6);
-const _purple = Color(0xFF8A3FFC);
-const _teal = Color(0xFF009D9A);
-const _ink = Color(0xFF111111);
-const _inkSecondary = Color(0xFF666666);
-const _inkTertiary = Color(0xFF888888);
-const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF8F8F8);
-const _border = Color(0xFFD7D7D7);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AdminUserDetailPage
-// Navigate to this page by pushing with a `userId` argument:
-//
-//   Navigator.push(context, MaterialPageRoute(
-//     builder: (_) => AdminUserDetailPage(userId: user['id'].toString()),
-//   ));
-// ─────────────────────────────────────────────────────────────────────────────
-
+/// One portal account: who it is, its editable details, and its security
+/// actions. Status and password actions never apply to your own account, and
+/// agents only get them for customer and end-user accounts.
 class AdminUserDetailPage extends StatefulWidget {
-  final String userId;
-
   const AdminUserDetailPage({super.key, required this.userId});
+  final String userId;
 
   @override
   State<AdminUserDetailPage> createState() => _AdminUserDetailPageState();
 }
 
-class _AdminUserDetailPageState extends State<AdminUserDetailPage>
-    with TickerProviderStateMixin {
-  late AnimationController _fadeCtrl;
-  late AnimationController _slideCtrl;
+class _AdminUserDetailPageState extends State<AdminUserDetailPage> {
+  final _first = TextEditingController();
+  final _middle = TextEditingController();
+  final _last = TextEditingController();
+  final _position = TextEditingController();
 
-  Map<String, dynamic>? _user;
-  bool _isLoading = true;
-  String? _errorMessage;
+  bool _loading = true;
+  String? _loadError;
+  Map<String, dynamic> _user = const {};
+  String _myRole = '';
+  String _myId = '';
+  bool _saving = false;
+  bool _toggling = false;
+  bool _sendingReset = false;
 
-  // Edit mode controllers
-  bool _isEditing = false;
-  bool _isSaving = false;
-  final _firstNameCtrl = TextEditingController();
-  final _lastNameCtrl = TextEditingController();
-  final _middleNameCtrl = TextEditingController();
-  final _positionCtrl = TextEditingController();
+  bool get _isSelf => _myId.isNotEmpty && _myId == widget.userId;
+  bool get _isActive => accountText(_user['inactive']) == 'N';
+  bool get _canManage =>
+      canToggleUser(myRole: _myRole, myId: _myId, user: _user);
+  bool get _canEdit => _isSelf || _canManage;
+
+  bool get _isDirty =>
+      !_loading &&
+      _loadError == null &&
+      (_first.text != accountText(_user['first_name']) ||
+          _middle.text != accountText(_user['middle_name']) ||
+          _last.text != accountText(_user['last_name']) ||
+          _position.text != accountText(_user['position']));
 
   @override
   void initState() {
     super.initState();
-    _fadeCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _slideCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _fetchUser();
+    _load();
   }
 
   @override
   void dispose() {
-    _fadeCtrl.dispose();
-    _slideCtrl.dispose();
-    _firstNameCtrl.dispose();
-    _lastNameCtrl.dispose();
-    _middleNameCtrl.dispose();
-    _positionCtrl.dispose();
+    _first.dispose();
+    _middle.dispose();
+    _last.dispose();
+    _position.dispose();
     super.dispose();
   }
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
-  Future<void> _fetchUser() async {
+  Future<void> _load() async {
     setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+      _loading = true;
+      _loadError = null;
     });
-
-    try {
-      final result = await ApiService.getUserById2(widget.userId);
-      if (result['status'] == 'success') {
-        final data = result['data'];
-        final Map<String, dynamic> user =
-            data is Map<String, dynamic>
-                ? data
-                : (data is Map ? Map<String, dynamic>.from(data) : {});
-
-        setState(() {
-          _user = user;
-          _isLoading = false;
-        });
-        _populateControllers(user);
-        _fadeCtrl.forward(from: 0);
-        _slideCtrl.forward(from: 0);
-      } else {
-        setState(() {
-          _errorMessage = result['message'] ?? 'Failed to load user.';
-          _isLoading = false;
-        });
+    final results = await Future.wait([
+      ApiService.getUserById2(widget.userId),
+      ApiService.getMe(),
+    ]);
+    if (!mounted) return;
+    final res = results[0];
+    final data = res['data'];
+    final me = results[1]['data'];
+    setState(() {
+      _loading = false;
+      if (me is Map) {
+        _myRole = accountText(me['role'] ?? me['user_role']).toLowerCase();
+        _myId = accountText(me['id']);
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _populateControllers(Map<String, dynamic> u) {
-    _firstNameCtrl.text = u['first_name']?.toString() ?? '';
-    _lastNameCtrl.text = u['last_name']?.toString() ?? '';
-    _middleNameCtrl.text = u['middle_name']?.toString() ?? '';
-    _positionCtrl.text = u['position']?.toString() ?? '';
-  }
-
-  // ── Save edits ─────────────────────────────────────────────────────────────
-  Future<void> _saveEdits() async {
-    setState(() => _isSaving = true);
-    try {
-      final result = await ApiService.updateUser(widget.userId, {
-        'first_name': _firstNameCtrl.text.trim(),
-        'last_name': _lastNameCtrl.text.trim(),
-        'middle_name': _middleNameCtrl.text.trim(),
-        'position': _positionCtrl.text.trim(),
-      });
-
-      if (result['status'] == 'success') {
-        // Update local state with edited values
-        setState(() {
-          _user = {
-            ..._user!,
-            'first_name': _firstNameCtrl.text.trim(),
-            'last_name': _lastNameCtrl.text.trim(),
-            'middle_name': _middleNameCtrl.text.trim(),
-            'position': _positionCtrl.text.trim(),
-            'name':
-                '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
-          };
-          _isEditing = false;
-          _isSaving = false;
-        });
-        _showSnack('User updated successfully.', _success);
+      if (res['status'] == 'success' && data is Map) {
+        _applyUser(Map<String, dynamic>.from(data));
       } else {
-        setState(() => _isSaving = false);
-        _showSnack(result['message'] ?? 'Update failed.', _primary);
+        _loadError = accountText(res['message']);
       }
-    } catch (e) {
-      setState(() => _isSaving = false);
-      _showSnack(e.toString().replaceAll('Exception: ', ''), _primary);
-    }
+    });
   }
 
-  // ── Toggle active/inactive ─────────────────────────────────────────────────
-  Future<void> _toggleActivation() async {
-    if (_user == null) return;
-    final isActive = _isActive(_user!);
-    final action = isActive ? 'deactivate' : 'activate';
+  void _applyUser(Map<String, dynamic> user) {
+    _user = user;
+    _first.text = accountText(user['first_name']);
+    _middle.text = accountText(user['middle_name']);
+    _last.text = accountText(user['last_name']);
+    _position.text = accountText(user['position']);
+  }
 
-    final confirmed = await showDialog<bool>(
+  void _snack(String message, {bool isError = false}) => AppToast.result(context, message, ok: !isError);
+
+  String _failure(Map<String, dynamic> res, String fallback) {
+    final message = accountText(res['message']);
+    return message.isNotEmpty ? message : fallback;
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    if (_first.text.trim().isEmpty || _last.text.trim().isEmpty) {
+      _snack('First and last name are required.', isError: true);
+      return;
+    }
+    setState(() => _saving = true);
+    final res = await ApiService.updateUser(widget.userId, {
+      'first_name': _first.text.trim(),
+      'middle_name': _middle.text.trim(),
+      'last_name': _last.text.trim(),
+      'position': _position.text.trim(),
+    });
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (res['status'] != 'success') {
+      _snack(_failure(res, "Couldn't save the changes."), isError: true);
+      return;
+    }
+    _snack('Profile updated');
+    await _load();
+  }
+
+  Future<void> _toggleStatus() async {
+    final activate = !_isActive;
+    if (!activate) {
+      final ok = await showAppConfirm(context, title: 'Deactivate this user?', message: '${accountText(_user['name'])} (${accountText(_user['email'])}) '
+"will be signed out and won't be able to sign in until "
+'reactivated.', confirmLabel: 'Deactivate', icon: Icons.person_off_outlined, tone: AppDialogTone.danger);
+      if (ok != true || !mounted) return;
+    }
+    setState(() => _toggling = true);
+    final res =
+        activate
+            ? await ApiService.activateUser(widget.userId)
+            : await ApiService.deactivateUser(widget.userId);
+    if (!mounted) return;
+    final ok = res['status'] == 'success';
+    setState(() {
+      _toggling = false;
+      if (ok) _user = {..._user, 'inactive': activate ? 'N' : 'Y'};
+    });
+    _snack(
+      ok ? 'Status updated' : _failure(res, "Couldn't update the status."), isError: !ok);
+  }
+
+  Future<void> _sendReset() async {
+    final ok = await showAppConfirm(context, title: 'Send reset link?', message: 'A password reset link will be emailed to '
+'${accountText(_user['email'])}.', confirmLabel: 'Send', icon: Icons.mail_outline_rounded);
+    if (ok != true || !mounted) return;
+    setState(() => _sendingReset = true);
+    final res = await ApiService.sendResetPasswordEmail(widget.userId);
+    if (!mounted) return;
+    setState(() => _sendingReset = false);
+    _snack(
+      res['status'] == 'success'
+          ? 'Reset link sent'
+          : _failure(res, "Couldn't send the reset link."), isError: res['status'] != 'success');
+  }
+
+  Future<void> _openSetPassword() async {
+    final set = await showModalBottomSheet<bool>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: Text(
-              isActive ? 'Deactivate User?' : 'Activate User?',
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-            ),
-            content: Text(
-              isActive
-                  ? 'This will prevent the user from logging in.'
-                  : 'This will restore the user\'s access.',
-              style: const TextStyle(color: _inkSecondary, fontSize: 13),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: _inkSecondary),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isActive ? _primary : _success,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: const StadiumBorder(),
-                ),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(
-                  isActive ? 'Deactivate' : 'Activate',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
+      isScrollControlled: true,
+      enableDrag: false,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (_) => _SetPasswordSheet(userId: widget.userId),
     );
-
-    if (confirmed != true) return;
-
-    try {
-      final result =
-          isActive
-              ? await ApiService.deactivateUser(widget.userId)
-              : await ApiService.activateUser(widget.userId);
-
-      if (result['status'] == 'success') {
-        setState(() {
-          _user = {..._user!, 'inactive': isActive ? 'Y' : 'N'};
-        });
-        _showSnack(
-          isActive ? 'User deactivated.' : 'User activated.',
-          isActive ? _warning : _success,
-        );
-      } else {
-        _showSnack(result['message'] ?? 'Action failed.', _primary);
-      }
-    } catch (e) {
-      _showSnack(e.toString().replaceAll('Exception: ', ''), _primary);
-    }
+    if (set == true && mounted) _snack('Password set');
   }
 
-  // ── Send reset password email ──────────────────────────────────────────────
-  Future<void> _sendResetPasswordEmail() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: const Text(
-              'Send Reset Password Email?',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-            ),
-            content: Text(
-              'A password reset link will be sent to ${_user?['email'] ?? 'this user'}.',
-              style: const TextStyle(color: _inkSecondary, fontSize: 13),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: _inkSecondary),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _info,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: const StadiumBorder(),
-                ),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(
-                  'Send',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      final result = await ApiService.sendResetPasswordEmail(widget.userId);
-      if (result['status'] == 'success') {
-        _showSnack(result['message'] ?? 'Password reset email sent.', _info);
-      } else {
-        _showSnack(
-          result['message'] ?? 'Failed to send reset email.',
-          _primary,
-        );
-      }
-    } catch (e) {
-      _showSnack(e.toString().replaceAll('Exception: ', ''), _primary);
-    }
-  }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  bool _isActive(Map<String, dynamic> u) =>
-      (u['inactive'] ?? 'N').toString().toUpperCase() != 'Y';
-
-  String _displayName(Map<String, dynamic> u) {
-    final first = u['first_name']?.toString().trim() ?? '';
-    final last = u['last_name']?.toString().trim() ?? '';
-    final name = u['name']?.toString().trim() ?? '';
-    if (first.isNotEmpty || last.isNotEmpty) {
-      return '$first $last'.trim();
-    }
-    return name.isNotEmpty ? name : 'Unknown User';
-  }
-
-  String _initials(Map<String, dynamic> u) {
-    final name = _displayName(u);
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    return name.isNotEmpty ? name[0].toUpperCase() : '?';
-  }
-
-  String _normaliseRole(String raw) {
-    switch (raw.toLowerCase()) {
-      case 'end_user':
-        return 'End User';
-      case 'admin':
-        return 'Admin';
-      case 'agent':
-        return 'Agent';
-      case 'customer':
-        return 'Customer';
-      case 'biller':
-        return 'Biller';
-      default:
-        return raw.isEmpty ? '—' : raw;
-    }
-  }
-
-  Color _roleColor(String raw) {
-    switch (raw.toLowerCase()) {
-      case 'admin':
-        return _primary;
-      case 'agent':
-        return _warning;
-      case 'customer':
-        return _info;
-      case 'end_user':
-        return _success;
-      case 'biller':
-        return _purple;
-      default:
-        return _teal;
-    }
-  }
-
-  IconData _roleIcon(String raw) {
-    switch (raw.toLowerCase()) {
-      case 'admin':
-        return Icons.admin_panel_settings_outlined;
-      case 'agent':
-        return Icons.support_agent_outlined;
-      case 'customer':
-        return Icons.business_outlined;
-      case 'end_user':
-        return Icons.person_outline;
-      case 'biller':
-        return Icons.receipt_long_outlined;
-      default:
-        return Icons.badge_outlined;
-    }
-  }
-
-  void _showSnack(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          msg,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
-  }
-
-  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
+    return UnsavedChangesGuard(
+      isDirty: () => _isDirty,
+      listenTo: Listenable.merge([_first, _middle, _last, _position]),
       child: Scaffold(
-        backgroundColor: _surfaceSubtle,
+        backgroundColor: AppColors.paperSubtle,
+        appBar: AppBar(title: const Text('User')),
         body:
-            _isLoading
-                ? _buildLoader()
-                : _errorMessage != null
+            _loading && _user.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : _loadError != null
                 ? _buildError()
-                : _buildBody(),
+                : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 14),
+                    _buildDetails(),
+                    if (_canManage || _isSelf) ...[
+                      const SizedBox(height: 14),
+                      _buildSecurity(),
+                    ],
+                  ],
+                ),
       ),
     );
   }
 
-  Widget _buildLoader() => Column(
-    children: [
-      _buildAppBar(title: 'User Details', subtitle: 'Loading...'),
-      const Expanded(
-        child: Center(child: CircularProgressIndicator(color: _primary)),
+  Widget _buildError() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 34, color: AppColors.inkFaint),
+          const SizedBox(height: 10),
+          const Text(
+            'User not found',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          if (_loadError!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              _loadError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
+            ),
+          ],
+          const SizedBox(height: 14),
+          OutlinedButton(onPressed: _load, child: const Text('Try again')),
+        ],
       ),
-    ],
+    ),
   );
 
-  Widget _buildError() => Column(
-    children: [
-      _buildAppBar(title: 'User Details', subtitle: 'Error'),
-      Expanded(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildHeader() {
+    final full =
+        '${accountText(_user['first_name'])} '
+                '${accountText(_user['last_name'])}'
+            .trim();
+    final name =
+        accountText(_user['name']).isNotEmpty
+            ? accountText(_user['name'])
+            : full;
+    final email = accountText(_user['email']);
+    final role = accountText(_user['role']).replaceAll('_', ' ').toUpperCase();
+    final company = accountText(_user['company_name']);
+    const compact = Size(0, 34);
+    const padding = EdgeInsets.symmetric(horizontal: 14);
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: AppColors.navy,
+                child: Text(
+                  accountInitials(name),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name.isEmpty ? '—' : name,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        height: 1.2,
+                        letterSpacing: -0.3,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                    if (email.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        email,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.inkMuted,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (role.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.navy.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              role,
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                                color: AppColors.navy,
+                              ),
+                            ),
+                          ),
+                        if (company.isNotEmpty)
+                          Text(
+                            company,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.inkFaint,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 6,
               children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: _primary.withOpacity(0.08),
-                    shape: BoxShape.circle,
+                DotBadge(
+                  _isActive ? 'ACTIVE' : 'INACTIVE',
+                  color: _isActive ? AppColors.successInk : AppColors.inkMuted,
+                ),
+                if (_canManage)
+                  _isActive
+                      ? TextButton(
+                        onPressed: _toggling ? null : _toggleStatus,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.ink,
+                          minimumSize: compact,
+                          padding: padding,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Deactivate'),
+                      )
+                      : OutlinedButton(
+                        onPressed: _toggling ? null : _toggleStatus,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: compact,
+                          padding: padding,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Activate'),
+                      ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cardTitle(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        color: AppColors.navy,
+      ),
+    ),
+  );
+
+  Widget _field(String label, TextEditingController controller) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.6,
+            color: AppColors.ink,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          readOnly: !_canEdit,
+          enabled: !_saving,
+          textCapitalization: TextCapitalization.words,
                   ),
-                  child: const Icon(
-                    Icons.cloud_off_outlined,
-                    color: _primary,
-                    size: 30,
+      ],
+    ),
+  );
+
+  Widget _buildDetails() {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _cardTitle('Details'),
+          _field('First name', _first),
+          _field('Middle name', _middle),
+          _field('Last name', _last),
+          _field('Position', _position),
+          if (_canEdit)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _saving ? null : _save,
+                child:
+                    _saving
+                        ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                        : const Text('Save changes'),
+              ),
+            )
+          else
+            const Text(
+              'Only admins can change staff accounts.',
+              style: TextStyle(fontSize: 12.5, color: AppColors.inkMuted),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecurity() {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _cardTitle('Security'),
+          if (_canManage) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _sendingReset ? null : _sendReset,
+                icon: const Icon(Icons.mail_outline_rounded, size: 18),
+                label: const Text('Send reset link'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _openSetPassword,
+                style: FilledButton.styleFrom(backgroundColor: AppColors.navy),
+                icon: const Icon(Icons.key_rounded, size: 18),
+                label: const Text('Set password'),
+              ),
+            ),
+          ] else ...[
+            const Text(
+              'This is your account. Change your password here:',
+              style: TextStyle(fontSize: 13, color: AppColors.inkMuted),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AdminChangePasswordPage(),
+                      ),
+                    ),
+                child: const Text('Change password'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Set someone's password directly (PUT /auth/user/set-password/:id).
+class _SetPasswordSheet extends StatefulWidget {
+  const _SetPasswordSheet({required this.userId});
+  final String userId;
+
+  @override
+  State<_SetPasswordSheet> createState() => _SetPasswordSheetState();
+}
+
+class _SetPasswordSheetState extends State<_SetPasswordSheet> {
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _visible = false;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() => _saving = true);
+    final res = await ApiService.setUserPassword(widget.userId, _password.text);
+    if (!mounted) return;
+    if (res['status'] == 'success') {
+      Navigator.pop(context, true);
+      return;
+    }
+    setState(() => _saving = false);
+    final message = accountText(res['message']);
+    AppToast.error(
+      context,
+      message.isEmpty ? "Couldn't set the password." : message,
+    );
+  }
+
+  Widget _field(String label, TextEditingController controller) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.6,
+            color: AppColors.ink,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          obscureText: !_visible,
+          autocorrect: false,
+          enableSuggestions: false,
+          enabled: !_saving,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            suffixIcon: IconButton(
+              tooltip: _visible ? 'Hide passwords' : 'Show passwords',
+              onPressed: () => setState(() => _visible = !_visible),
+              icon: Icon(
+                _visible
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                size: 19,
+                color: AppColors.inkFaint,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final valid = passwordMeetsRules(_password.text, _confirm.text);
+    return UnsavedChangesGuard(
+      isDirty: () => _password.text.isNotEmpty || _confirm.text.isNotEmpty,
+      listenTo: Listenable.merge([_password, _confirm]),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Set password',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.navy,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _field('New password', _password),
+            _field('Confirm password', _confirm),
+            PasswordChecklist(password: _password.text, confirm: _confirm.text),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: OutlinedButton(
+                    onPressed:
+                        _saving ? null : () => Navigator.maybePop(context),
+                    child: const Text('Cancel'),
                   ),
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Could not load user',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: _ink,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _errorMessage ?? '',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFFE90408)),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: _fetchUser,
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Retry'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brand,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: const StadiumBorder(),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 3,
+                  child: FilledButton(
+                    onPressed: valid && !_saving ? _submit : null,
+                    child:
+                        _saving
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                            : const Text('Set password'),
                   ),
                 ),
               ],
             ),
-          ),
+          ],
         ),
       ),
-    ],
-  );
-
-  Widget _buildBody() {
-    final u = _user!;
-    final role = u['role']?.toString() ?? '';
-    final roleColor = _roleColor(role);
-    final isActive = _isActive(u);
-
-    return Column(
-      children: [
-        // ── Header ─────────────────────────────────────────────────────────
-        _buildAppBar(
-          title: _displayName(u),
-          subtitle: _normaliseRole(role),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            // children: [
-            //   if (!_isEditing)
-            //     _headerIconBtn(
-            //       Icons.edit_outlined,
-            //       Colors.white70,
-            //       () => setState(() => _isEditing = true),
-            //     ),
-            //   const SizedBox(width: 4),
-            //   _headerIconBtn(Icons.refresh_rounded, Colors.white70, _fetchUser),
-            // ],
-          ),
-        ),
-
-        Expanded(
-          child: FadeTransition(
-            opacity: _fadeCtrl,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Profile hero card ─────────────────────────────────
-                  _buildHeroCard(u, roleColor, isActive, role),
-                  const SizedBox(height: 16),
-
-                  // ── Edit form or info sections ─────────────────────────
-                  if (_isEditing)
-                    _buildEditForm()
-                  else ...[
-                    _buildSection('Account Information', [
-                      _infoRow(
-                        Icons.email_outlined,
-                        'Email',
-                        u['email']?.toString() ?? '—',
-                      ),
-                      // _infoRow(
-                      //   Icons.badge_outlined,
-                      //   'Username',
-                      //   u['username']?.toString() ?? '—',
-                      // ),
-                      _infoRow(
-                        Icons.work_outline,
-                        'Position',
-                        u['position']?.toString().trim().isNotEmpty == true
-                            ? u['position'].toString()
-                            : '—',
-                      ),
-                      _infoRow(
-                        Icons.code_outlined,
-                        'Code',
-                        u['com_eu_code']?.toString() ??
-                            u['code']?.toString() ??
-                            '—',
-                      ),
-                    ]),
-                    const SizedBox(height: 16),
-                    _buildSection('Personal Details', [
-                      _infoRow(
-                        Icons.person_outline,
-                        'First Name',
-                        u['first_name']?.toString() ?? '—',
-                      ),
-                      _infoRow(
-                        Icons.person_outline,
-                        'Middle Name',
-                        u['middle_name']?.toString().trim().isNotEmpty == true
-                            ? u['middle_name'].toString()
-                            : '—',
-                      ),
-                      _infoRow(
-                        Icons.person_outline,
-                        'Last Name',
-                        u['last_name']?.toString() ?? '—',
-                      ),
-                    ]),
-                    const SizedBox(height: 16),
-                    // _buildSection('System Details', [
-                    //   _infoRow(
-                    //     Icons.tag,
-                    //     'User ID',
-                    //     u['id']?.toString() ?? '—',
-                    //   ),
-                    //   _infoRow(
-                    //     Icons.calendar_today_outlined,
-                    //     'Created At',
-                    //     _formatDate(u['created_at']?.toString()),
-                    //   ),
-                    //   _infoRow(
-                    //     Icons.update_outlined,
-                    //     'Updated At',
-                    //     _formatDate(u['updated_at']?.toString()),
-                    //   ),
-                    // ]),
-                  ],
-
-                  const SizedBox(height: 24),
-
-                  // ── Action buttons ─────────────────────────────────────
-                  if (!_isEditing) _buildActionButtons(isActive),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
-
-  // ── AppBar ─────────────────────────────────────────────────────────────────
-  Widget _buildAppBar({
-    required String title,
-    required String subtitle,
-    Widget? trailing,
-  }) => Container(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        colors: [Color(0xFF133341), Color(0xFF0C2029)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-    ),
-    child: SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
-        child: Row(
-          children: [
-            IconButton(
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.3,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-            if (trailing != null) trailing,
-          ],
-        ),
-      ),
-    ),
-  );
-
-
-  // ── Hero Card ──────────────────────────────────────────────────────────────
-  Widget _buildHeroCard(
-    Map<String, dynamic> u,
-    Color roleColor,
-    bool isActive,
-    String role,
-  ) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: _border),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.04),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: Column(
-      children: [
-        // Avatar
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [roleColor, roleColor.withOpacity(0.65)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: roleColor.withOpacity(0.3),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              _initials(u),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 28,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          _displayName(u),
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: _ink,
-            letterSpacing: -0.3,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          u['email']?.toString() ?? '—',
-          style: const TextStyle(fontSize: 13, color: _inkSecondary),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 14),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Role badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: roleColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: roleColor.withOpacity(0.2)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(_roleIcon(role), size: 12, color: roleColor),
-                  const SizedBox(width: 5),
-                  Text(
-                    _normaliseRole(role).toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: roleColor,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Status badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: (isActive ? _success : _inkTertiary).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: isActive ? _success : _inkTertiary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    isActive ? 'ACTIVE' : 'INACTIVE',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: isActive ? _success : _inkTertiary,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-
-  // ── Info Section ───────────────────────────────────────────────────────────
-  Widget _buildSection(String title, List<Widget> rows) => Container(
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.03),
-          blurRadius: 8,
-          offset: const Offset(0, 3),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: _inkTertiary,
-              letterSpacing: 0.6,
-            ),
-          ),
-        ),
-        const Divider(height: 1, color: _border),
-        ...rows,
-      ],
-    ),
-  );
-
-  Widget _infoRow(IconData icon, String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    child: Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: _primary.withOpacity(0.07),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 15, color: _primary),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: _inkTertiary,
-                  letterSpacing: 0.4,
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _ink,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Copy button
-        // if (value != '—')
-        //   GestureDetector(
-        //     onTap: () {
-        //       Clipboard.setData(ClipboardData(text: value));
-        //       _showSnack('Copied to clipboard', _inkSecondary);
-        //     },
-        //     child: const Icon(
-        //       Icons.copy_outlined,
-        //       size: 14,
-        //       color: _inkTertiary,
-        //     ),
-        //   ),
-      ],
-    ),
-  );
-
-  // ── Edit Form ──────────────────────────────────────────────────────────────
-  Widget _buildEditForm() => Container(
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.03),
-          blurRadius: 8,
-          offset: const Offset(0, 3),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-          child: Row(
-            children: [
-              const Text(
-                'EDIT PROFILE',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: _inkTertiary,
-                  letterSpacing: 0.6,
-                ),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap:
-                    _isSaving ? null : () => setState(() => _isEditing = false),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: _inkSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1, color: _border),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              _editField(_firstNameCtrl, 'First Name', Icons.person_outline),
-              const SizedBox(height: 12),
-              _editField(_middleNameCtrl, 'Middle Name', Icons.person_outline),
-              const SizedBox(height: 12),
-              _editField(_lastNameCtrl, 'Last Name', Icons.person_outline),
-              const SizedBox(height: 12),
-              _editField(_positionCtrl, 'Position', Icons.work_outline),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brand,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: const StadiumBorder(),
-                  ),
-                  onPressed: _isSaving ? null : _saveEdits,
-                  child:
-                      _isSaving
-                          ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                          : const Text(
-                            'Save Changes',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _editField(TextEditingController ctrl, String label, IconData icon) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: _inkSecondary,
-              letterSpacing: 0.4,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            decoration: BoxDecoration(
-              color: _surfaceSubtle,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _border),
-            ),
-            child: TextField(
-              controller: ctrl,
-              style: const TextStyle(fontSize: 14, color: _ink),
-              decoration: InputDecoration(
-                hintText: 'Enter $label',
-                hintStyle: const TextStyle(color: _inkTertiary, fontSize: 13),
-                prefixIcon: Icon(icon, size: 17, color: _primary),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 14,
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-
-  // ── Action Buttons ─────────────────────────────────────────────────────────
-  Widget _buildActionButtons(bool isActive) => Column(
-    children: [
-      // Activate / Deactivate
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: isActive ? _warning : _success,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: const StadiumBorder(),
-          ),
-          onPressed: _toggleActivation,
-          icon: Icon(
-            isActive
-                ? Icons.block_outlined
-                : Icons.check_circle_outline_rounded,
-            size: 18,
-          ),
-          label: Text(
-            isActive ? 'Deactivate User' : 'Activate User',
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-        ),
-      ),
-      const SizedBox(height: 10),
-
-      // Send Reset Password Email
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _info,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: const StadiumBorder(),
-          ),
-          onPressed: _sendResetPasswordEmail,
-          icon: const Icon(Icons.lock_reset_outlined, size: 18),
-          label: const Text(
-            'Send Reset Password Email',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-        ),
-      ),
-      const SizedBox(height: 10),
-
-      // Edit button (shortcut)
-      SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _ink,
-            side: const BorderSide(color: _border),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: const StadiumBorder(),
-          ),
-          onPressed: () => setState(() => _isEditing = true),
-          icon: const Icon(Icons.edit_outlined, size: 18),
-          label: const Text(
-            'Edit Profile',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-        ),
-      ),
-    ],
-  );
-  // ── Date formatter ─────────────────────────────────────────────────────────
 }

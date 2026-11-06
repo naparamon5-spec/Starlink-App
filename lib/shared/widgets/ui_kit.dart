@@ -502,12 +502,18 @@ class _Pill<T> extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                 ],
-                Text(
-                  option.label,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : AppColors.inkSoft,
+                // Capped so a very long label can't run off the screen.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: Text(
+                    option.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : AppColors.inkSoft,
+                    ),
                   ),
                 ),
                 if (option.count != null) ...[
@@ -641,4 +647,83 @@ class AppCard extends StatelessWidget {
     ),
     child: child,
   );
+}
+
+/// Pill with a status dot, like the web portal's status badges.
+class DotBadge extends StatelessWidget {
+  const DotBadge(this.label, {super.key, required this.color});
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+            color: color,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Text with the search term marked.
+class HighlightedText extends StatelessWidget {
+  const HighlightedText(
+    this.text, {
+    super.key,
+    required this.query,
+    required this.style,
+    this.maxLines,
+  });
+  final String text;
+  final String query;
+  final TextStyle style;
+  final int? maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final overflow = maxLines == null ? null : TextOverflow.ellipsis;
+    final at =
+        query.isEmpty ? -1 : text.toLowerCase().indexOf(query.toLowerCase());
+    if (at < 0) {
+      return Text(text, style: style, maxLines: maxLines, overflow: overflow);
+    }
+    return Text.rich(
+      TextSpan(
+        style: style,
+        children: [
+          TextSpan(text: text.substring(0, at)),
+          TextSpan(
+            text: text.substring(at, at + query.length),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              backgroundColor: AppColors.warning.withValues(alpha: 0.25),
+            ),
+          ),
+          TextSpan(text: text.substring(at + query.length)),
+        ],
+      ),
+      maxLines: maxLines,
+      overflow: overflow,
+    );
+  }
 }

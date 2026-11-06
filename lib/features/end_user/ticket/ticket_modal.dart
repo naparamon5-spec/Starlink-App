@@ -1,4 +1,6 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
@@ -828,26 +830,7 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: _errorColor,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                msg,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    AppToast.error(context, msg);
   }
 
   // ── File picker ───────────────────────────────────────────────────────────
@@ -1152,111 +1135,124 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
 
   // ── Main build ────────────────────────────────────────────────────────────
 
+  final _baseline = FormBaseline();
+  bool get _hasChanges => _baseline.changed(
+    ready: !_isLoadingData,
+    values: [
+      _descriptionController.text,
+      _selectedTicketType,
+      _selectedContact,
+      _selectedSubscription,
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: double.infinity,
-        height: MediaQuery.of(context).size.height * 0.95,
-        decoration: const BoxDecoration(
-          color: _surfaceSubtle,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            // ── Gradient header ────────────────────────────────────────────
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF133341), Color(0xFF0C2029)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+    return UnsavedChangesGuard(
+      isDirty: () => _hasChanges,
+      listenTo: Listenable.merge([_descriptionController]),
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+        backgroundColor: Colors.transparent,
+        child: Container(
+          width: double.infinity,
+          height: MediaQuery.of(context).size.height * 0.95,
+          decoration: const BoxDecoration(
+            color: _surfaceSubtle,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // ── Gradient header ────────────────────────────────────────────
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF133341), Color(0xFF0C2029)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 ),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed:
-                            widget.onCancel ??
-                            () => Navigator.of(context).pop(),
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.14),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.confirmation_number_outlined,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'New Ticket',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                            Text(
-                              'Fill in the details below',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!_isLoadingData && _loadError == null)
-                        GestureDetector(
-                          onTap: _isSubmitting ? null : _submitTicket,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white,
+                            size: 22,
                           ),
                         ),
-                    ],
+                        const SizedBox(width: 4),
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.confirmation_number_outlined,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'New Ticket',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              Text(
+                                'Fill in the details below',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!_isLoadingData && _loadError == null)
+                          GestureDetector(
+                            onTap: _isSubmitting ? null : _submitTicket,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            // ── Body ──────────────────────────────────────────────────────
-            Expanded(
-              child:
-                  _isLoadingData
-                      ? _buildLoading()
-                      : _loadError != null
-                      ? _buildErrorState()
-                      : _buildForm(),
-            ),
-          ],
+              // ── Body ──────────────────────────────────────────────────────
+              Expanded(
+                child:
+                    _isLoadingData
+                        ? _buildLoading()
+                        : _loadError != null
+                        ? _buildErrorState()
+                        : _buildForm(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1579,8 +1575,7 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
                     onPressed:
                         _isSubmitting
                             ? null
-                            : (widget.onCancel ??
-                                () => Navigator.of(context).pop()),
+                            : () => Navigator.of(context).maybePop(),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _inkSecondary,
                       side: const BorderSide(color: _border),

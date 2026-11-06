@@ -1,3 +1,5 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:starlink_app/features/auth/two_factor/authenticator_widgets.dart';
@@ -63,37 +65,22 @@ class _TwoFactorSettingsCardState extends State<TwoFactorSettingsCard> {
     final code = await showDialog<String>(
       context: context,
       builder:
-          (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+          (ctx) => AppDialog(
+            icon: Icons.shield_outlined,
+            tone: AppDialogTone.danger,
+            title: 'Turn off two-factor?',
+            message:
+                'Enter the current 6-digit code from your authenticator app '
+                'to confirm.',
+            content: TotpCodeField(
+              controller: controller,
+              autofocus: true,
+              onCompleted: (v) => Navigator.pop(ctx, v),
             ),
-            title: const Text('Turn off two-factor?'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Enter the current 6-digit code from your authenticator app '
-                  'to confirm.',
-                  style: TextStyle(fontSize: 13, color: _inkSecondary),
-                ),
-                const SizedBox(height: 14),
-                TotpCodeField(
-                  controller: controller,
-                  autofocus: true,
-                  onCompleted: (v) => Navigator.pop(ctx, v),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-                child: const Text('Turn off', style: TextStyle(color: _danger)),
-              ),
-            ],
+            confirmLabel: 'Turn off',
+            onConfirm: () => Navigator.pop(ctx, controller.text.trim()),
+            cancelLabel: 'Cancel',
+            onCancel: () => Navigator.pop(ctx),
           ),
     );
     controller.dispose();
@@ -102,15 +89,9 @@ class _TwoFactorSettingsCardState extends State<TwoFactorSettingsCard> {
     final res = await ApiService.disableTwoFactor(code);
     if (!mounted) return;
     final ok = res['status'] == 'success';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
+    AppToast.result(context, ok
               ? 'Two-factor authentication turned off'
-              : (res['message']?.toString() ?? 'Could not turn it off'),
-        ),
-      ),
-    );
+              : (res['message']?.toString() ?? 'Could not turn it off'), ok: ok);
     if (ok) _load();
   }
 
@@ -268,7 +249,6 @@ class AuthenticatorSetupPage extends StatefulWidget {
 class _AuthenticatorSetupPageState extends State<AuthenticatorSetupPage> {
   final _code = TextEditingController();
   AuthenticatorSetupInfo? _info;
-  String? _error;
   bool _loading = true;
   bool _verifying = false;
 
@@ -287,7 +267,6 @@ class _AuthenticatorSetupPageState extends State<AuthenticatorSetupPage> {
   Future<void> _start() async {
     setState(() {
       _loading = true;
-      _error = null;
     });
     final res = await ApiService.startTwoFactorSetup();
     if (!mounted) return;
@@ -298,12 +277,14 @@ class _AuthenticatorSetupPageState extends State<AuthenticatorSetupPage> {
           res['status'] == 'success' && data is Map
               ? AuthenticatorSetupInfo.fromMap(data)
               : null;
-      if (_info == null) {
-        _error =
-            res['message']?.toString() ??
-            'Could not start authenticator setup.';
-      }
+      
     });
+    if (_info == null) {
+      AppToast.error(
+        context,
+        res['message']?.toString() ?? 'Could not start authenticator setup.',
+      );
+    }
   }
 
   Future<void> _confirm() async {
@@ -312,20 +293,18 @@ class _AuthenticatorSetupPageState extends State<AuthenticatorSetupPage> {
     FocusScope.of(context).unfocus();
     setState(() {
       _verifying = true;
-      _error = null;
     });
     final res = await ApiService.confirmTwoFactorSetup(code);
     if (!mounted) return;
     setState(() => _verifying = false);
     if (res['status'] == 'success') {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Authenticator app linked')));
+      AppToast.success(context, 'Authenticator app linked');
       Navigator.pop(context, true);
     } else {
       _code.clear();
-      setState(
-        () => _error = res['message']?.toString() ?? 'Invalid code. Try again.',
+      AppToast.error(
+        context,
+        res['message']?.toString() ?? 'Invalid code. Try again.',
       );
     }
   }
@@ -356,13 +335,6 @@ class _AuthenticatorSetupPageState extends State<AuthenticatorSetupPage> {
                           controller: _code,
                           enabled: !_verifying,
                           onCompleted: (_) => _confirm(),
-                        ),
-                      ],
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          _error!,
-                          style: const TextStyle(color: _danger, fontSize: 13),
                         ),
                       ],
                       const SizedBox(height: 20),

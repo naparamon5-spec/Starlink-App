@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
 import 'dart:convert';
 import 'dart:io' show HttpClient;
 import 'package:http/http.dart' as http;
@@ -441,22 +442,17 @@ class ApiService {
       context: context,
       barrierDismissible: false,
       builder:
-          (ctx) => AlertDialog(
-            title: const Text('Session Expired'),
-            content: const Text(
-              'Your session has expired. Please login again.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  Navigator.of(
-                    context,
-                  ).pushNamedAndRemoveUntil('/', (route) => false);
-                },
-                child: const Text('OK'),
-              ),
-            ],
+          (ctx) => AppDialog(
+            icon: Icons.lock_clock_outlined,
+            title: 'Session Expired',
+            message: 'Your session has expired. Please login again.',
+            confirmLabel: 'OK',
+            onConfirm: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/', (route) => false);
+            },
           ),
     );
   }
@@ -862,6 +858,10 @@ class ApiService {
   // GET /api/v1/auth/me
   static Future<Map<String, dynamic>> getMe() async =>
       _getV1WithAuth('/v1/auth/me');
+
+  /// The signed-in user's own record, with names, position and company.
+  static Future<Map<String, dynamic>> getOwnUserRecord() =>
+      _authorizedGet('/v1/users/my/profile/');
 
   // Alias kept for backward-compat
   static Future<Map<String, dynamic>> getCurrentUserProfile() async =>
@@ -2981,6 +2981,10 @@ class ApiService {
     body: {'rows': rows, 'dryRun': dryRun},
     timeout: const Duration(seconds: 120),
   );
+
+  /// Filter choices for the ticket lists; refreshes an expired session.
+  static Future<Map<String, dynamic>> getTicketFilterOptions() =>
+      _authorizedGet('/v1/tickets/list/filters');
 
   // Admin sets a user's password directly
   static Future<Map<String, dynamic>> setUserPassword(

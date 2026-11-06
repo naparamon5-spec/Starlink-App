@@ -1,5 +1,8 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
-import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/shared/widgets/ticket_list_card.dart';
+import 'package:starlink_app/core/utils/list_export.dart';
+import 'package:starlink_app/shared/widgets/ticket_filter_bar.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/features/customer/ticket/customer_ticket_modal.dart';
@@ -8,9 +11,7 @@ import 'dart:convert';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFF133341);
-const _inProgress = Color(0xFF3B82F6);
 const _success = Color(0xFF10B981);
-const _warning = Color(0xFFF59E0B);
 const _ink = Color(0xFF111111);
 const _inkSecondary = Color(0xFF666666);
 const _inkTertiary = Color(0xFF888888);
@@ -20,7 +21,12 @@ const _border = Color(0xFFD7D7D7);
 
 class CustomerTicketScreen extends StatefulWidget {
   final bool showAppBar;
-  const CustomerTicketScreen({super.key, this.showAppBar = true});
+  final ListExportController? exportController;
+  const CustomerTicketScreen({
+    super.key,
+    this.showAppBar = true,
+    this.exportController,
+  });
 
   @override
   _CustomerTicketState createState() => _CustomerTicketState();
@@ -31,6 +37,8 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   final ScrollController _scrollController = ScrollController();
 
   String _selectedFilter = 'All';
+  String _typeFilter = '';
+  String _requesterFilter = '';
 
   List<Map<String, dynamic>> _tickets = [];
   List<Map<String, dynamic>> _filteredTickets = [];
@@ -43,13 +51,6 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   bool _isLoading = true;
   int? _userId;
 
-  final List<String> _filterOptions = [
-    'All',
-    'Open',
-    'In Progress',
-    'Resolved',
-    'Closed',
-  ];
   final List<String> _tableHeaders = [
     'Status',
     'Ticket Type',
@@ -63,6 +64,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   @override
   void initState() {
     super.initState();
+    widget.exportController?.loader = _ticketsForExport;
     _loadUserData();
     _searchController.addListener(_handleSearch);
     _scrollController.addListener(_onScroll);
@@ -70,6 +72,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
 
   @override
   void dispose() {
+    widget.exportController?.loader = null;
     _searchController.removeListener(_handleSearch);
     _searchController.dispose();
     _scrollController.removeListener(_onScroll);
@@ -119,6 +122,11 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     } catch (e) {
       debugPrint('Error loading user data: $e');
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _ticketsForExport() async {
+    if (_isLoading) throw Exception('Tickets are still loading.');
+    return _filteredTickets;
   }
 
   void _handleSearch() => _applyFilter();
@@ -228,12 +236,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
         _filteredTickets = [];
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading tickets: $e'),
-          backgroundColor: _primary,
-        ),
-      );
+      AppToast.error(context, 'Error loading tickets: $e');
     }
   }
 
@@ -244,6 +247,13 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
           final status = ticket['Status']?.toString().toUpperCase() ?? '';
           if (_selectedFilter != 'All') {
             if (status != _selectedFilter.toUpperCase()) return false;
+          }
+          if (!ticketMatchesDropdowns(
+            ticket,
+            type: _typeFilter,
+            requester: _requesterFilter,
+          )) {
+            return false;
           }
           if (query.isNotEmpty) {
             return _tableHeaders.any((header) {
@@ -309,22 +319,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
     );
 
     if (result != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle_outline, color: Colors.white),
-              SizedBox(width: 12),
-              Text('Ticket created successfully'),
-            ],
-          ),
-          backgroundColor: _success,
-          duration: const Duration(seconds: 3),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+      AppToast.success(context, 'Ticket created successfully');
       _loadTickets();
     }
   }
@@ -367,77 +362,28 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
               ),
             ),
 
-            // ── Filter chips ──────────────────────────────────────────────
+            // ── Filters ───────────────────────────────────────────────────
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              padding: const EdgeInsets.only(top: 12),
               sliver: SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 34,
-                  child: EdgeFade(
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _filterOptions.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (context, i) {
-                        final option = _filterOptions[i];
-                        final isSelected = _selectedFilter == option;
-                        final dotColor =
-                            option == 'All' ? _primary : _statusColor(option);
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() => _selectedFilter = option);
-                            _applyFilter();
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color:
-                                  isSelected
-                                      ? dotColor.withOpacity(0.1)
-                                      : _surface,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: isSelected ? dotColor : _border,
-                                width: isSelected ? 1.5 : 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (option != 'All') ...[
-                                  Container(
-                                    width: 7,
-                                    height: 7,
-                                    decoration: BoxDecoration(
-                                      color: dotColor,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 5),
-                                ],
-                                Text(
-                                  option,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight:
-                                        isSelected
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                    color:
-                                        isSelected ? dotColor : _inkSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                child: TicketFilterBar(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  tickets: _tickets,
+                  status: _selectedFilter,
+                  type: _typeFilter,
+                  requester: _requesterFilter,
+                  onStatus: (v) {
+                    setState(() => _selectedFilter = v);
+                    _applyFilter();
+                  },
+                  onType: (v) {
+                    setState(() => _typeFilter = v);
+                    _applyFilter();
+                  },
+                  onRequester: (v) {
+                    setState(() => _requesterFilter = v);
+                    _applyFilter();
+                  },
                 ),
               ),
             ),
@@ -450,6 +396,25 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
                   children: [
                     const _SectionHeader(title: 'ALL TICKETS'),
                     const Spacer(),
+                    if (_selectedFilter != 'All' ||
+                        _typeFilter.isNotEmpty ||
+                        _requesterFilter.isNotEmpty)
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectedFilter = 'All';
+                            _typeFilter = '';
+                            _requesterFilter = '';
+                          });
+                          _applyFilter();
+                        },
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 28),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Clear filters'),
+                      ),
                     if (!_isLoading)
                       Text(
                         '${_filteredTickets.length} result${_filteredTickets.length == 1 ? '' : 's'}',
@@ -503,7 +468,6 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showNewTicketModal,
-        backgroundColor: _primary,
         tooltip: 'Create new ticket',
         elevation: 6,
         child: const Icon(Icons.add, color: Colors.white),
@@ -576,6 +540,8 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
             child: Text(
               query.isNotEmpty
                   ? 'No results for "$query".'
+                  : _typeFilter.isNotEmpty || _requesterFilter.isNotEmpty
+                  ? 'No tickets match your filters.'
                   : _selectedFilter != 'All'
                   ? 'No $_selectedFilter tickets found.'
                   : 'No tickets yet. Tap + to create one.',
@@ -594,216 +560,54 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
   // ── Ticket card ───────────────────────────────────────────────────────────
 
   Widget _buildTicketCard(Map<String, dynamic> ticket) {
-    final String ticketType = ticket['Ticket Type']?.toString() ?? 'N/A';
-    final String createdAt = ticket['Created At']?.toString() ?? 'N/A';
-    final String description =
-        ticket['Description']?.toString() ?? 'No description';
-    final String contact = ticket['Contact']?.toString() ?? 'N/A';
-    final String subscription = ticket['Subscription']?.toString() ?? 'N/A';
-    final String status = ticket['Status']?.toString() ?? 'OPEN';
-    final Color statusColor = _statusColorFromLabel(status);
-    final String query = _searchController.text.trim().toLowerCase();
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          final ticketData = {
-            'id': ticket['id'],
-            'type': ticket['Ticket Type'],
-            'status': ticket['Status'],
-            'subscription': ticket['Subscription'],
-            'description': ticket['Description'],
-            'created_at': ticket['Created At'],
-            'attachments': ticket['Attachments'],
-            'full_data': Map<String, dynamic>.from(ticket['full_data'] as Map),
-          };
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CustomerViewScreen(ticket: ticketData),
-            ),
-          ).then((result) {
-            if (result != null && result is Map<String, dynamic>) {
-              final resultStatus =
-                  result['status']?.toString().toUpperCase() ?? '';
-              setState(() {
-                final idx = _tickets.indexWhere(
-                  (t) => t['id'].toString() == result['id'].toString(),
-                );
-                if (idx != -1) {
-                  _tickets[idx]['Status'] = resultStatus;
-                  (_tickets[idx]['full_data']
-                          as Map<String, dynamic>)['status'] =
-                      resultStatus;
-                }
-                _applyFilter();
-              });
-            }
-          });
-        },
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
+    return TicketListCard(
+      id: '${ticket['id'] ?? ''}',
+      subject:
+          '${(ticket['full_data'] as Map?)?['subject'] ?? ticket['Subscription'] ?? ''}',
+      status: ticket['Status']?.toString() ?? 'OPEN',
+      description: ticket['Description']?.toString() ?? '',
+      type: ticket['Ticket Type']?.toString() ?? '',
+      createdBy: ticket['Contact']?.toString() ?? '',
+      createdAt: ticket['created_at_raw']?.toString(),
+      searchQuery: _searchController.text,
+      onTap: () {
+        final ticketData = {
+          'id': ticket['id'],
+          'type': ticket['Ticket Type'],
+          'status': ticket['Status'],
+          'subscription': ticket['Subscription'],
+          'description': ticket['Description'],
+          'created_at': ticket['Created At'],
+          'attachments': ticket['Attachments'],
+          'full_data': Map<String, dynamic>.from(ticket['full_data'] as Map),
+        };
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CustomerViewScreen(ticket: ticketData),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Icon
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(_statusIcon(status), color: statusColor, size: 20),
-              ),
-              const SizedBox(width: 12),
-
-              // Body
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title row
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _HighlightText(
-                            text: ticketType,
-                            query: query,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: _ink,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        _StatusChip(status: status, color: statusColor),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    _HighlightText(
-                      text: createdAt,
-                      query: query,
-                      style: const TextStyle(fontSize: 11, color: _inkTertiary),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(height: 1, color: _border),
-                    const SizedBox(height: 10),
-
-                    // Meta
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _MetaField(
-                          label: 'Subscription',
-                          value: subscription,
-                          query: query,
-                        ),
-                        const SizedBox(height: 8),
-                        _MetaField(
-                          label: 'Requester',
-                          value: contact,
-                          query: query,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Description
-                    // _HighlightText(
-                    //   text: description,
-                    //   query: query,
-                    //   style: const TextStyle(
-                    //     fontSize: 12,
-                    //     color: _inkSecondary,
-                    //     height: 1.4,
-                    //   ),
-                    //   maxLines: 2,
-                    //   overflow: TextOverflow.ellipsis,
-                    // ),
-                    const SizedBox(height: 8),
-
-                    // Footer
-                    // Row(
-                    //   mainAxisAlignment: MainAxisAlignment.end,
-                    //   children: const [
-                    //     Text(
-                    //       'View details',
-                    //       style: TextStyle(
-                    //         fontSize: 11,
-                    //         fontWeight: FontWeight.w700,
-                    //         color: _primary,
-                    //       ),
-                    //     ),
-                    //     SizedBox(width: 2),
-                    //     Icon(
-                    //       Icons.chevron_right_rounded,
-                    //       color: _primary,
-                    //       size: 14,
-                    //     ),
-                    //   ],
-                    // ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+        ).then((result) {
+          if (result != null && result is Map<String, dynamic>) {
+            final resultStatus =
+                result['status']?.toString().toUpperCase() ?? '';
+            setState(() {
+              final idx = _tickets.indexWhere(
+                (t) => t['id'].toString() == result['id'].toString(),
+              );
+              if (idx != -1) {
+                _tickets[idx]['Status'] = resultStatus;
+                (_tickets[idx]['full_data'] as Map<String, dynamic>)['status'] =
+                    resultStatus;
+              }
+              _applyFilter();
+            });
+          }
+        });
+      },
     );
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-
-  Color _statusColor(String filterLabel) {
-    switch (filterLabel.toUpperCase()) {
-      case 'OPEN':
-        return _warning;
-      case 'IN PROGRESS':
-        return _inProgress;
-      case 'RESOLVED':
-        return _success;
-      case 'CLOSED':
-        return _inkTertiary;
-      default:
-        return _inkTertiary;
-    }
-  }
-
-  Color _statusColorFromLabel(String status) => _statusColor(status);
-
-  IconData _statusIcon(String status) {
-    switch (status.toUpperCase()) {
-      case 'OPEN':
-        return Icons.error_outline;
-      case 'IN PROGRESS':
-        return Icons.sync;
-      case 'RESOLVED':
-        return Icons.check_circle_outline;
-      case 'CLOSED':
-        return Icons.lock_outline;
-      default:
-        return Icons.help_outline;
-    }
-  }
 
   Map<String, dynamic> _mapTicket(Map<String, dynamic> raw) {
     final backendStatus = (raw['status'] ?? '').toString().toLowerCase().trim();
@@ -857,6 +661,7 @@ class _CustomerTicketState extends State<CustomerTicketScreen> {
       'Subscription': raw['subscription'] ?? raw['subject'] ?? 'N/A',
       'Description': raw['description'] ?? 'No description',
       'Created At': _formatDate(raw['created_at']),
+      'created_at_raw': raw['created_at'],
       'Attachments': attachmentsDisplay,
       'full_data': {
         ...raw,
@@ -1010,111 +815,9 @@ class _SectionHeader extends StatelessWidget {
 
 // ── Highlight Text ────────────────────────────────────────────────────────────
 
-class _HighlightText extends StatelessWidget {
-  final String text;
-  final String query;
-  final TextStyle style;
-  final int? maxLines;
-  final TextOverflow? overflow;
-
-  const _HighlightText({
-    required this.text,
-    required this.query,
-    required this.style,
-    this.maxLines,
-    this.overflow,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (query.isEmpty) {
-      return Text(text, style: style, maxLines: maxLines, overflow: overflow);
-    }
-    final lower = text.toLowerCase();
-    final spans = <TextSpan>[];
-    int start = 0;
-    while (true) {
-      final idx = lower.indexOf(query, start);
-      if (idx == -1) {
-        spans.add(TextSpan(text: text.substring(start)));
-        break;
-      }
-      if (idx > start) spans.add(TextSpan(text: text.substring(start, idx)));
-      spans.add(
-        TextSpan(
-          text: text.substring(idx, idx + query.length),
-          style: style.copyWith(
-            color: _primary,
-            backgroundColor: _primary.withOpacity(0.08),
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      );
-      start = idx + query.length;
-    }
-    return Text.rich(
-      TextSpan(style: style, children: spans),
-      maxLines: maxLines,
-      overflow: overflow ?? TextOverflow.clip,
-    );
-  }
-}
-
 // ── Status Chip ───────────────────────────────────────────────────────────────
 
-class _StatusChip extends StatelessWidget {
-  final String status;
-  final Color color;
-  const _StatusChip({required this.status, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: color.withOpacity(0.2)),
-    ),
-    child: Text(
-      status.toUpperCase(),
-      style: TextStyle(
-        color: color,
-        fontWeight: FontWeight.w800,
-        fontSize: 9,
-        letterSpacing: 0.5,
-      ),
-    ),
-  );
-}
-
 // ── Meta Field ────────────────────────────────────────────────────────────────
-
-class _MetaField extends StatelessWidget {
-  final String label;
-  final String value;
-  final String query;
-  const _MetaField({required this.label, required this.value, this.query = ''});
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: const TextStyle(fontSize: 11, color: _inkTertiary)),
-      const SizedBox(height: 2),
-      _HighlightText(
-        text: value,
-        query: query,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: _ink,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    ],
-  );
-}
 
 // ── Skeleton Card ─────────────────────────────────────────────────────────────
 
@@ -1150,7 +853,7 @@ class _SkeletonCard extends StatelessWidget {
                   children: [
                     Container(
                       height: 12,
-                      width: 140,
+                      width: 110,
                       decoration: BoxDecoration(
                         color: _surfaceSubtle,
                         borderRadius: BorderRadius.circular(6),

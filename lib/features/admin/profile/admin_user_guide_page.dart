@@ -72,7 +72,7 @@ class _AdminUserGuidePageState extends State<AdminUserGuidePage>
       'icon': Icons.security_outlined,
       'color': _primary,
       'content':
-          'Roles define what a user can do:\n\n• Admin – Full access to all sections\n• Agent – Can view and manage tickets and end users\n• User – Standard account access\n\nChange roles from Manage Users in the Settings tab.',
+          'Roles define what a user can do:\n\n• Admin – Full access to all sections\n• Agent – Can view and manage tickets and end users\n• User – Standard account access\n\nChange roles from Users in the Settings tab.',
     },
     {
       'title': 'Account & Security',

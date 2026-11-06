@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +11,6 @@ const _ink = Color(0xFF111111);
 const _inkSecondary = Color(0xFF666666);
 const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF8F8F8);
 const _border = Color(0xFFD7D7D7);
 
 class ForgotPasswordPage extends StatefulWidget {
@@ -24,7 +24,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   bool _isLoading = false;
-  String? _errorMessage;
 
   @override
   void dispose() {
@@ -38,7 +37,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     final email = _emailController.text.trim();
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
     });
 
     try {
@@ -46,79 +44,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       if (!mounted) return;
 
       if (data['status'] == 'success' || data['success'] == true) {
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder:
-              (ctx) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFFF0F0),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.mark_email_read_outlined,
-                        color: _primary,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Check your email',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: _ink,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      data['message'] ??
-                          'A password reset link has been sent to your email.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: _inkSecondary,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(ctx).pop();
-                          Navigator.of(context).pop();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brand,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: const StadiumBorder(),
-                        ),
-                        child: const Text(
-                          'Back to Login',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-        );
+        AppToast.success(context, 'Reset link sent. Check your email.');
+Navigator.of(context).pop();
       } else {
         var error = data['message'] as String? ?? 'Failed to send reset link';
         final errorLower = error.toLowerCase();
@@ -127,12 +54,12 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             errorLower.contains('does not exist')) {
           error = 'This email is not registered in our system.';
         }
-        setState(() => _errorMessage = error);
+        AppToast.error(context, error);
       }
     } catch (_) {
-      setState(
-        () => _errorMessage = 'Network error. Please check your connection.',
-      );
+      if (mounted) {
+        AppToast.error(context, 'Network error. Please check your connection.');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -349,62 +276,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       ),
 
                       // Error banner
-                      if (_errorMessage != null)
-                        Container(
-                          margin: const EdgeInsets.only(top: 14),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _primary.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _primary.withOpacity(0.25),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  color: _primary.withOpacity(0.10),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.error_outline_rounded,
-                                  color: _primary,
-                                  size: 17,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _errorMessage!,
-                                  style: const TextStyle(
-                                    color: Color(0xFFE90408),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap:
-                                    () => setState(() => _errorMessage = null),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 8),
-                                  child: Icon(
-                                    Icons.close_rounded,
-                                    color: _primary.withOpacity(0.6),
-                                    size: 18,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
 
                       const SizedBox(height: 32),
 

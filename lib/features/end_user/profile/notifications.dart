@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:starlink_app/services/notification_service.dart';
@@ -284,27 +285,7 @@ class _NotificationsPageState extends State<NotificationsPage>
 
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : Icons.check_circle_outline,
-              color: Colors.white,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(msg, style: const TextStyle(fontSize: 13))),
-          ],
-        ),
-        backgroundColor:
-            isError ? Colors.red.shade700 : const Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.result(context, msg, ok: !isError);
   }
 
   String _getTimeAgo(DateTime? timestamp) {
@@ -363,19 +344,7 @@ class _NotificationsPageState extends State<NotificationsPage>
                 ).refresh();
                 await _loadNotifications();
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${notification['title']} removed'),
-                      backgroundColor: _ink,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      margin: const EdgeInsets.all(16),
-                      action: SnackBarAction(
-                        label: 'Undo',
-                        textColor: _primary,
-                        onPressed: () async {
+                  AppToast.info(context, '${notification['title']} removed', actionLabel: 'Undo', onAction: () async {
                           await NotificationService.createNotification(
                             title: deletedNotification['title'],
                             message: deletedNotification['message'],
@@ -389,10 +358,7 @@ class _NotificationsPageState extends State<NotificationsPage>
                             listen: false,
                           ).refresh();
                           await _loadNotifications();
-                        },
-                      ),
-                    ),
-                  );
+                        });
                 }
               },
       child: GestureDetector(

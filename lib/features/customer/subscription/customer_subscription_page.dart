@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/utils/list_export.dart';
+import 'package:starlink_app/core/utils/subscription_export.dart';
+import 'package:starlink_app/shared/widgets/subscription_list_card.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
@@ -7,35 +11,12 @@ import 'package:starlink_app/features/customer/subscription/customer_subscriptio
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFF133341);
-const _activeGreen = Color(0xFF10B981);
 const _ink = Color(0xFF111111);
 const _inkSecondary = Color(0xFF666666);
 const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
 const _surfaceSubtle = Color(0xFFF8F8F8);
 const _border = Color(0xFFD7D7D7);
-
-/// Robust active-status resolver.
-bool _isActiveSub(Map<String, dynamic> sub) {
-  for (final key in ['active', 'is_active', 'isActive', 'status', 'state']) {
-    final raw = sub[key];
-    if (raw == null) continue;
-    if (raw is bool) return raw;
-    if (raw is int) return raw == 1;
-    final s = raw.toString().toLowerCase().trim();
-    if (s == 'true' || s == '1' || s == 'active' || s == 'enabled') {
-      return true;
-    }
-    if (s == 'false' ||
-        s == '0' ||
-        s == 'inactive' ||
-        s == 'disabled' ||
-        s == 'expired') {
-      return false;
-    }
-  }
-  return false;
-}
 
 /// Extract service line number — handles both camelCase and snake_case.
 String _sln(Map<String, dynamic> sub) =>
@@ -47,20 +28,16 @@ String _sln(Map<String, dynamic> sub) =>
 String _nickname(Map<String, dynamic> sub) =>
     (sub['nickname'] ?? sub['name'] ?? '').toString().trim();
 
-/// Extract end date — handles endDate, end_date, expires_at, expiry_date.
-String _endDate(Map<String, dynamic> sub) =>
-    (sub['endDate'] ??
-            sub['end_date'] ??
-            sub['expires_at'] ??
-            sub['expiry_date'] ??
-            '')
-        .toString()
-        .trim();
-
 class CustomerSubscriptionPage extends StatefulWidget {
   final bool showAppBar;
 
-  const CustomerSubscriptionPage({super.key, this.showAppBar = true});
+  final ListExportController? exportController;
+
+  const CustomerSubscriptionPage({
+    super.key,
+    this.showAppBar = true,
+    this.exportController,
+  });
 
   @override
   State<CustomerSubscriptionPage> createState() =>
@@ -81,7 +58,11 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
   int _totalItems = 0;
   int _totalPages = 1;
   int _currentPage = 1;
-  static const int _pageSize = 10;
+  int _pageSize = 10;
+
+  // Only the latest request may update the list.
+  int _requestSeq = 0;
+  String _lastQuery = '';
 
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
@@ -94,10 +75,17 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    widget.exportController?.loader =
+        () => fetchAllSubscriptions(_searchController.text.trim());
     _searchController.addListener(() {
+      // Also fires when the cursor moves; only a changed search reloads.
+      final q = _searchController.text.trim();
+      if (q == _lastQuery) return;
+      _lastQuery = q;
+      setState(() {});
       _searchDebounce?.cancel();
-      _searchDebounce = Timer(const Duration(milliseconds: 250), () {
-        if (mounted) setState(() {});
+      _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+        if (mounted) _loadFirstPage();
       });
     });
     _init();
@@ -105,6 +93,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
 
   @override
   void dispose() {
+    widget.exportController?.loader = null;
     _searchDebounce?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -123,24 +112,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
 
   // ── Filtering ──────────────────────────────────────────────────────────────
 
-  List<Map<String, dynamic>> get _filtered {
-    final q = _searchController.text.trim().toLowerCase();
-    if (q.isEmpty) return _allSubscriptions;
-    return _allSubscriptions.where((sub) {
-      final n = _nickname(sub).toLowerCase();
-      final s = _sln(sub).toLowerCase();
-      final status = _isActiveSub(sub) ? 'active' : 'inactive';
-      final ed = _endDate(sub).toLowerCase();
-      final company = (sub['company_name'] ?? '').toString().toLowerCase();
-      final endUser = (sub['end_user_name'] ?? '').toString().toLowerCase();
-      return n.contains(q) ||
-          s.contains(q) ||
-          status.contains(q) ||
-          ed.contains(q) ||
-          company.contains(q) ||
-          endUser.contains(q);
-    }).toList();
-  }
+  List<Map<String, dynamic>> get _filtered => _allSubscriptions;
 
   // ── Init: resolve user codes & role ───────────────────────────────────────
 
@@ -226,7 +198,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
   // ── First page ─────────────────────────────────────────────────────────────
 
   Future<void> _loadFirstPage() async {
-    if (_loading) return;
+    final seq = ++_requestSeq;
     setState(() {
       _loading = true;
       _error = null;
@@ -238,7 +210,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
 
     try {
       final response = await _fetchPage(1);
-      if (!mounted) return;
+      if (!mounted || seq != _requestSeq) return;
 
       if (response == null) {
         setState(() {
@@ -256,7 +228,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _requestSeq) return;
       setState(() {
         _error = e.toString().replaceAll('Exception: ', '');
         _loading = false;
@@ -268,12 +240,13 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
 
   Future<void> _loadNextPage() async {
     if (_fetchingMore || _currentPage >= _totalPages) return;
+    final seq = _requestSeq;
     setState(() => _fetchingMore = true);
 
     try {
       final nextPage = _currentPage + 1;
       final result = await _fetchPage(nextPage);
-      if (!mounted) return;
+      if (!mounted || seq != _requestSeq) return;
 
       if (result != null && result.items.isNotEmpty) {
         final existing = _allSubscriptions.map((s) => _sln(s)).toSet();
@@ -307,6 +280,7 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
       response = await ApiService.getSubscriptionsPaginated(
         page: page,
         limit: _pageSize,
+        search: _searchController.text.trim(),
       );
 
       if (response['status'] != 'success') return null;
@@ -323,33 +297,6 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
   }
 
   // ── Formatters ─────────────────────────────────────────────────────────────
-
-  String _formatDate(String raw) {
-    if (raw.isEmpty || raw == '—' || raw == '0000-00-00') return '—';
-    try {
-      final clean =
-          raw.contains('T') ? raw.split('T').first : raw.split(' ').first;
-      final dt = DateTime.parse(clean);
-      if (dt.year < 1900) return '—';
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return '${months[dt.month - 1]} ${dt.day.toString().padLeft(2, '0')}, ${dt.year}';
-    } catch (_) {
-      return raw;
-    }
-  }
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
@@ -386,6 +333,34 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               sliver: SliverToBoxAdapter(
                 child: _SearchBar(controller: _searchController),
+              ),
+            ),
+
+            // ── Per page
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SizedBox(
+                    width: 132,
+                    child: AppSelect<int>(
+                      dense: true,
+                      sheetTitle: 'Per page',
+                      value: _pageSize,
+                      options: const [
+                        SelectOption(5, '5 per page'),
+                        SelectOption(10, '10 per page'),
+                        SelectOption(20, '20 per page'),
+                        SelectOption(50, '50 per page'),
+                      ],
+                      onChanged: (v) {
+                        setState(() => _pageSize = v);
+                        _loadFirstPage();
+                      },
+                    ),
+                  ),
+                ),
               ),
             ),
 
@@ -486,28 +461,15 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
                           }
 
                           final sub = filtered[index];
-                          final isActive = _isActiveSub(sub);
                           final nick = _nickname(sub);
                           final sl = _sln(sub);
-                          final rawEnd = _endDate(sub);
-                          final endDateStr =
-                              rawEnd.isEmpty ? '—' : _formatDate(rawEnd);
-                          final companyName =
-                              (sub['company_name'] ?? '').toString().trim();
-                          final endUserName =
-                              (sub['end_user_name'] ?? '').toString().trim();
                           final searchQuery =
                               _searchController.text.trim().toLowerCase();
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
-                            child: _SubscriptionTile(
-                              nickname: nick.isNotEmpty ? nick : sl,
-                              serviceLineNumber: sl.isEmpty ? '—' : sl,
-                              endDate: endDateStr,
-                              isActive: isActive,
-                              companyName: companyName,
-                              endUserName: endUserName,
+                            child: SubscriptionListCard(
+                              sub: sub,
                               searchQuery: searchQuery,
                               onTap:
                                   () => Navigator.push(
@@ -568,9 +530,9 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
           style: TextButton.styleFrom(
             foregroundColor: _primary,
             textStyle: const TextStyle(
-                fontFamily: 'Montserrat',
-                fontWeight: FontWeight.w600,
-              ),
+              fontFamily: 'Montserrat',
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
@@ -589,188 +551,6 @@ class _PageResult {
     required this.totalPages,
     required this.totalItems,
   });
-}
-
-// ── Subscription Tile ──────────────────────────────────────────────────────────
-
-class _SubscriptionTile extends StatelessWidget {
-  final String nickname;
-  final String serviceLineNumber;
-  final String endDate;
-  final bool isActive;
-  final String companyName;
-  final String endUserName;
-  final String searchQuery;
-  final VoidCallback? onTap;
-
-  const _SubscriptionTile({
-    required this.nickname,
-    required this.serviceLineNumber,
-    required this.endDate,
-    required this.isActive,
-    this.companyName = '',
-    this.endUserName = '',
-    this.searchQuery = '',
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isActive ? _activeGreen : _primary;
-    final statusLabel = isActive ? 'ACTIVE' : 'INACTIVE';
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-          ),
-          child: Row(
-            children: [
-              // Icon box
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: Color.fromRGBO(
-                    color.red,
-                    color.green,
-                    color.blue,
-                    0.08,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  isActive
-                      ? Icons.wifi_tethering_rounded
-                      : Icons.wifi_tethering_off_rounded,
-                  color: color,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Text column
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _HighlightText(
-                      text: nickname,
-                      query: searchQuery,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: _ink,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    _HighlightText(
-                      text: serviceLineNumber,
-                      query: searchQuery,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: _inkSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    if (endUserName.isNotEmpty || companyName.isNotEmpty) ...[
-                      const SizedBox(height: 1),
-                      _HighlightText(
-                        text:
-                            endUserName.isNotEmpty ? endUserName : companyName,
-                        query: searchQuery,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: _inkTertiary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    const SizedBox(height: 1),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.event_rounded,
-                          size: 10,
-                          color: _inkTertiary,
-                        ),
-                        const SizedBox(width: 3),
-                        _HighlightText(
-                          text: 'Expires $endDate',
-                          query: searchQuery,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: _inkTertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-
-              // Status badge + chevron
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Color.fromRGBO(
-                        color.red,
-                        color.green,
-                        color.blue,
-                        0.08,
-                      ),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Color.fromRGBO(
-                          color.red,
-                          color.green,
-                          color.blue,
-                          0.2,
-                        ),
-                      ),
-                    ),
-                    child: Text(
-                      statusLabel,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: color,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: _inkTertiary,
-                    size: 18,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ── Supporting Widgets ─────────────────────────────────────────────────────────
@@ -862,58 +642,6 @@ class _EmptyState extends StatelessWidget {
       ],
     ),
   );
-}
-
-class _HighlightText extends StatelessWidget {
-  final String text;
-  final String query;
-  final TextStyle style;
-  final int? maxLines;
-  final TextOverflow? overflow;
-
-  const _HighlightText({
-    required this.text,
-    required this.query,
-    required this.style,
-    this.maxLines,
-    this.overflow,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (query.isEmpty) {
-      return Text(text, style: style, maxLines: maxLines, overflow: overflow);
-    }
-    final lower = text.toLowerCase();
-    final spans = <TextSpan>[];
-    int start = 0;
-    while (true) {
-      final idx = lower.indexOf(query, start);
-      if (idx == -1) {
-        spans.add(TextSpan(text: text.substring(start)));
-        break;
-      }
-      if (idx > start) {
-        spans.add(TextSpan(text: text.substring(start, idx)));
-      }
-      spans.add(
-        TextSpan(
-          text: text.substring(idx, idx + query.length),
-          style: style.copyWith(
-            color: _primary,
-            backgroundColor: const Color.fromRGBO(235, 30, 35, 0.08),
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      );
-      start = idx + query.length;
-    }
-    return Text.rich(
-      TextSpan(style: style, children: spans),
-      maxLines: maxLines,
-      overflow: overflow ?? TextOverflow.clip,
-    );
-  }
 }
 
 class _SkeletonTile extends StatelessWidget {

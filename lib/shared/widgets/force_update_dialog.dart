@@ -1,3 +1,5 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -24,28 +26,21 @@ class ForceUpdateDialog extends StatelessWidget {
 
     return PopScope(
       canPop: false,
-      child: AlertDialog(
-        title: const Text('Update Required'),
-        content: Text(buffer.toString()),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              final Uri url = Uri.parse(downloadUrl);
-              final launched = await launchUrl(
-                url,
-                mode: LaunchMode.externalApplication,
-              );
-              if (!launched && context.mounted) {
-                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                  const SnackBar(
-                    content: Text('Unable to open the update link.'),
-                  ),
-                );
-              }
-            },
-            child: const Text('Update Now'),
-          ),
-        ],
+      child: AppDialog(
+        icon: Icons.system_update_rounded,
+        title: 'Update Required',
+        message: buffer.toString(),
+        confirmLabel: 'Update Now',
+        onConfirm: () async {
+          final Uri url = Uri.parse(downloadUrl);
+          final launched = await launchUrl(
+            url,
+            mode: LaunchMode.externalApplication,
+          );
+          if (!launched && context.mounted) {
+            AppToast.error(context, 'Unable to open the update link.');
+          }
+        },
       ),
     );
   }

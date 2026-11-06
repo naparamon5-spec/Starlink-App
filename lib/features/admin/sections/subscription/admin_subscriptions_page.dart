@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:starlink_app/core/utils/status_labels.dart';
+import 'package:starlink_app/core/utils/list_export.dart';
+import 'package:starlink_app/core/utils/subscription_export.dart';
+import 'package:starlink_app/shared/widgets/subscription_list_card.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
 import 'dart:async';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/admin/sections/subscription/admin_subscription_details_page.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFF133341);
-const _primaryDark = Color(0xFF0C2029);
-const _success = Color(0xFF10B981);
 const _ink = Color(0xFF111111);
 const _inkSecondary = Color(0xFF666666);
 const _inkTertiary = Color(0xFF888888);
@@ -16,7 +17,9 @@ const _surfaceSubtle = Color(0xFFF8F8F8);
 const _border = Color(0xFFD7D7D7);
 
 class AdminSubscriptionsPage extends StatefulWidget {
-  const AdminSubscriptionsPage({super.key});
+  const AdminSubscriptionsPage({super.key, this.exportController});
+
+  final ListExportController? exportController;
 
   @override
   State<AdminSubscriptionsPage> createState() => _AdminSubscriptionsPageState();
@@ -36,17 +39,23 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
   int _totalItems = 0;
   int _totalPages = 1;
   int _currentPage = 1;
-  static const int _pageSize = 10;
+  int _pageSize = 10;
+
+  // Only the latest request may update the list.
+  int _requestSeq = 0;
 
   @override
   void initState() {
     super.initState();
+    widget.exportController?.loader =
+        () => fetchAllSubscriptions(_searchController.text.trim());
     _loadFirstPage();
     _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    widget.exportController?.loader = null;
     _searchDebounce?.cancel();
     _searchController.dispose();
     _scrollController.removeListener(_onScroll);
@@ -61,26 +70,6 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
         _currentPage < _totalPages) {
       _loadNextPage();
     }
-  }
-
-  List<Map<String, dynamic>> get _filteredSubscriptions {
-    final q = _searchController.text.trim().toLowerCase();
-    if (q.isEmpty) return _allSubscriptions;
-    return _allSubscriptions.where((s) {
-      final nickname = (s['nickname'] ?? '').toString().toLowerCase();
-      final id = (s['id'] ?? '').toString().toLowerCase();
-      final sln = (s['serviceLineNumber'] ?? '').toString().toLowerCase();
-      final plan = (s['subscriptionPlan'] ?? '').toString().toLowerCase();
-      final eu =
-          (s['end_user_name'] ?? s['company_name'] ?? '')
-              .toString()
-              .toLowerCase();
-      return nickname.contains(q) ||
-          id.contains(q) ||
-          sln.contains(q) ||
-          plan.contains(q) ||
-          eu.contains(q);
-    }).toList();
   }
 
   // ── Parse ──────────────────────────────────────────────────────────────────
@@ -120,7 +109,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
   // ── First page ─────────────────────────────────────────────────────────────
 
   Future<void> _loadFirstPage() async {
-    if (_loading) return;
+    final seq = ++_requestSeq;
     setState(() {
       _loading = true;
       _error = null;
@@ -134,9 +123,9 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
       final response = await ApiService.getSubscriptionsPaginated(
         page: 1,
         limit: _pageSize,
-        search: '',
+        search: _searchController.text.trim(),
       );
-      if (!mounted) return;
+      if (!mounted || seq != _requestSeq) return;
 
       if (response['status'] != 'success') {
         setState(() {
@@ -157,7 +146,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _requestSeq) return;
       setState(() {
         _error = e.toString().replaceAll('Exception: ', '');
         _loading = false;
@@ -169,6 +158,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
 
   Future<void> _loadNextPage() async {
     if (_fetchingMore || _currentPage >= _totalPages) return;
+    final seq = _requestSeq;
     setState(() => _fetchingMore = true);
 
     try {
@@ -176,9 +166,9 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
       final response = await ApiService.getSubscriptionsPaginated(
         page: nextPage,
         limit: _pageSize,
-        search: '',
+        search: _searchController.text.trim(),
       );
-      if (!mounted) return;
+      if (!mounted || seq != _requestSeq) return;
 
       if (response['status'] == 'success') {
         final parsed = _parsePage(response);
@@ -226,23 +216,11 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
     );
   }
 
-  Color _activeColor(String? active) {
-    final a = subscriptionStatusLabel(active);
-    if (a == 'ACTIVE') return _success;
-    if (a == 'EXPIRED' || a == 'CANCELLED') return _primaryDark;
-    return _inkTertiary;
-  }
-
-  String _formatDate(String? raw) {
-    if (raw == null || raw.isEmpty || raw == '0000-00-00') return '—';
-    return raw;
-  }
-
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredSubscriptions;
+    final filtered = _allSubscriptions;
 
     return ColoredBox(
       color: _surface,
@@ -262,9 +240,9 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                 onChanged: (_) {
                   _searchDebounce?.cancel();
                   _searchDebounce = Timer(
-                    const Duration(milliseconds: 250),
+                    const Duration(milliseconds: 350),
                     () {
-                      if (mounted) setState(() {});
+                      if (mounted) _loadFirstPage();
                     },
                   );
                 },
@@ -281,8 +259,9 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                       _searchController.text.isNotEmpty
                           ? GestureDetector(
                             onTap: () {
+                              _searchDebounce?.cancel();
                               _searchController.clear();
-                              setState(() {});
+                              _loadFirstPage();
                             },
                             child: const Icon(
                               Icons.close_rounded,
@@ -296,6 +275,32 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                     vertical: 14,
                     horizontal: 16,
                   ),
+                ),
+              ),
+            ),
+          ),
+
+          // Per page
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: 132,
+                child: AppSelect<int>(
+                  dense: true,
+                  sheetTitle: 'Per page',
+                  value: _pageSize,
+                  options: const [
+                    SelectOption(5, '5 per page'),
+                    SelectOption(10, '10 per page'),
+                    SelectOption(20, '20 per page'),
+                    SelectOption(50, '50 per page'),
+                  ],
+                  onChanged: (v) {
+                    setState(() => _pageSize = v);
+                    _loadFirstPage();
+                  },
                 ),
               ),
             ),
@@ -405,18 +410,10 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: RepaintBoundary(
-                            child: _SubscriptionCard(
+                            child: SubscriptionListCard(
                               sub: sub,
+                              searchQuery: _searchController.text,
                               onTap: () => _openDetails(sub),
-                              activeColor: _activeColor(
-                                sub['active']?.toString(),
-                              ),
-                              formattedStart: _formatDate(
-                                sub['startDate']?.toString(),
-                              ),
-                              formattedEnd: _formatDate(
-                                sub['endDate']?.toString(),
-                              ),
                             ),
                           ),
                         );
@@ -638,220 +635,4 @@ class _SkeletonListState extends State<_SkeletonList>
       },
     );
   }
-}
-
-// ── Subscription card ──────────────────────────────────────────────────────────
-
-class _SubscriptionCard extends StatelessWidget {
-  final Map<String, dynamic> sub;
-  final VoidCallback onTap;
-  final Color activeColor;
-  final String formattedStart;
-  final String formattedEnd;
-
-  static const _primary = Color(0xFF133341);
-  static const _ink = Color(0xFF111111);
-  static const _inkSecondary = Color(0xFF666666);
-  static const _inkTertiary = Color(0xFF888888);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFD7D7D7);
-
-  const _SubscriptionCard({
-    required this.sub,
-    required this.onTap,
-    required this.activeColor,
-    required this.formattedStart,
-    required this.formattedEnd,
-  });
-
-  String get _nickname => (sub['nickname'] ?? '—').toString();
-  String get _id => (sub['id'] ?? '—').toString();
-  String get _serviceLineNumber => (sub['serviceLineNumber'] ?? '—').toString();
-  String get _active => subscriptionStatusLabel(sub['active']);
-  String get _subscriptionPlan => (sub['subscriptionPlan'] ?? '—').toString();
-  String get _dataplan => (sub['dataplan'] ?? '—').toString();
-  String get _endUserName =>
-      (sub['end_user_name'] ?? sub['company_name'] ?? '').toString();
-  bool get _canNavigate =>
-      _serviceLineNumber.trim().isNotEmpty && _serviceLineNumber != '—';
-
-  @override
-  Widget build(BuildContext context) {
-    final initial = _nickname.isNotEmpty ? _nickname[0].toUpperCase() : '?';
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _canNavigate ? onTap : null,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: _primary.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      initial,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: _primary,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _nickname,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: _ink,
-                                letterSpacing: -0.2,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: activeColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              _active,
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                color: activeColor,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'ID: $_id · $_serviceLineNumber',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: _inkSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          if (_subscriptionPlan != '—')
-                            _MetaTag(label: 'Plan', value: _subscriptionPlan),
-                          if (_dataplan != '—')
-                            _MetaTag(label: 'Data', value: '$_dataplan GB'),
-                        ],
-                      ),
-                      if (_endUserName.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          _endUserName,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: _inkTertiary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      Container(height: 1, color: _border),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_today_outlined,
-                            size: 11,
-                            color: _inkTertiary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$formattedStart → $formattedEnd',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _inkTertiary,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (_canNavigate)
-                            const Icon(
-                              Icons.chevron_right_rounded,
-                              size: 18,
-                              color: _inkTertiary,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Meta tag ───────────────────────────────────────────────────────────────────
-
-class _MetaTag extends StatelessWidget {
-  final String label, value;
-  static const _inkTertiary = Color(0xFF888888);
-  static const _surfaceSubtle = Color(0xFFF8F8F8);
-  static const _border = Color(0xFFD7D7D7);
-
-  const _MetaTag({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-    decoration: BoxDecoration(
-      color: _surfaceSubtle,
-      borderRadius: BorderRadius.circular(5),
-      border: Border.all(color: _border),
-    ),
-    child: Text(
-      '$label: $value',
-      style: const TextStyle(
-        fontSize: 9,
-        color: _inkTertiary,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-  );
 }

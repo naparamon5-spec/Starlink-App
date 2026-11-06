@@ -1,3 +1,5 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -15,11 +17,19 @@ class SubscriptionKitsCard extends StatelessWidget {
     required this.serviceLineNumber,
     required this.terminals,
     required this.onChanged,
+    this.canManage = true,
+    this.canViewRouter = true,
   });
 
   final String serviceLineNumber;
   final dynamic terminals;
   final Future<void> Function() onChanged;
+
+  /// Move and remove (admin, agent).
+  final bool canManage;
+
+  /// Router settings (staff).
+  final bool canViewRouter;
 
   List<Map<String, dynamic>> get _rows =>
       terminals is List
@@ -47,44 +57,12 @@ class SubscriptionKitsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.router_outlined,
-                  size: 18,
-                  color: AppColors.navy,
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Kits & Router',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                ),
-                Text(
-                  '${rows.length}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.inkMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
           if (rows.isEmpty)
             const Padding(
               padding: EdgeInsets.all(18),
               child: Center(
                 child: Text(
-                  'No kits on this service line',
+                  'No terminal mapped.',
                   style: TextStyle(fontSize: 13, color: AppColors.inkFaint),
                 ),
               ),
@@ -96,6 +74,8 @@ class SubscriptionKitsCard extends StatelessWidget {
                 row: rows[i],
                 serviceLineNumber: serviceLineNumber,
                 onChanged: onChanged,
+                canManage: canManage,
+                canViewRouter: canViewRouter,
               ),
             ],
         ],
@@ -109,7 +89,12 @@ class _KitRow extends StatelessWidget {
     required this.row,
     required this.serviceLineNumber,
     required this.onChanged,
+    required this.canManage,
+    required this.canViewRouter,
   });
+
+  final bool canManage;
+  final bool canViewRouter;
 
   final Map<String, dynamic> row;
   final String serviceLineNumber;
@@ -120,31 +105,12 @@ class _KitRow extends StatelessWidget {
   String get _routerId =>
       SubscriptionKitsCard._s(row['router_id'] ?? row['routerId']);
 
-  void _snack(BuildContext context, String msg) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _snack(BuildContext context, String msg, {bool isError = false}) =>
+      AppToast.result(context, msg, ok: !isError);
 
   Future<void> _remove(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: Text('Remove kit $_kit?'),
-            content: Text(
-              'The kit is removed from $serviceLineNumber in the portal. '
-              "This doesn't change anything in Starlink.",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Remove'),
-              ),
-            ],
-          ),
-    );
+    final ok = await showAppConfirm(context, title: 'Remove kit $_kit?', message: 'The kit is removed from $serviceLineNumber in the portal. '
+"This doesn't change anything in Starlink.", confirmLabel: 'Remove', icon: Icons.link_off_rounded, tone: AppDialogTone.danger);
     if (ok != true || !context.mounted) return;
     final res = await ApiService.removeKit(serviceLineNumber, _kit);
     if (!context.mounted) return;
@@ -153,8 +119,7 @@ class _KitRow extends StatelessWidget {
       res['message']?.toString() ??
           (res['status'] == 'success'
               ? 'Kit removed'
-              : 'Could not remove the kit'),
-    );
+              : 'Could not remove the kit'), isError: res['status'] != 'success');
     if (res['status'] == 'success') await onChanged();
   }
 
@@ -165,35 +130,15 @@ class _KitRow extends StatelessWidget {
       builder: (_) => _LinePicker(exclude: serviceLineNumber),
     );
     if (target == null || !context.mounted) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: Text('Move kit $_kit?'),
-            content: Text(
-              'From $serviceLineNumber to $target. This changes the portal '
-              'record only; move the terminal in Starlink too.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Move'),
-              ),
-            ],
-          ),
-    );
+    final ok = await showAppConfirm(context, title: 'Move kit $_kit?', message: 'From $serviceLineNumber to $target. This changes the portal '
+'record only; move the terminal in Starlink too.', confirmLabel: 'Move', icon: Icons.swap_horiz_rounded);
     if (ok != true || !context.mounted) return;
     final res = await ApiService.moveKit(serviceLineNumber, _kit, target);
     if (!context.mounted) return;
     _snack(
       context,
       res['message']?.toString() ??
-          (res['status'] == 'success' ? 'Kit moved' : 'Could not move the kit'),
-    );
+          (res['status'] == 'success' ? 'Kit moved' : 'Could not move the kit'), isError: res['status'] != 'success');
     if (res['status'] == 'success') await onChanged();
   }
 
@@ -246,7 +191,7 @@ class _KitRow extends StatelessWidget {
                   ),
                 ),
               ),
-              if (hasKit)
+              if (hasKit && (canManage || (canViewRouter && hasRouter)))
                 SizedBox(
                   width: 32,
                   height: 32,
@@ -297,7 +242,7 @@ class _KitRow extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (hasRouter)
+                  if (hasRouter && canViewRouter)
                     _sheetOption(
                       ctx,
                       value: 'router',
@@ -305,21 +250,23 @@ class _KitRow extends StatelessWidget {
                       title: 'Router settings',
                       subtitle: 'Wi-Fi names and passwords, bands, restart',
                     ),
-                  _sheetOption(
-                    ctx,
-                    value: 'move',
-                    icon: Icons.swap_horiz_rounded,
-                    title: 'Move to another line',
-                    subtitle: 'Changes the portal record only',
-                  ),
-                  _sheetOption(
-                    ctx,
-                    value: 'remove',
-                    icon: Icons.delete_outline_rounded,
-                    title: 'Remove from this line',
-                    subtitle: 'Asks you to confirm first',
-                    color: AppColors.dangerInk,
-                  ),
+                  if (canManage) ...[
+                    _sheetOption(
+                      ctx,
+                      value: 'move',
+                      icon: Icons.swap_horiz_rounded,
+                      title: 'Move to another line',
+                      subtitle: 'Changes the portal record only',
+                    ),
+                    _sheetOption(
+                      ctx,
+                      value: 'remove',
+                      icon: Icons.delete_outline_rounded,
+                      title: 'Remove from this line',
+                      subtitle: 'Asks you to confirm first',
+                      color: AppColors.dangerInk,
+                    ),
+                  ],
                 ],
               ),
             ),

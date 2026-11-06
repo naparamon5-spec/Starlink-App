@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:starlink_app/core/utils/sheet_export.dart';
@@ -21,9 +22,7 @@ Future<void> exportUsage(
 }) async {
   final days = usageRows(cycle);
   if (cycle == null || days.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No usage data to export for this cycle')),
-    );
+    AppToast.info(context, 'No usage data to export for this cycle');
     return;
   }
   double r2(num v) => (v * 100).round() / 100;

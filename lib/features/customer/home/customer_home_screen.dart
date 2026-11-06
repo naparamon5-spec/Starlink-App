@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/features/billing/billing_actions_button.dart';
+import 'package:starlink_app/core/utils/list_export.dart';
+import 'package:starlink_app/core/utils/subscription_export.dart';
+import 'package:starlink_app/core/utils/ticket_export.dart';
 import 'package:starlink_app/shared/widgets/whats_new_dialog.dart';
 import 'package:starlink_app/shared/widgets/notifications.dart';
 import 'package:http/http.dart' as http;
@@ -45,6 +49,9 @@ class CustomerHomeScreen extends StatefulWidget {
 
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   int _selectedIndex = 0;
+  final _ticketExport = ListExportController();
+  final _subscriptionExport = ListExportController();
+  final _billingActions = BillingListController();
   CustomerQuickActionType? _quickAction;
   bool _quickMenuOpen = false;
 
@@ -514,6 +521,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         child: Container(height: 3, color: _headerLight),
       ),
       actions: [
+        if (_selectedIndex == 1 &&
+            _quickAction == CustomerQuickActionType.tickets)
+          ExportTicketsButton(controller: _ticketExport),
+        if (_selectedIndex == 1 &&
+            _quickAction == CustomerQuickActionType.subscriptions)
+          ExportSubscriptionsButton(controller: _subscriptionExport),
+        if (_selectedIndex == 1 &&
+            _quickAction == CustomerQuickActionType.billing)
+          BillingActionsButton(controller: _billingActions),
         const Padding(
           padding: EdgeInsets.only(right: 6),
           child: NotificationBell(),
@@ -529,11 +545,20 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     }
 
     if (_quickAction == CustomerQuickActionType.tickets) {
-      return const CustomerTicketScreen(showAppBar: false);
+      return CustomerTicketScreen(
+        showAppBar: false,
+        exportController: _ticketExport,
+      );
     } else if (_quickAction == CustomerQuickActionType.subscriptions) {
-      return const CustomerSubscriptionPage(showAppBar: false);
+      return CustomerSubscriptionPage(
+        showAppBar: false,
+        exportController: _subscriptionExport,
+      );
     } else if (_quickAction == CustomerQuickActionType.billing) {
-      return const CustomerBillingPage(showAppBar: false);
+      return CustomerBillingPage(
+        showAppBar: false,
+        actionsController: _billingActions,
+      );
     } else {
       return Center(
         child: Column(

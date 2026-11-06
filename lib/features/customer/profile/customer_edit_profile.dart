@@ -1,4 +1,6 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -122,22 +124,27 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     try {
       final token = await ApiService.getValidAccessToken();
       if (token != null && token.isNotEmpty) {
-        final res = await _httpClient.get(
-          Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/'),
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-        ).timeout(const Duration(seconds: 10));
+        final res = await _httpClient
+            .get(
+              Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/'),
+              headers: {
+                'Accept': 'application/json',
+                'Authorization': 'Bearer $token',
+              },
+            )
+            .timeout(const Duration(seconds: 10));
 
         if (res.statusCode == 200) {
           final decoded = json.decode(res.body);
           if (decoded is Map<String, dynamic>) {
-            final extra = (decoded['data'] is Map<String, dynamic>)
-                ? decoded['data'] as Map<String, dynamic>
-                : decoded;
+            final extra =
+                (decoded['data'] is Map<String, dynamic>)
+                    ? decoded['data'] as Map<String, dynamic>
+                    : decoded;
             extra.forEach((k, v) {
-              if (v != null && v.toString().isNotEmpty && v.toString() != 'null') {
+              if (v != null &&
+                  v.toString().isNotEmpty &&
+                  v.toString() != 'null') {
                 merged[k] = v;
               }
             });
@@ -151,7 +158,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     if (merged.isNotEmpty) {
       final firstName = _str(merged, 'first_name') ?? _str(merged, 'firstName');
       final lastName = _str(merged, 'last_name') ?? _str(merged, 'lastName');
-      final middleName = _str(merged, 'middle_name') ?? _str(merged, 'middleName') ?? '';
+      final middleName =
+          _str(merged, 'middle_name') ?? _str(merged, 'middleName') ?? '';
       final email = _str(merged, 'email') ?? '';
 
       await _prefs.setString('firstName', firstName ?? '');
@@ -175,7 +183,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         _isLoading = false;
       });
 
-      WidgetsBinding.instance.addPostFrameCallback((_) => _animController.forward());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _animController.forward(),
+      );
       return;
     }
 
@@ -183,7 +193,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     _resolvedUserId ??= _prefs.getInt('user_id');
     _position = _prefs.getString('position') ?? 'Customer';
     _role = _prefs.getString('role') ?? 'User';
-    
+
     setState(() {
       _firstNameController.text = _prefs.getString('firstName') ?? '';
       _lastNameController.text = _prefs.getString('lastName') ?? '';
@@ -193,7 +203,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       _isLoading = false;
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _animController.forward());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _animController.forward(),
+    );
   }
 
   // ── Helper methods ────────────────────────────────────────────────────────
@@ -331,15 +343,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isError ? Colors.red : _success,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.result(context, msg, ok: !isError);
   }
-
 
   ImageProvider? _getProfileImage() {
     try {
@@ -353,7 +358,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       return null;
     }
   }
-
 
   // ── Widget builders ────────────────────────────────────────────────────────
 
@@ -500,12 +504,21 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  final _baseline = FormBaseline();
+  bool get _hasChanges => _baseline.changed(
+    ready: !_isLoading,
+    values: [
+      _firstNameController.text,
+      _lastNameController.text,
+      _middleNameController.text,
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final positionDisplay =
         (_position != null && _position!.isNotEmpty) ? _position! : '—';
-    final roleDisplay =
-        (_role != null && _role!.isNotEmpty) ? _role! : '—';
+    final roleDisplay = (_role != null && _role!.isNotEmpty) ? _role! : '—';
 
     final String statusLabel;
     final Color statusColor;
@@ -525,280 +538,289 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       statusBadgeBg = _primary.withOpacity(0.10);
     }
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Scaffold(
-        backgroundColor: _surfaceSubtle,
-        body: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              // ── Gradient header ──────────────────────────────────────────
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF133341), Color(0xFF0C2029)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+    return UnsavedChangesGuard(
+      isDirty: () => _hasChanges,
+      listenTo: Listenable.merge([
+        _firstNameController,
+        _lastNameController,
+        _middleNameController,
+      ]),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,
+        child: Scaffold(
+          backgroundColor: _surfaceSubtle,
+          body: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                // ── Gradient header ──────────────────────────────────────────
+                Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF133341), Color(0xFF0C2029)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
-                ),
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Expanded(
-                          child: Text(
-                            'Edit Profile',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => Navigator.maybePop(context),
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
                               color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.3,
+                              size: 20,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 52),
-                        // if (!_isLoading)
-                        //   TextButton(
-                        //     onPressed:
-                        //         (_isImageLoading || _isSaving)
-                        //             ? null
-                        //             : _saveProfile,
-                        //     style: TextButton.styleFrom(
-                        //       backgroundColor: Colors.white.withOpacity(0.15),
-                        //       shape: RoundedRectangleBorder(
-                        //         borderRadius: BorderRadius.circular(10),
-                        //       ),
-                        //       padding: const EdgeInsets.symmetric(
-                        //         horizontal: 14,
-                        //         vertical: 8,
-                        //       ),
-                        //     ),
-                        //     child:
-                        //         _isSaving
-                        //             ? const SizedBox(
-                        //               width: 16,
-                        //               height: 16,
-                        //               child: CircularProgressIndicator(
-                        //                 strokeWidth: 2,
-                        //                 valueColor: AlwaysStoppedAnimation(
-                        //                   Colors.white,
-                        //                 ),
-                        //               ),
-                        //             )
-                        //             : const Text(
-                        //               'Save',
-                        //               style: TextStyle(
-                        //                 color: Colors.white,
-                        //                 fontWeight: FontWeight.w700,
-                        //                 fontSize: 13,
-                        //               ),
-                        //             ),
-                        //   ),
-                      ],
+                          const SizedBox(width: 4),
+                          const Expanded(
+                            child: Text(
+                              'Edit Profile',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 52),
+                          // if (!_isLoading)
+                          //   TextButton(
+                          //     onPressed:
+                          //         (_isImageLoading || _isSaving)
+                          //             ? null
+                          //             : _saveProfile,
+                          //     style: TextButton.styleFrom(
+                          //       backgroundColor: Colors.white.withOpacity(0.15),
+                          //       shape: RoundedRectangleBorder(
+                          //         borderRadius: BorderRadius.circular(10),
+                          //       ),
+                          //       padding: const EdgeInsets.symmetric(
+                          //         horizontal: 14,
+                          //         vertical: 8,
+                          //       ),
+                          //     ),
+                          //     child:
+                          //         _isSaving
+                          //             ? const SizedBox(
+                          //               width: 16,
+                          //               height: 16,
+                          //               child: CircularProgressIndicator(
+                          //                 strokeWidth: 2,
+                          //                 valueColor: AlwaysStoppedAnimation(
+                          //                   Colors.white,
+                          //                 ),
+                          //               ),
+                          //             )
+                          //             : const Text(
+                          //               'Save',
+                          //               style: TextStyle(
+                          //                 color: Colors.white,
+                          //                 fontWeight: FontWeight.w700,
+                          //                 fontSize: 13,
+                          //               ),
+                          //             ),
+                          //   ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
 
-              // ── Scrollable body ──────────────────────────────────────────
-              Expanded(
-                child:
-                    _isLoading
-                        ? const Center(
-                          child: CircularProgressIndicator(color: _primary),
-                        )
-                        : AnimatedBuilder(
-                          animation: _animController,
-                          builder:
-                              (context, child) => Opacity(
-                                opacity: _animController.value,
-                                child: Transform.translate(
-                                  offset: Offset(
-                                    0,
-                                    20 * (1 - _animController.value),
+                // ── Scrollable body ──────────────────────────────────────────
+                Expanded(
+                  child:
+                      _isLoading
+                          ? const Center(
+                            child: CircularProgressIndicator(color: _primary),
+                          )
+                          : AnimatedBuilder(
+                            animation: _animController,
+                            builder:
+                                (context, child) => Opacity(
+                                  opacity: _animController.value,
+                                  child: Transform.translate(
+                                    offset: Offset(
+                                      0,
+                                      20 * (1 - _animController.value),
+                                    ),
+                                    child: child,
                                   ),
-                                  child: child,
                                 ),
-                              ),
-                          child: Form(
-                            key: _formKey,
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.fromLTRB(
-                                20,
-                                24,
-                                20,
-                                32,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // ── Personal Information ──────────────────
-                                  _sectionTitle('PERSONAL INFORMATION'),
-                                  _card(
-                                    child: Column(
-                                      children: [
-                                        _field(
-                                          _firstNameController,
-                                          'First Name',
-                                          Icons.person_outline,
-                                          validator:
-                                              (v) =>
-                                                  (v?.trim().isEmpty ?? true)
-                                                      ? 'Required'
-                                                      : null,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        _field(
-                                          _lastNameController,
-                                          'Last Name',
-                                          Icons.person_outline,
-                                          validator:
-                                              (v) =>
-                                                  (v?.trim().isEmpty ?? true)
-                                                      ? 'Required'
-                                                      : null,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        _field(
-                                          _middleNameController,
-                                          'Middle Name (Optional)',
-                                          Icons.person_outline,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        _field(
-                                          _emailController,
-                                          'Email Address',
-                                          Icons.email_outlined,
-                                          readOnly: true,
-                                          keyboardType:
-                                              TextInputType.emailAddress,
-                                        ),
-                                      ],
+                            child: Form(
+                              key: _formKey,
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  24,
+                                  20,
+                                  32,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // ── Personal Information ──────────────────
+                                    _sectionTitle('PERSONAL INFORMATION'),
+                                    _card(
+                                      child: Column(
+                                        children: [
+                                          _field(
+                                            _firstNameController,
+                                            'First Name',
+                                            Icons.person_outline,
+                                            validator:
+                                                (v) =>
+                                                    (v?.trim().isEmpty ?? true)
+                                                        ? 'Required'
+                                                        : null,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _field(
+                                            _lastNameController,
+                                            'Last Name',
+                                            Icons.person_outline,
+                                            validator:
+                                                (v) =>
+                                                    (v?.trim().isEmpty ?? true)
+                                                        ? 'Required'
+                                                        : null,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _field(
+                                            _middleNameController,
+                                            'Middle Name (Optional)',
+                                            Icons.person_outline,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _field(
+                                            _emailController,
+                                            'Email Address',
+                                            Icons.email_outlined,
+                                            readOnly: true,
+                                            keyboardType:
+                                                TextInputType.emailAddress,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 24),
+                                    const SizedBox(height: 24),
 
-                                  // ── Account Details (read-only) ───────────
-                                  _sectionTitle('ACCOUNT DETAILS'),
-                                  _card(
-                                    child: Column(
-                                      children: [
-                                        _infoRow(
-                                          icon: Icons.badge_outlined,
-                                          label: 'Role',
-                                          value: roleDisplay,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        _infoRow(
-                                          icon: Icons.work_outline_rounded,
-                                          label: 'Position',
-                                          value: positionDisplay,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        _infoRow(
-                                          icon: Icons.verified_user_outlined,
-                                          label: 'Account Status',
-                                          value: statusLabel,
-                                          valueColor:
-                                              _isActive == null
-                                                  ? _inkTertiary
-                                                  : statusColor,
-                                          trailing:
-                                              _isActive != null
-                                                  ? Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 3,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: statusBadgeBg,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            6,
+                                    // ── Account Details (read-only) ───────────
+                                    _sectionTitle('ACCOUNT DETAILS'),
+                                    _card(
+                                      child: Column(
+                                        children: [
+                                          _infoRow(
+                                            icon: Icons.badge_outlined,
+                                            label: 'Role',
+                                            value: roleDisplay,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _infoRow(
+                                            icon: Icons.work_outline_rounded,
+                                            label: 'Position',
+                                            value: positionDisplay,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _infoRow(
+                                            icon: Icons.verified_user_outlined,
+                                            label: 'Account Status',
+                                            value: statusLabel,
+                                            valueColor:
+                                                _isActive == null
+                                                    ? _inkTertiary
+                                                    : statusColor,
+                                            trailing:
+                                                _isActive != null
+                                                    ? Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 3,
                                                           ),
-                                                    ),
-                                                    child: Text(
-                                                      statusLabel.toUpperCase(),
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        color: statusColor,
-                                                        letterSpacing: 0.5,
+                                                      decoration: BoxDecoration(
+                                                        color: statusBadgeBg,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              6,
+                                                            ),
                                                       ),
-                                                    ),
-                                                  )
-                                                  : null,
-                                        ),
-                                      ],
+                                                      child: Text(
+                                                        statusLabel
+                                                            .toUpperCase(),
+                                                        style: TextStyle(
+                                                          fontSize: 9,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          color: statusColor,
+                                                          letterSpacing: 0.5,
+                                                        ),
+                                                      ),
+                                                    )
+                                                    : null,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 28),
+                                    const SizedBox(height: 28),
 
-                                  // ── Save button ───────────────────────────
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton(
-                                      onPressed:
-                                          (_isImageLoading || _isSaving)
-                                              ? null
-                                              : _saveProfile,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.brand,
-                                        foregroundColor: Colors.white,
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 16,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
+                                    // ── Save button ───────────────────────────
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed:
+                                            (_isImageLoading || _isSaving)
+                                                ? null
+                                                : _saveProfile,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.brand,
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 16,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              14,
+                                            ),
                                           ),
                                         ),
+                                        child:
+                                            _isSaving
+                                                ? const SizedBox(
+                                                  width: 22,
+                                                  height: 22,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation(
+                                                          Colors.white,
+                                                        ),
+                                                  ),
+                                                )
+                                                : const Text(
+                                                  'Save Changes',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    fontSize: 15,
+                                                  ),
+                                                ),
                                       ),
-                                      child:
-                                          _isSaving
-                                              ? const SizedBox(
-                                                width: 22,
-                                                height: 22,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  valueColor:
-                                                      AlwaysStoppedAnimation(
-                                                        Colors.white,
-                                                      ),
-                                                ),
-                                              )
-                                              : const Text(
-                                                'Save Changes',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 15,
-                                                ),
-                                              ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

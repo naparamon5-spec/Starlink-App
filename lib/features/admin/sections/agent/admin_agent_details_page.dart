@@ -1,23 +1,39 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
-import 'package:starlink_app/shared/widgets/picker_option_tile.dart';
-import 'package:starlink_app/services/api_service.dart';
-import 'package:starlink_app/shared/widgets/account_limit_card.dart';
+import 'package:starlink_app/core/utils/status_labels.dart';
 import 'package:starlink_app/features/admin/profile/admin_manage_users_page.dart';
-import 'package:starlink_app/features/admin/sections/subscription/admin_subscription_details_page.dart';
 import 'package:starlink_app/features/admin/profile/view-user/admin_view_user_details_page.dart';
+import 'package:starlink_app/features/admin/sections/enduser/admin_create_end_user_page.dart';
+import 'package:starlink_app/features/admin/sections/enduser/admin_end_user_details_page.dart';
+import 'package:starlink_app/features/admin/sections/subscription/admin_subscription_details_page.dart';
+import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/account_detail_parts.dart';
+import 'package:starlink_app/shared/widgets/account_limit_card.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 
+String _text(dynamic v) {
+  final t = v?.toString().trim() ?? '';
+  return t == 'null' ? '' : t;
+}
+
+String _sln(Map<String, dynamic> s) =>
+    _text(s['serviceLineNumber'] ?? s['service_line_number']);
+
+/// One customer: who they are, then their subscriptions, users and end users.
 class AdminAgentDetailsPage extends StatefulWidget {
-  final String agentId;
-  final String agentCode;
-  final String agentName;
-
   const AdminAgentDetailsPage({
     super.key,
     required this.agentId,
     required this.agentCode,
     required this.agentName,
   });
+
+  final String agentId;
+  final String agentCode;
+  final String agentName;
 
   @override
   State<AdminAgentDetailsPage> createState() => _AdminAgentDetailsPageState();
@@ -27,140 +43,220 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
   bool _loading = true;
   String? _error;
 
-  Map<String, dynamic>? _company;
-  List<Map<String, dynamic>> _subscriptions = [];
-  List<Map<String, dynamic>> _users = [];
+  Map<String, dynamic>? _customer;
+  List<Map<String, dynamic>> _subscriptions = const [];
+  List<Map<String, dynamic>> _users = const [];
+  List<Map<String, dynamic>> _endUsers = const [];
+  int _tab = 0;
+  int _limitVersion = 0;
 
-  bool _isEditingSubscriptions = false;
-  List<Map<String, dynamic>>? _stagedSubscriptions;
+  // Lines chosen to link, waiting for an end user and Save.
+  final List<Map<String, dynamic>> _pending = [];
+  bool _savingLinks = false;
+
+  // Changing the end user of lines already linked.
+  bool _editingEndUsers = false;
+  final Map<String, String> _euDraft = {};
+  bool _savingEndUsers = false;
+
+  String get _code {
+    final code = _text(_customer?['code']);
+    return code.isNotEmpty ? code : widget.agentCode;
+  }
+
+  String get _name {
+    final name = _text(_customer?['name']);
+    return name.isNotEmpty ? name : widget.agentName;
+  }
+
+  List<Map<String, dynamic>> get _changedEndUsers => [
+    for (final s in _subscriptions)
+      if ((_euDraft[_sln(s)] ?? '') != _text(s['eu_code'])) s,
+  ];
+
+  bool get _isDirty =>
+      _pending.isNotEmpty || (_editingEndUsers && _changedEndUsers.isNotEmpty);
 
   @override
   void initState() {
     super.initState();
-    _loadAll();
+    _load();
   }
 
-  Future<void> _loadAll() async {
+  List<Map<String, dynamic>> _rows(Map<String, dynamic> res) {
+    if (res['status'] != 'success') return const [];
+    final d = res['data'];
+    final list =
+        d is List
+            ? d
+            : (d is Map && d['data'] is List ? d['data'] as List : []);
+    return list
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+  }
+
+  Future<void> _load() async {
     setState(() {
-      _loading = true;
+      _loading = _customer == null;
       _error = null;
     });
-
-    try {
-      final results = await Future.wait(<Future<Map<String, dynamic>>>[
-        ApiService.getCustomerById(widget.agentId),
-        ApiService.getSubscriptionsByCustomerId(widget.agentCode),
-        ApiService.getUsersByCompanyCode(widget.agentCode),
-      ]);
-
-      if (!mounted) return;
-
-      final r0 = results[0];
-      final r1 = results[1];
-      final r2 = results[2];
-
-      if (r0['status'] != 'success') {
-        setState(() {
-          _loading = false;
-          _error = r0['message']?.toString() ?? 'Failed to load agent details';
-        });
+    final results = await Future.wait(<Future<Map<String, dynamic>>>[
+      ApiService.getCustomerById(widget.agentId),
+      ApiService.getSubscriptionsByCustomerId(widget.agentCode),
+      ApiService.getUsersByCompanyCode(widget.agentCode),
+      ApiService.getEndUsersByCustomer(widget.agentCode),
+    ]);
+    if (!mounted) return;
+    final customer = results[0];
+    setState(() {
+      _loading = false;
+      if (customer['status'] != 'success') {
+        _error = _text(customer['message']);
         return;
       }
+      final d = customer['data'];
+      _customer = d is Map ? Map<String, dynamic>.from(d) : const {};
+      _subscriptions = _rows(results[1]);
+      _users = _rows(results[2]);
+      _endUsers = _rows(results[3]);
+      _limitVersion++;
+    });
+  }
 
-      final cd = r0['data'];
-      final company =
-          cd is Map ? Map<String, dynamic>.from(cd) : <String, dynamic>{};
+  void _snack(String message, {bool isError = false}) => AppToast.result(context, message, ok: !isError);
 
-      List<Map<String, dynamic>> subs = [];
-      if (r1['status'] == 'success') {
-        final d = r1['data'];
-        final list =
-            d is List
-                ? d
-                : (d is Map && (d)['data'] is List
-                    ? (d)['data'] as List
-                    : <dynamic>[]);
-        subs =
-            list
-                .whereType<Map>()
-                .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-                .toList();
+  String _failure(Map<String, dynamic> res) =>
+      _text(res['message']).isNotEmpty
+          ? _text(res['message'])
+          : "Couldn't save. Try again.";
+
+  // ── Linking ──────────────────────────────────────────────────────────────
+
+  Future<void> _openLinkSheet() async {
+    final exclude = {
+      for (final s in _subscriptions) _sln(s),
+      for (final p in _pending) _sln(p),
+    };
+    final picked = await showModalBottomSheet<List<Map<String, dynamic>>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (_) => _UnlinkedSheet(exclude: exclude),
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    setState(() {
+      for (final s in picked) {
+        _pending.add({
+          'serviceLineNumber': _sln(s),
+          'nickname': _text(s['nickname']),
+          'eu_code': '',
+        });
       }
+    });
+  }
 
-      List<Map<String, dynamic>> users = [];
-      if (r2['status'] == 'success') {
-        final d = r2['data'];
-        final list =
-            d is List
-                ? d
-                : (d is Map && (d)['data'] is List
-                    ? (d)['data'] as List
-                    : <dynamic>[]);
-        users =
-            list
-                .whereType<Map>()
-                .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-                .toList();
-      }
-
-      setState(() {
-        _company = company;
-        _subscriptions = subs;
-        _users = users;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString().replaceAll('Exception: ', '');
-      });
+  Future<void> _saveLinks() async {
+    setState(() => _savingLinks = true);
+    final res = await ApiService.linkSubscriptions(_code, [
+      for (final p in _pending)
+        {'serviceLineNumber': _sln(p), 'eu_code': p['eu_code']},
+    ]);
+    if (!mounted) return;
+    setState(() => _savingLinks = false);
+    if (res['status'] != 'success') {
+      _snack(_failure(res), isError: true);
+      return;
     }
+    setState(_pending.clear);
+    _snack('Service lines linked');
+    await _load();
   }
 
-  String _str(dynamic v) =>
-      (v == null || v.toString() == 'null' || v.toString().trim().isEmpty)
-          ? '—'
-          : v.toString().trim();
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  void _startEndUserEdit() {
+    setState(() {
+      _euDraft
+        ..clear()
+        ..addAll({
+          for (final s in _subscriptions) _sln(s): _text(s['eu_code']),
+        });
+      _editingEndUsers = true;
+    });
   }
 
-  // ── Navigate to subscription detail ───────────────────────────────────────
-  void _openSubscription(Map<String, dynamic> sub) {
-    final sln = _str(sub['serviceLineNumber'] ?? sub['service_line_number']);
-    if (sln == '—') return;
-    final nickname = _str(sub['nickname'] ?? sub['site_name'] ?? sln);
-    Navigator.push(
+  Future<void> _saveEndUsers() async {
+    final changed = _changedEndUsers;
+    if (changed.isEmpty) {
+      setState(() => _editingEndUsers = false);
+      return;
+    }
+    setState(() => _savingEndUsers = true);
+    final res = await ApiService.linkSubscriptions(_code, [
+      for (final s in changed)
+        {'serviceLineNumber': _sln(s), 'eu_code': _euDraft[_sln(s)] ?? ''},
+    ]);
+    if (!mounted) return;
+    setState(() => _savingEndUsers = false);
+    if (res['status'] != 'success') {
+      _snack(_failure(res), isError: true);
+      return;
+    }
+    setState(() => _editingEndUsers = false);
+    _snack(
+      'Updated ${changed.length} service line${changed.length == 1 ? '' : 's'}',
+    );
+    await _load();
+  }
+
+  Future<void> _unlink(Map<String, dynamic> s) async {
+    final label =
+        _text(s['nickname']).isNotEmpty ? _text(s['nickname']) : _sln(s);
+    final ok = await showAppConfirm(context, title: 'Unlink service line?', message: 'Unlink $label from $_name?', confirmLabel: 'Unlink', icon: Icons.link_off_rounded, tone: AppDialogTone.danger);
+    if (ok != true || !mounted) return;
+    final res = await ApiService.unlinkSubscription(_sln(s));
+    if (!mounted) return;
+    if (res['status'] != 'success') {
+      _snack(_failure(res), isError: true);
+      return;
+    }
+    _snack('Unlinked');
+    await _load();
+  }
+
+  // ── Navigation ───────────────────────────────────────────────────────────
+
+  Future<void> _openSubscription(Map<String, dynamic> s) async {
+    final sln = _sln(s);
+    if (sln.isEmpty) return;
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder:
             (_) => AdminSubscriptionDetailsPage(
               serviceLineNumber: sln,
-              title: nickname,
+              title:
+                  _text(s['nickname']).isNotEmpty ? _text(s['nickname']) : sln,
             ),
       ),
     );
+    if (mounted) _load();
   }
 
-  // ── Navigate to user detail ────────────────────────────────────────────────
-  void _openUser(Map<String, dynamic> user) {
-    final userId = user['id']?.toString() ?? '';
-    if (userId.isEmpty || userId == 'null') return;
-    Navigator.push(
+  Future<void> _openUser(Map<String, dynamic> u) async {
+    final id = _text(u['id']);
+    if (id.isEmpty) return;
+    await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => AdminUserDetailPage(userId: userId)),
+      MaterialPageRoute(builder: (_) => AdminUserDetailPage(userId: id)),
     );
+    if (mounted) _load();
   }
 
-  // ── Add User bottom sheet ──────────────────────────────────────────────────
-  void _showAddUserSheet() {
+  void _addUser() {
     showModalBottomSheet(
       context: context,
+      enableDrag: false,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       useSafeArea: true,
@@ -168,1215 +264,710 @@ class _AdminAgentDetailsPageState extends State<AdminAgentDetailsPage> {
           (_) => CreateUserSheet(
             currentUserRole: 'admin',
             prefilledRole: 'customer',
-            prefilledCompanyCode: widget.agentCode,
-            prefilledCompanyName: widget.agentName,
+            prefilledCompanyCode: _code,
+            prefilledCompanyName: _name,
             onCreated: () {
-              _loadAll();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                    'User created successfully.',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  backgroundColor: _success,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  margin: const EdgeInsets.all(16),
-                ),
-              );
+              _snack('User invited — an email has been sent');
+              _load();
             },
-            onError: (msg) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    msg,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  backgroundColor: _primary,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  margin: const EdgeInsets.all(16),
-                ),
-              );
-            },
+            onError: (message) => _snack(message, isError: true),
           ),
     );
   }
 
-  // ── Design tokens ─────────────────────────────────────────────────────────
-  static const _primary = Color(0xFF133341);
-  static const _primaryDark = Color(0xFF0C2029);
-  static const _success = Color(0xFF10B981);
-  static const _danger = Color(0xFFE90408);
-  static const _ink = Color(0xFF111111);
-  static const _inkSecondary = Color(0xFF666666);
-  static const _inkTertiary = Color(0xFF888888);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF8F8F8);
-  static const _border = Color(0xFFD7D7D7);
+  Future<void> _openEndUser(Map<String, dynamic> e) async {
+    final code = _text(e['eu_code']);
+    if (code.isEmpty) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => AdminEndUserDetailsPage(
+              endUserId: code,
+              endUserCode: code,
+              endUserName: _text(e['eu_name']),
+            ),
+      ),
+    );
+    if (mounted) _load();
+  }
+
+  Future<void> _addEndUser() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminCreateEndUserPage(initialCustomerCode: _code),
+      ),
+    );
+    if (created == true && mounted) _load();
+  }
+
+  // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _surfaceSubtle,
-      appBar: AppBar(
-        centerTitle: true,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.agentName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                letterSpacing: -0.3,
-              ),
-            ),
-            Text(
-              widget.agentCode,
-              style: const TextStyle(fontSize: 11, color: Colors.white70),
-            ),
-          ],
-        ),
-      ),
-      body:
-          _loading
-              ? _buildLoader()
-              : _error != null
-              ? _buildError()
-              : RefreshIndicator(
-                onRefresh: _loadAll,
-                color: _primary,
-                strokeWidth: 2,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                  children: [
-                    _buildCompanyCard(),
-                    const SizedBox(height: 12),
-                    AccountLimitCard(code: widget.agentCode),
-                    const SizedBox(height: 12),
-                    _buildSubscriptionsCard(),
-                    const SizedBox(height: 12),
-                    _buildUsersCard(),
-                  ],
+    return UnsavedChangesGuard(
+      isDirty: () => _isDirty,
+      child: Scaffold(
+        backgroundColor: AppColors.paperSubtle,
+        appBar: AppBar(title: const Text('Customer')),
+        body:
+            _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? _buildError()
+                : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 14),
+                      _buildTabs(),
+                      const SizedBox(height: 14),
+                      if (_tab == 0)
+                        _buildSubscriptions()
+                      else if (_tab == 1)
+                        _buildUsers()
+                      else
+                        _buildEndUsers(),
+                    ],
+                  ),
                 ),
-              ),
+      ),
     );
   }
 
-  Widget _buildLoader() {
-    return const Center(
+  Widget _buildError() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
+          const Icon(Icons.error_outline, size: 34, color: AppColors.inkFaint),
+          const SizedBox(height: 10),
+          const Text(
+            'Customer not found',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
-          SizedBox(height: 14),
-          Text(
-            'Loading agent details…',
-            style: TextStyle(fontSize: 13, color: _inkSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: _danger.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.error_outline_rounded,
-                color: _danger,
-                size: 26,
-              ),
-            ),
-            const SizedBox(height: 16),
+          if (_error!.isNotEmpty) ...[
+            const SizedBox(height: 4),
             Text(
               _error!,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFFE90408),
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _loadAll,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brand,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: const StadiumBorder(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-              icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: const Text(
-                'Try Again',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  // ── Company Card ───────────────────────────────────────────────────────────
-
-  Widget _buildCompanyCard() {
-    final c = _company ?? {};
-    return _SectionCard(
-      icon: Icons.business_rounded,
-      iconColor: _inkTertiary,
-      title: 'Company',
-      trailing: const _StatusBadge(label: 'Active', color: _success),
-      child: Column(
-        children: [
-          _KVRow(label: 'Code', value: _str(c['code'])),
-          const SizedBox(height: 10),
-          _KVRow(label: 'Name', value: _str(c['name'])),
+          const SizedBox(height: 14),
+          OutlinedButton(onPressed: _load, child: const Text('Try again')),
         ],
       ),
-    );
-  }
+    ),
+  );
 
-  // ── Subscriptions Card ─────────────────────────────────────────────────────
-
-  Widget _buildSubscriptionsCard() {
-    return _SectionCard(
-      icon: Icons.router_rounded,
-      iconColor: _inkTertiary,
-      title: 'Subscriptions',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _buildHeader() {
+    final inactive = _text(_customer?['inactive']);
+    return AppCard(
+      child: Row(
         children: [
-          _CountBadge(count: _subscriptions.length, color: _inkTertiary),
-          const SizedBox(width: 8),
-          // ── Edit / Done button ──
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                if (!_isEditingSubscriptions) {
-                  _stagedSubscriptions = List.from(_subscriptions);
-                } else {
-                  _subscriptions = List.from(_stagedSubscriptions!);
-                  _stagedSubscriptions = null;
-                }
-                _isEditingSubscriptions = !_isEditingSubscriptions;
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: _ink,
-                borderRadius: BorderRadius.circular(8),
+          CircleAvatar(
+            radius: 26,
+            backgroundColor: AppColors.navy,
+            child: Text(
+              accountInitials(_name),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
               ),
-              child: Text(
-                _isEditingSubscriptions ? 'Done' : 'Edit',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _name.isEmpty ? '—' : _name,
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                    letterSpacing: -0.3,
+                    color: AppColors.navy,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 5),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      _code,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.inkFaint,
+                      ),
+                    ),
+                    if (inactive.isNotEmpty)
+                      DotBadge(
+                        inactive == 'N' ? 'ACTIVE' : 'INACTIVE',
+                        color:
+                            inactive == 'N'
+                                ? AppColors.successInk
+                                : AppColors.inkMuted,
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTabs() => AccountTabs(
+    tabs: [
+      ('Subscriptions', _subscriptions.length),
+      ('Users', _users.length),
+      ('End Users', _endUsers.length),
+    ],
+    selected: _tab,
+    onSelected: (i) => setState(() => _tab = i),
+  );
+
+  Widget _title(String text) => Text(
+    text,
+    style: const TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w700,
+      color: AppColors.navy,
+    ),
+  );
+
+  List<SelectOption<String>> get _endUserOptions => [
+    const SelectOption('', 'No end user'),
+    for (final e in _endUsers)
+      SelectOption(_text(e['eu_code']), _text(e['eu_name'])),
+  ];
+
+  // ── Subscriptions ────────────────────────────────────────────────────────
+
+  Widget _buildSubscriptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _title('Linked service lines'),
+        const SizedBox(height: 8),
+        if (_editingEndUsers)
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed:
+                      _savingEndUsers
+                          ? null
+                          : () => setState(() => _editingEndUsers = false),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _savingEndUsers ? null : _saveEndUsers,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(_savingEndUsers ? 'Saving…' : 'Save end users'),
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _openLinkSheet,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                  ),
+                  icon: const Icon(Icons.link_rounded, size: 17),
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Link service lines'),
+                  ),
+                ),
+              ),
+              if (_subscriptions.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: _startEndUserEdit,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.ink,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                    ),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Edit end users'),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        const SizedBox(height: 12),
+        if (_pending.isNotEmpty) ...[
+          _buildPending(),
+          const SizedBox(height: 12),
+        ],
+        if (_subscriptions.isEmpty)
+          AccountEmptyCard('No linked service lines.')
+        else
+          for (final s in _subscriptions)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildSubscriptionCard(s),
+            ),
+      ],
+    );
+  }
+
+  Widget _buildPending() {
+    return AppCard(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_isEditingSubscriptions) ...[
-            const SizedBox(height: 8),
-            // ── Add Subscription button ──
-            Center(
-              child: GestureDetector(
-                onTap: _showSubscriptionPicker,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _ink,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
+          const Text(
+            'Assign end users, then save',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.inkMuted,
+            ),
+          ),
+          for (var i = 0; i < _pending.length; i++) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.add, size: 13, color: Colors.white),
-                      SizedBox(width: 4),
                       Text(
-                        'Add Subscription',
-                        style: TextStyle(
-                          fontSize: 11,
+                        _text(_pending[i]['nickname']).isNotEmpty
+                            ? _text(_pending[i]['nickname'])
+                            : _sln(_pending[i]),
+                        style: const TextStyle(
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      Text(
+                        _sln(_pending[i]),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: AppColors.inkFaint,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          (_stagedSubscriptions ?? _subscriptions).isEmpty
-              ? const _EmptyRow(message: 'No subscriptions found')
-              : Column(
-                children:
-                    (_stagedSubscriptions ?? _subscriptions)
-                        .asMap()
-                        .entries
-                        .map((entry) {
-                          final i = entry.key;
-                          final s = entry.value;
-                          final nickname = _str(
-                            s['nickname'] ?? s['site_name'],
-                          );
-                          final sln = _str(
-                            s['serviceLineNumber'] ?? s['service_line_number'],
-                          );
-                          final kit = _str(s['kit_number'] ?? s['kitNumber']);
-                          final euName = _str(s['eu_name']);
-                          final totalGB = _str(s['totalPriorityGB']);
-                          final dataplan = _str(s['dataplan']);
-                          final activeRaw = _str(s['active'] ?? s['status']);
-                          final isActive =
-                              activeRaw.toUpperCase() == 'ACTIVE' ||
-                              activeRaw == '1';
-                          final usedGB = totalGB == '—' ? '0.00' : totalGB;
-                          final planGB =
-                              (dataplan == '—' || dataplan == '0')
-                                  ? '0'
-                                  : dataplan;
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (i > 0) const _HDivider(),
-                              InkWell(
-                                onTap:
-                                    _isEditingSubscriptions || sln == '—'
-                                        ? null
-                                        : () => _openSubscription(s),
-                                borderRadius: BorderRadius.circular(8),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  nickname,
-                                                  style: const TextStyle(
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: _ink,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  maxLines: 2,
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  sln,
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: _inkTertiary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          if (_isEditingSubscriptions)
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.delete_outline_rounded,
-                                                color: _danger,
-                                                size: 20,
-                                              ),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _stagedSubscriptions!
-                                                      .removeAt(i);
-                                                });
-                                              },
-                                            )
-                                          else
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                _StatusBadge(
-                                                  label:
-                                                      isActive
-                                                          ? 'ACTIVE'
-                                                          : 'INACTIVE',
-                                                  color:
-                                                      isActive
-                                                          ? _success
-                                                          : _primaryDark,
-                                                ),
-                                              ],
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      _KVRow(
-                                        label: 'Data Usage',
-                                        value: '$usedGB GB / $planGB GB',
-                                      ),
-                                      if (kit != '—') ...[
-                                        const SizedBox(height: 6),
-                                        _KVRow(label: 'Kit Number', value: kit),
-                                      ],
-                                      if (euName != '—') ...[
-                                        const SizedBox(height: 6),
-                                        _KVRow(
-                                          label: 'End User',
-                                          value: euName,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        })
-                        .toList(),
-              ),
-          if (_isEditingSubscriptions) ...[
-            const SizedBox(height: 12),
-            // ── Cancel / Save row — compact inline pills, aligned right ──
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isEditingSubscriptions = false;
-                      _stagedSubscriptions = null;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _ink),
-                    ),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: _ink,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _saveSubscriptionChanges,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _ink,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Save',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
+                IconButton(
+                  tooltip: 'Remove',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _pending.removeAt(i)),
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: AppColors.inkFaint,
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 4),
+            AppSelect<String>(
+              dense: true,
+              sheetTitle: 'End user',
+              value: _text(_pending[i]['eu_code']),
+              options: _endUserOptions,
+              onChanged: (v) => setState(() => _pending[i]['eu_code'] = v),
+            ),
           ],
-        ],
-      ),
-    );
-  }
-
-  void _showSubscriptionPicker() async {
-    setState(() => _loading = true);
-    try {
-      // Only service lines not linked to any customer can be added
-      // (GET /subscriptions/none/customer), as on the web portal.
-      final res = await ApiService.getUnlinkedSubscriptions(limit: 1000);
-      if (!mounted) return;
-      setState(() => _loading = false);
-      final payload = res['data'];
-      final raw =
-          payload is List
-              ? payload
-              : (payload is Map && payload['data'] is List
-                  ? payload['data'] as List
-                  : const []);
-      final staged = {
-        for (final s in _stagedSubscriptions ?? const [])
-          _str(s['serviceLineNumber'] ?? s['service_line_number']),
-      };
-      final allSubs =
-          raw
-              .whereType<Map>()
-              .where(
-                (m) =>
-                    !staged.contains(
-                      _str(m['serviceLineNumber'] ?? m['service_line_number']),
-                    ),
-              )
-              .toList();
-
-      if (allSubs.isEmpty) {
-        _showSnack('No available subscriptions found.', _primary);
-        return;
-      }
-
-      final items =
-          allSubs.map((s) {
-            final m = Map<String, dynamic>.from(s);
-            return {
-              'label': _str(
-                m['nickname'] ?? m['serviceLineNumber'] ?? m['sln'],
-              ),
-              'value': m,
-            };
-          }).toList();
-
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder:
-            (ctx) => _PickerSheet(
-              title: 'Select Subscription',
-              items: items,
-              onSelect: (val) {
-                setState(() {
-                  _stagedSubscriptions!.add(Map<String, dynamic>.from(val));
-                });
-              },
-            ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-      _showSnack('Failed to load subscriptions: $e', _primary);
-    }
-  }
-
-  String _slnOf(Map s) =>
-      _str(s['serviceLineNumber'] ?? s['service_line_number']);
-
-  /// Saves the edit: links added service lines to this customer
-  /// (PUT /subscriptions/link/:code) and unlinks removed ones
-  /// (PUT /subscriptions/unlink/:sln).
-  Future<void> _saveSubscriptionChanges() async {
-    final staged = _stagedSubscriptions ?? const [];
-    final before = {for (final s in _subscriptions) _slnOf(s)};
-    final after = {for (final s in staged) _slnOf(s)};
-    final added = after.difference(before)..remove('—');
-    final removed = before.difference(after)..remove('—');
-    if (added.isEmpty && removed.isEmpty) {
-      setState(() {
-        _isEditingSubscriptions = false;
-        _stagedSubscriptions = null;
-      });
-      return;
-    }
-    if (removed.isNotEmpty) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder:
-            (ctx) => AlertDialog(
-              title: Text(
-                'Unlink ${removed.length} service line${removed.length == 1 ? '' : 's'}?',
-              ),
-              content: Text(
-                '${removed.join(', ')} will no longer belong to ${widget.agentName}.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Unlink'),
-                ),
-              ],
-            ),
-      );
-      if (ok != true || !mounted) return;
-    }
-    setState(() => _loading = true);
-    String? error;
-    if (added.isNotEmpty) {
-      final res = await ApiService.linkSubscriptions(widget.agentCode, [
-        for (final sln in added) {'serviceLineNumber': sln, 'eu_code': ''},
-      ]);
-      if (res['status'] != 'success') error = res['message']?.toString();
-    }
-    for (final sln in removed) {
-      if (error != null) break;
-      final res = await ApiService.unlinkSubscription(sln);
-      if (res['status'] != 'success') error = res['message']?.toString();
-    }
-    if (!mounted) return;
-    setState(() {
-      _isEditingSubscriptions = false;
-      _stagedSubscriptions = null;
-    });
-    _showSnack(
-      error ?? 'Subscriptions updated',
-      error == null ? _success : _primary,
-    );
-    await _loadAll();
-  }
-
-  void _showSnack(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
-  }
-
-  // ── Users Card ─────────────────────────────────────────────────────────────
-
-  Widget _buildUsersCard() {
-    return _SectionCard(
-      icon: Icons.people_outline_rounded,
-      iconColor: _inkTertiary,
-      title: 'Users',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _CountBadge(count: _users.length, color: _inkTertiary),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _showAddUserSheet,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: _ink,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add, size: 13, color: Colors.white),
-                  SizedBox(width: 4),
-                  Text(
-                    'Add User',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _savingLinks ? null : _saveLinks,
+              child: Text(_savingLinks ? 'Saving…' : 'Save links'),
             ),
           ),
         ],
       ),
-      child:
-          _users.isEmpty
-              ? const _EmptyRow(message: 'No users found')
-              : Column(
-                children:
-                    _users.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final u = entry.value;
-                      final firstName = _str(u['first_name']);
-                      final lastName = _str(u['last_name']);
-                      final rawName = u['name'];
-                      final name = _str(
-                        rawName ??
-                            (firstName != '—' || lastName != '—'
-                                ? '$firstName $lastName'.trim()
-                                : null),
-                      );
-                      final email = _str(u['email']);
-                      final role = _str(u['role']);
-                      final position = _str(u['position']);
-                      final inactiveRaw = _str(u['inactive']);
-                      final isActive =
-                          inactiveRaw == 'N' ||
-                          inactiveRaw == '0' ||
-                          inactiveRaw.toUpperCase() == 'ACTIVE';
-                      final initials = _initials(name == '—' ? 'U' : name);
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (i > 0) const _HDivider(),
-                          InkWell(
-                            onTap: () => _openUser(u),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: _primary.withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        initials,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w800,
-                                          color: _primary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                name,
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: _ink,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            _StatusBadge(
-                                              label:
-                                                  isActive
-                                                      ? 'Active'
-                                                      : 'Inactive',
-                                              color:
-                                                  isActive
-                                                      ? _success
-                                                      : _primaryDark,
-                                            ),
-                                          ],
-                                        ),
-                                        if (email != '—') ...[
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            email,
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: _inkSecondary,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                        if (role != '—' || position != '—') ...[
-                                          const SizedBox(height: 6),
-                                          Wrap(
-                                            spacing: 6,
-                                            runSpacing: 4,
-                                            children: [
-                                              if (role != '—')
-                                                _Chip(
-                                                  label: role.toUpperCase(),
-                                                  icon: Icons.shield_outlined,
-                                                ),
-                                              if (position != '—')
-                                                _Chip(
-                                                  label: position,
-                                                  icon:
-                                                      Icons
-                                                          .work_outline_rounded,
-                                                ),
-                                            ],
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: _surfaceSubtle,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Icon(
-                                      Icons.chevron_right_rounded,
-                                      size: 16,
-                                      color: _inkTertiary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
-              ),
     );
   }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared sub-widgets
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _SectionCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final Widget? trailing;
-  final Widget child;
-
-  const _SectionCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.child,
-    this.trailing,
-  });
-
-  static const _ink = Color(0xFF111111);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFD7D7D7);
-  static const _surfaceSubtle = Color(0xFFF8F8F8);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+  Widget _buildSubscriptionCard(Map<String, dynamic> s) {
+    final sln = _sln(s);
+    final nickname = _text(s['nickname']);
+    final used = num.tryParse(_text(s['totalPriorityGB']));
+    final plan = _text(s['dataplan']);
+    final endUser =
+        _text(s['eu_name']).isNotEmpty
+            ? _text(s['eu_name'])
+            : _text(s['end_user_name']);
+    final kit = _text(s['kit_number']);
+    final status = subscriptionStatusLabel(s['active'] ?? s['status']);
+    return AccountRowCard(
+      onTap: _editingEndUsers ? null : () => _openSubscription(s),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Icon(icon, color: iconColor, size: 17),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: _ink,
-                    ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  nickname.isNotEmpty ? nickname : sln,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                    color: AppColors.navy,
                   ),
                 ),
-                if (trailing != null) trailing!,
-              ],
+              ),
+              const SizedBox(width: 8),
+              DotBadge(
+                status,
+                color:
+                    status == 'ACTIVE'
+                        ? AppColors.successInk
+                        : AppColors.inkMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            sln,
+            style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: 10),
+          AccountDetailRow(
+            'Current plan usage',
+            '${(used ?? 0).toStringAsFixed(2)} GB / '
+                '${plan.isEmpty ? '—' : plan} GB',
+          ),
+          if (_editingEndUsers) ...[
+            const SizedBox(height: 8),
+            AppSelect<String>(
+              label: 'End user',
+              sheetTitle: 'End user',
+              dense: true,
+              value: _euDraft[sln] ?? '',
+              options: _endUserOptions,
+              onChanged: (v) => setState(() => _euDraft[sln] = v),
             ),
-          ),
-          Container(height: 1, color: _surfaceSubtle),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            child: child,
-          ),
+          ] else ...[
+            const SizedBox(height: 4),
+            AccountDetailRow('End user', endUser.isEmpty ? '—' : endUser),
+          ],
+          const SizedBox(height: 4),
+          AccountDetailRow('Kit', kit.isEmpty ? '—' : kit),
+          if (!_editingEndUsers)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _unlink(s),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.inkMuted,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  minimumSize: const Size(0, 32),
+                ),
+                icon: const Icon(Icons.link_off_rounded, size: 16),
+                label: const Text('Unlink', style: TextStyle(fontSize: 12.5)),
+              ),
+            ),
         ],
       ),
     );
   }
-}
 
-class _HDivider extends StatelessWidget {
-  const _HDivider();
-  @override
-  Widget build(BuildContext context) =>
-      Container(height: 1, color: const Color(0xFFF4F4F4));
-}
+  // ── Users ────────────────────────────────────────────────────────────────
 
-class _StatusBadge extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _StatusBadge({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.25)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          color: color,
-          letterSpacing: 0.4,
+  Widget _heading(String title, String action, VoidCallback onTap) => Row(
+    children: [
+      Expanded(child: _title(title)),
+      const SizedBox(width: 8),
+      OutlinedButton.icon(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(0, 36),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
+        icon: const Icon(Icons.add_rounded, size: 17),
+        label: Text(action, style: const TextStyle(fontSize: 12.5)),
       ),
-    );
-  }
-}
+    ],
+  );
 
-class _CountBadge extends StatelessWidget {
-  final int count;
-  final Color color;
-  const _CountBadge({required this.count, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        '$count',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
-
-class _KVRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _KVRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
+  Widget _buildUsers() {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 100,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFFA8A8A8),
-              fontWeight: FontWeight.w500,
+        _heading('Users at this company', 'Add user', _addUser),
+        const SizedBox(height: 12),
+        AccountLimitCard(key: ValueKey(_limitVersion), code: _code),
+        const SizedBox(height: 12),
+        if (_users.isEmpty)
+          AccountEmptyCard('No users.')
+        else
+          for (final u in _users)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: AccountUserCard(user: u, onTap: () => _openUser(u)),
             ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF000000),
-              fontWeight: FontWeight.w600,
+      ],
+    );
+  }
+
+  // ── End users ────────────────────────────────────────────────────────────
+
+  Widget _buildEndUsers() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _heading('End users', 'Add end user', _addEndUser),
+        const SizedBox(height: 12),
+        if (_endUsers.isEmpty)
+          AccountEmptyCard('No end users.')
+        else
+          for (final e in _endUsers)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: AccountRowCard(
+                onTap: () => _openEndUser(e),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _text(e['eu_code']),
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.navy,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _text(e['eu_name']),
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              height: 1.3,
+                              color: AppColors.inkSoft,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    DotBadge(
+                      _text(e['inactive']) == 'N' ? 'ACTIVE' : 'INACTIVE',
+                      color:
+                          _text(e['inactive']) == 'N'
+                              ? AppColors.successInk
+                              : AppColors.inkMuted,
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
       ],
     );
   }
 }
 
-class _Chip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  const _Chip({required this.label, required this.icon});
+/// Service lines with no customer: search, tick several, add them to assign.
+class _UnlinkedSheet extends StatefulWidget {
+  const _UnlinkedSheet({required this.exclude});
+  final Set<String> exclude;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F4F4),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: const Color(0xFFA8A8A8)),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF6F6F6F),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  State<_UnlinkedSheet> createState() => _UnlinkedSheetState();
 }
 
-class _EmptyRow extends StatelessWidget {
-  final String message;
-  const _EmptyRow({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Center(
-        child: Text(
-          message,
-          style: const TextStyle(fontSize: 13, color: Color(0xFFA8A8A8)),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Picker Bottom Sheet ──────────────────────────────────────────────────────
-
-class _PickerSheet extends StatefulWidget {
-  final String title;
-  final List<Map<String, dynamic>> items;
-  final ValueChanged<dynamic> onSelect;
-
-  const _PickerSheet({
-    required this.title,
-    required this.items,
-    required this.onSelect,
-  });
-
-  @override
-  State<_PickerSheet> createState() => _PickerSheetState();
-}
-
-class _PickerSheetState extends State<_PickerSheet> {
-  final _searchCtrl = TextEditingController();
-  List<Map<String, dynamic>> _filtered = [];
-
-  static const _ink = Color(0xFF111111);
-  static const _inkSecondary = Color(0xFF666666);
-  static const _inkTertiary = Color(0xFF888888);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceSubtle = Color(0xFFF8F8F8);
-  static const _border = Color(0xFFD7D7D7);
-  static const _primary = Color(0xFF133341);
+class _UnlinkedSheetState extends State<_UnlinkedSheet> {
+  final _search = TextEditingController();
+  List<Map<String, dynamic>> _all = const [];
+  final Map<String, Map<String, dynamic>> _picked = {};
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _filtered = widget.items;
+    _load();
   }
 
-  void _onSearch(String q) {
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final res = await ApiService.getUnlinkedSubscriptions(limit: 1000);
+    if (!mounted) return;
+    final d = res['data'];
+    final list =
+        d is List
+            ? d
+            : (d is Map && d['data'] is List ? d['data'] as List : []);
     setState(() {
-      if (q.isEmpty) {
-        _filtered = widget.items;
-      } else {
-        _filtered =
-            widget.items.where((item) {
-              final lbl = item['label']?.toString().toLowerCase() ?? '';
-              return lbl.contains(q.toLowerCase());
-            }).toList();
+      _loading = false;
+      if (res['status'] != 'success') {
+        _error = _text(res['message']);
+        return;
       }
+      _all = [
+        for (final m in list.whereType<Map>())
+          if (!widget.exclude.contains(_sln(Map<String, dynamic>.from(m))))
+            Map<String, dynamic>.from(m),
+      ];
     });
+  }
+
+  List<Map<String, dynamic>> get _matches {
+    final q = _search.text.trim().toLowerCase();
+    if (q.isEmpty) return _all;
+    return _all.where((s) {
+      return [
+        s['nickname'],
+        _sln(s),
+        s['kit_number'],
+      ].any((v) => _text(v).toLowerCase().contains(q));
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
-      decoration: const BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: _border.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Text(
-                  widget.title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: _ink,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const Spacer(),
-                InkWell(
-                  onTap: () => Navigator.pop(context),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: _surfaceSubtle,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.close_rounded,
-                      size: 20,
-                      color: _inkSecondary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: _surfaceSubtle,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.search_rounded,
-                    color: _inkTertiary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchCtrl,
-                      onChanged: _onSearch,
-                      style: const TextStyle(fontSize: 14, color: _ink),
-                      decoration: const InputDecoration(
-                        hintText: 'Search subscriptions...',
-                        hintStyle: TextStyle(color: _inkTertiary, fontSize: 14),
-                        border: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                ],
+    final matches = _matches;
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.8,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          12 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Unlinked service lines',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.navy,
               ),
             ),
-          ),
-          Expanded(
-            child:
-                _filtered.isEmpty
-                    ? const Center(
-                      child: Text(
-                        'No results found',
-                        style: TextStyle(color: _inkTertiary),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: 'Search nickname, service line or kit…',
+                prefixIcon: Icon(Icons.search_rounded, size: 20),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child:
+                  _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : matches.isEmpty
+                      ? Center(
+                        child: Text(
+                          _error?.isNotEmpty == true
+                              ? _error!
+                              : 'No unlinked service lines.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.inkMuted,
+                          ),
+                        ),
+                      )
+                      : ListView.builder(
+                        itemCount: matches.length,
+                        itemBuilder: (context, i) {
+                          final s = matches[i];
+                          final sln = _sln(s);
+                          final nickname = _text(s['nickname']);
+                          return CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            activeColor: AppColors.brand,
+                            value: _picked.containsKey(sln),
+                            title: Text(
+                              nickname.isNotEmpty ? nickname : sln,
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.ink,
+                              ),
+                            ),
+                            subtitle: Text(
+                              sln,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.inkMuted,
+                              ),
+                            ),
+                            onChanged:
+                                (v) => setState(() {
+                                  if (v == true) {
+                                    _picked[sln] = s;
+                                  } else {
+                                    _picked.remove(sln);
+                                  }
+                                }),
+                          );
+                        },
                       ),
-                    )
-                    : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: _filtered.length,
-                      separatorBuilder:
-                          (_, __) =>
-                              const Divider(height: 1, color: _surfaceSubtle),
-                      itemBuilder: (context, i) {
-                        final item = _filtered[i];
-                        return PickerOptionTile(
-                          label: item['label'] ?? '',
-                          icon: Icons.satellite_alt_outlined,
-                          trailingIcon: Icons.add_circle_outline_rounded,
-                          onTap: () {
-                            widget.onSelect(item['value']);
-                            Navigator.pop(context);
-                          },
-                        );
-                      },
-                    ),
-          ),
-        ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed:
+                    _picked.isEmpty
+                        ? null
+                        : () => Navigator.pop(context, _picked.values.toList()),
+                child: Text(
+                  _picked.isEmpty
+                      ? 'Add to assign'
+                      : 'Add ${_picked.length} to assign',
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

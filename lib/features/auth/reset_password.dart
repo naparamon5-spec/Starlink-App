@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +12,6 @@ const _ink = Color(0xFF111111);
 const _inkSecondary = Color(0xFF666666);
 const _inkTertiary = Color(0xFF888888);
 const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF8F8F8);
 const _border = Color(0xFFD7D7D7);
 
 class ResetPasswordScreen extends StatefulWidget {
@@ -37,7 +37,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  String? _errorMessage;
 
   bool _validatePassword(String password) {
     return RegExp(
@@ -50,7 +49,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
     });
 
     try {
@@ -64,93 +62,21 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       if (!mounted) return;
 
       if (data['status'] == 'success' || data['success'] == true) {
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder:
-              (ctx) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFFF0F0),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check_circle_outline_rounded,
-                        color: _primary,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Password Reset!',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: _ink,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Your password has been reset successfully. You can now sign in with your new password.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _inkSecondary,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(ctx).pop();
-                          Navigator.of(context).pushAndRemoveUntil(
+        AppToast.success(context, 'Password reset. You can now sign in with your new password.');
+Navigator.of(context).pushAndRemoveUntil(
                             MaterialPageRoute(
                               builder: (context) => const LoginScreen(),
                             ),
                             (route) => false,
                           );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brand,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: const StadiumBorder(),
-                        ),
-                        child: const Text(
-                          'Back to Login',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-        );
       } else {
         final error = data['message'] as String? ?? data['error'] as String?;
-        setState(() {
-          _errorMessage = error ?? 'Failed to reset password';
-        });
+        AppToast.error(context, error ?? 'Failed to reset password');
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Network error. Please check your connection.';
-      });
+      if (mounted) {
+        AppToast.error(context, 'Network error. Please check your connection.');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -417,62 +343,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       ),
 
                       // Error banner
-                      if (_errorMessage != null)
-                        Container(
-                          margin: const EdgeInsets.only(top: 14),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _primary.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _primary.withOpacity(0.25),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  color: _primary.withOpacity(0.10),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.error_outline_rounded,
-                                  color: _primary,
-                                  size: 17,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _errorMessage!,
-                                  style: const TextStyle(
-                                    color: Color(0xFFE90408),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap:
-                                    () => setState(() => _errorMessage = null),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 8),
-                                  child: Icon(
-                                    Icons.close_rounded,
-                                    color: _primary.withOpacity(0.6),
-                                    size: 18,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
 
                       const SizedBox(height: 32),
 

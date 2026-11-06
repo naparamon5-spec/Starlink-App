@@ -1,4 +1,6 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,7 +10,6 @@ import 'package:starlink_app/features/auth/two_factor/two_factor_settings_card.d
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFF133341);
-const _success = Color(0xFF10B981);
 const _ink = Color(0xFF111111);
 const _inkSecondary = Color(0xFF666666);
 const _inkTertiary = Color(0xFF888888);
@@ -79,78 +80,13 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
       );
 
       if (response['status'] == 'success') {
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder:
-              (ctx) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                contentPadding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: _success.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check_circle_outline,
-                        color: _success,
-                        size: 36,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Password Changed',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Your password was changed successfully. For security, please log in again.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: _inkSecondary),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brand,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: const StadiumBorder(),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        onPressed: () {
-                          Navigator.of(ctx).pop();
-                          Navigator.of(context).pushAndRemoveUntil(
+        AppToast.success(context, 'Password changed. Please sign in again.');
+Navigator.of(context).pushAndRemoveUntil(
                             MaterialPageRoute(
                               builder: (_) => const LoginScreen(),
                             ),
                             (route) => false,
                           );
-                        },
-                        child: const Text(
-                          'OK',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-        );
       } else {
         final msg =
             response['message']?.toString() ?? 'Failed to update password.';
@@ -172,26 +108,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
 
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : Icons.check_circle_outline,
-              color: Colors.white,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(msg, style: const TextStyle(fontSize: 13))),
-          ],
-        ),
-        backgroundColor: isError ? const Color(0xFFE90408) : _success,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.result(context, msg, ok: !isError);
   }
 
   Widget _sectionTitle(String t) => Padding(
@@ -326,248 +243,265 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen>
     ],
   );
 
+  final _baseline = FormBaseline();
+  bool get _hasChanges => _baseline.changed(
+    ready: true,
+    values: [
+      _currentPasswordController.text,
+      _newPasswordController.text,
+      _confirmPasswordController.text,
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Scaffold(
-        backgroundColor: _surfaceSubtle,
-        body: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF133341), Color(0xFF0C2029)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Expanded(
-                          child: Text(
-                            'Security Settings',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 52),
-                      ],
+    return UnsavedChangesGuard(
+      isDirty: () => _hasChanges,
+      listenTo: Listenable.merge([
+        _currentPasswordController,
+        _newPasswordController,
+        _confirmPasswordController,
+      ]),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,
+        child: Scaffold(
+          backgroundColor: _surfaceSubtle,
+          body: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF133341), Color(0xFF0C2029)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
                   ),
-                ),
-              ),
-              Expanded(
-                child: AnimatedBuilder(
-                  animation: _animController,
-                  builder:
-                      (context, child) => Opacity(
-                        opacity: _animController.value,
-                        child: Transform.translate(
-                          offset: Offset(0, 20 * (1 - _animController.value)),
-                          child: child,
-                        ),
-                      ),
-                  child: Form(
-                    key: _formKey,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
+                      child: Row(
                         children: [
-                          // Info banner
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: _primary.withOpacity(0.06),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: _primary.withOpacity(0.15),
+                          IconButton(
+                            onPressed: () => Navigator.maybePop(context),
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Expanded(
+                            child: Text(
+                              'Security Settings',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
                               ),
                             ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: _primary.withOpacity(0.12),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.security_outlined,
-                                    color: _primary,
-                                    size: 18,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                const Expanded(
-                                  child: Text(
-                                    'Keep your account secure by using a strong, unique password.',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: _primary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
                           ),
-                          const SizedBox(height: 28),
-                          _sectionTitle('TWO-FACTOR AUTHENTICATION'),
-                          _card(child: const TwoFactorSettingsCard()),
-                          const SizedBox(height: 22),
-                          _sectionTitle('CHANGE PASSWORD'),
-                          _card(
-                            child: Column(
-                              children: [
-                                _passwordField(
-                                  controller: _currentPasswordController,
-                                  hint: 'Current Password',
-                                  obscureText: _obscureCurrentPassword,
-                                  errorText: _currentPasswordError,
-                                  onChanged: () {
-                                    if (_currentPasswordError != null) {
-                                      setState(
-                                        () => _currentPasswordError = null,
-                                      );
-                                    }
-                                  },
-                                  onToggleVisibility:
-                                      () => setState(
-                                        () =>
-                                            _obscureCurrentPassword =
-                                                !_obscureCurrentPassword,
-                                      ),
-                                ),
-                                const SizedBox(height: 12),
-                                _passwordField(
-                                  controller: _newPasswordController,
-                                  hint: 'New Password',
-                                  obscureText: _obscureNewPassword,
-                                  onToggleVisibility:
-                                      () => setState(
-                                        () =>
-                                            _obscureNewPassword =
-                                                !_obscureNewPassword,
-                                      ),
-                                ),
-                                const SizedBox(height: 12),
-                                _passwordField(
-                                  controller: _confirmPasswordController,
-                                  hint: 'Confirm New Password',
-                                  obscureText: _obscureConfirmPassword,
-                                  extraValidator:
-                                      (v) =>
-                                          v != _newPasswordController.text
-                                              ? 'New passwords do not match'
-                                              : null,
-                                  onToggleVisibility:
-                                      () => setState(
-                                        () =>
-                                            _obscureConfirmPassword =
-                                                !_obscureConfirmPassword,
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 22),
-                          _sectionTitle('PASSWORD REQUIREMENTS'),
-                          _card(
-                            child: Column(
-                              children: [
-                                _infoTile(
-                                  Icons.check_circle_outline,
-                                  'Minimum length',
-                                  'At least 6 characters',
-                                ),
-                                const SizedBox(height: 14),
-                                Divider(color: _border, height: 1),
-                                const SizedBox(height: 14),
-                                _infoTile(
-                                  Icons.lock_outline,
-                                  'Keep it private',
-                                  'Never share your password',
-                                ),
-                                const SizedBox(height: 14),
-                                Divider(color: _border, height: 1),
-                                const SizedBox(height: 14),
-                                _infoTile(
-                                  Icons.refresh_outlined,
-                                  'Update regularly',
-                                  'Change your password periodically',
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed:
-                                  _isSaving ? null : _saveSecuritySettings,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.brand,
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                shape: const StadiumBorder(),
-                                disabledBackgroundColor: AppColors.brand.withOpacity(
-                                  0.5,
-                                ),
-                              ),
-                              child:
-                                  _isSaving
-                                      ? const SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation(
-                                            Colors.white,
-                                          ),
-                                        ),
-                                      )
-                                      : const Text(
-                                        'Update Password',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                            ),
-                          ),
+                          const SizedBox(width: 52),
                         ],
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: AnimatedBuilder(
+                    animation: _animController,
+                    builder:
+                        (context, child) => Opacity(
+                          opacity: _animController.value,
+                          child: Transform.translate(
+                            offset: Offset(0, 20 * (1 - _animController.value)),
+                            child: child,
+                          ),
+                        ),
+                    child: Form(
+                      key: _formKey,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Info banner
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: _primary.withOpacity(0.06),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: _primary.withOpacity(0.15),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: _primary.withOpacity(0.12),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.security_outlined,
+                                      color: _primary,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  const Expanded(
+                                    child: Text(
+                                      'Keep your account secure by using a strong, unique password.',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: _primary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            _sectionTitle('TWO-FACTOR AUTHENTICATION'),
+                            _card(child: const TwoFactorSettingsCard()),
+                            const SizedBox(height: 22),
+                            _sectionTitle('CHANGE PASSWORD'),
+                            _card(
+                              child: Column(
+                                children: [
+                                  _passwordField(
+                                    controller: _currentPasswordController,
+                                    hint: 'Current Password',
+                                    obscureText: _obscureCurrentPassword,
+                                    errorText: _currentPasswordError,
+                                    onChanged: () {
+                                      if (_currentPasswordError != null) {
+                                        setState(
+                                          () => _currentPasswordError = null,
+                                        );
+                                      }
+                                    },
+                                    onToggleVisibility:
+                                        () => setState(
+                                          () =>
+                                              _obscureCurrentPassword =
+                                                  !_obscureCurrentPassword,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _passwordField(
+                                    controller: _newPasswordController,
+                                    hint: 'New Password',
+                                    obscureText: _obscureNewPassword,
+                                    onToggleVisibility:
+                                        () => setState(
+                                          () =>
+                                              _obscureNewPassword =
+                                                  !_obscureNewPassword,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _passwordField(
+                                    controller: _confirmPasswordController,
+                                    hint: 'Confirm New Password',
+                                    obscureText: _obscureConfirmPassword,
+                                    extraValidator:
+                                        (v) =>
+                                            v != _newPasswordController.text
+                                                ? 'New passwords do not match'
+                                                : null,
+                                    onToggleVisibility:
+                                        () => setState(
+                                          () =>
+                                              _obscureConfirmPassword =
+                                                  !_obscureConfirmPassword,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 22),
+                            _sectionTitle('PASSWORD REQUIREMENTS'),
+                            _card(
+                              child: Column(
+                                children: [
+                                  _infoTile(
+                                    Icons.check_circle_outline,
+                                    'Minimum length',
+                                    'At least 6 characters',
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Divider(color: _border, height: 1),
+                                  const SizedBox(height: 14),
+                                  _infoTile(
+                                    Icons.lock_outline,
+                                    'Keep it private',
+                                    'Never share your password',
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Divider(color: _border, height: 1),
+                                  const SizedBox(height: 14),
+                                  _infoTile(
+                                    Icons.refresh_outlined,
+                                    'Update regularly',
+                                    'Change your password periodically',
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed:
+                                    _isSaving ? null : _saveSecuritySettings,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.brand,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: const StadiumBorder(),
+                                  disabledBackgroundColor: AppColors.brand
+                                      .withOpacity(0.5),
+                                ),
+                                child:
+                                    _isSaving
+                                        ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation(
+                                              Colors.white,
+                                            ),
+                                          ),
+                                        )
+                                        : const Text(
+                                          'Update Password',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

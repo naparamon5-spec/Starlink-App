@@ -1,399 +1,165 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
-import 'package:flutter/services.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';
-import 'dart:io';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/account_detail_parts.dart';
 import 'package:starlink_app/shared/widgets/app_version_label.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 
-// ── Design Tokens ─────────────────────────────────────────────────────────────
-const _primary = Color(0xFF133341);
-const _success = Color(0xFF10B981);
-const _ink = Color(0xFF111111);
-const _inkSecondary = Color(0xFF666666);
-const _inkTertiary = Color(0xFF888888);
-const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF8F8F8);
-const _border = Color(0xFFD7D7D7);
-
+/// The signed-in admin's or agent's own details.
 class AdminEditProfilePage extends StatefulWidget {
-  final String? bearerToken;
   const AdminEditProfilePage({super.key, this.bearerToken});
+
+  /// No longer needed; kept so existing callers still build.
+  final String? bearerToken;
 
   @override
   State<AdminEditProfilePage> createState() => _AdminEditProfilePageState();
 }
 
-class _AdminEditProfilePageState extends State<AdminEditProfilePage>
-    with TickerProviderStateMixin {
+class _AdminEditProfilePageState extends State<AdminEditProfilePage> {
   final _formKey = GlobalKey<FormState>();
-  late AnimationController _animController;
+  final _first = TextEditingController();
+  final _middle = TextEditingController();
+  final _last = TextEditingController();
+  final _position = TextEditingController();
 
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
-  final _middleNameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _positionController = TextEditingController();
-  final _companyController = TextEditingController();
-  final _codeController = TextEditingController();
-  final _roleController = TextEditingController();
-
-  bool _isLoading = true;
-  bool _isSaving = false;
-  String? _errorMessage;
-  Map<String, dynamic>? _profileData;
-  String? _resolvedToken;
-
-  http.Client get _httpClient {
-    final httpClient =
-        HttpClient()
-          ..connectionTimeout = const Duration(seconds: 15)
-          ..badCertificateCallback = (cert, host, port) => true;
-    return IOClient(httpClient);
-  }
+  bool _loading = true;
+  bool _saving = false;
+  String? _loadError;
+  Map<String, dynamic> _profile = const {};
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      value: 1.0,
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _loadProfile();
+    _load();
   }
-
-  Future<void> _loadProfile() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    try {
-      _resolvedToken = widget.bearerToken;
-      if (_resolvedToken == null || _resolvedToken!.isEmpty) {
-        _resolvedToken = await ApiService.getValidAccessToken();
-      }
-      if (_resolvedToken == null || _resolvedToken!.isEmpty) {
-        setState(() {
-          _errorMessage = 'Session expired. Please log in again.';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final uri = Uri.parse('${ApiService.baseUrl}/v1/users/my/profile/');
-      final response = await _httpClient
-          .get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $_resolvedToken',
-            },
-          )
-          .timeout(const Duration(seconds: 15));
-
-      final decoded = json.decode(response.body);
-
-      if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
-        final data = (decoded['data'] as Map<String, dynamic>?) ?? decoded;
-        _profileData = data;
-        _firstNameController.text = data['first_name']?.toString() ?? '';
-        _lastNameController.text = data['last_name']?.toString() ?? '';
-        _middleNameController.text = data['middle_name']?.toString() ?? '';
-        _emailController.text = data['email']?.toString() ?? '';
-        _positionController.text = data['position']?.toString() ?? '';
-        _companyController.text = data['company_name']?.toString() ?? '';
-        // First non-empty company/user code the profile has (admins may
-        // have none, in which case the Code row is hidden).
-        _codeController.text = [
-              data['com_eu_code'],
-              data['eu_code'],
-              data['customer_code'],
-              data['code'],
-            ]
-            .map((v) => v?.toString().trim() ?? '')
-            .firstWhere((v) => v.isNotEmpty, orElse: () => '');
-        _roleController.text = _capitalize(data['role']?.toString() ?? '');
-        setState(() => _isLoading = false);
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _animController.forward(),
-        );
-      } else if (response.statusCode == 401) {
-        final refreshResult = await ApiService.refreshToken();
-        if (refreshResult['status'] == 'success') {
-          _resolvedToken = refreshResult['accessToken']?.toString();
-          await _loadProfile();
-        } else {
-          await ApiService.clearTokens();
-          setState(() {
-            _errorMessage = 'Session expired. Please log in again.';
-            _isLoading = false;
-          });
-        }
-      } else {
-        final msg = decoded is Map ? decoded['message']?.toString() : null;
-        setState(() {
-          _errorMessage = msg ?? 'Server error ${response.statusCode}';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-        _isLoading = false;
-      });
-    }
-  }
-
-  String _capitalize(String s) =>
-      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
 
   @override
   void dispose() {
-    _animController.dispose();
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _middleNameController.dispose();
-    _emailController.dispose();
-    _positionController.dispose();
-    _companyController.dispose();
-    _codeController.dispose();
-    _roleController.dispose();
+    _first.dispose();
+    _middle.dispose();
+    _last.dispose();
+    _position.dispose();
     super.dispose();
   }
 
-  Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate() || _isSaving) return;
-
-    var userId = _profileData?['id']?.toString() ?? '';
-    if (userId.isEmpty) {
-      final me = await ApiService.getMe();
-      final data = me['data'];
-      final user = data is Map && data['user'] is Map ? data['user'] : data;
-      if (user is Map) userId = user['id']?.toString() ?? '';
-    }
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    final res = await ApiService.getOwnUserRecord();
     if (!mounted) return;
-    if (userId.isEmpty) {
-      _showSnack('User ID not found. Please log out and back in.', true);
+    final data = res['data'];
+    if (res['status'] != 'success' || data is! Map) {
+      setState(() {
+        _loading = false;
+        _loadError =
+            res['message']?.toString() ?? "Couldn't load your profile.";
+      });
       return;
     }
+    final profile = Map<String, dynamic>.from(data);
+    _first.text = accountText(profile['first_name']);
+    _middle.text = accountText(profile['middle_name']);
+    _last.text = accountText(profile['last_name']);
+    _position.text = accountText(profile['position']);
+    setState(() {
+      _profile = profile;
+      _loading = false;
+    });
+  }
 
-    setState(() => _isSaving = true);
-    final res = await ApiService.updateUser(userId, {
-      'first_name': _firstNameController.text.trim(),
-      'last_name': _lastNameController.text.trim(),
-      'middle_name': _middleNameController.text.trim(),
-      'position': _positionController.text.trim(),
+  Future<void> _save() async {
+    if (_saving || !_formKey.currentState!.validate()) return;
+    final id = accountText(_profile['id']);
+    if (id.isEmpty) {
+      AppToast.error(context, 'User ID not found. Please log out and back in.');
+      return;
+    }
+    setState(() => _saving = true);
+    final res = await ApiService.updateUser(id, {
+      'first_name': _first.text.trim(),
+      'middle_name': _middle.text.trim(),
+      'last_name': _last.text.trim(),
+      'position': _position.text.trim(),
     });
     if (!mounted) return;
-    setState(() => _isSaving = false);
-
-    if (res['status'] == 'success') {
-      _showSnack('Profile updated successfully', false);
-      Navigator.pop(context, true);
-    } else {
-      _showSnack(
-        res['message']?.toString() ?? 'Failed to update profile.',
-        true,
+    setState(() => _saving = false);
+    if (res['status'] != 'success') {
+      AppToast.error(
+        context,
+        res['message']?.toString() ?? "Couldn't update your profile.",
       );
+      return;
     }
+    AppToast.success(context, 'Profile updated');
+    Navigator.pop(context, true);
   }
 
-  void _showSnack(String msg, bool isError) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: isError ? _primary : _success,
-        content: Text(msg),
-      ),
-    );
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  Widget _sectionTitle(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 12, left: 2),
-    child: Row(
-      children: [
-        Container(
-          width: 4,
-          height: 14,
-          decoration: BoxDecoration(
-            color: _primary,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          t,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: _primary,
-            letterSpacing: 1.1,
-          ),
-        ),
-      ],
-    ),
+  final _baseline = FormBaseline();
+  bool get _hasChanges => _baseline.changed(
+    ready: !_loading && _loadError == null,
+    values: [_first.text, _middle.text, _last.text, _position.text],
   );
 
-  /// Labeled field (label stays above the value so read-only rows like
-  /// Code and Role are self-explanatory).
   Widget _field(
-    TextEditingController c,
     String label,
-    IconData icon, {
-    bool readOnly = false,
-  }) => Container(
-    decoration: BoxDecoration(
-      color: readOnly ? _surfaceSubtle : _surface,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: _border, width: 1.5),
-    ),
-    child: TextFormField(
-      controller: c,
-      readOnly: readOnly,
-      style: TextStyle(
-        color: readOnly ? _inkSecondary : _ink,
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-      ),
-      decoration: InputDecoration(
-        prefixIcon: Icon(
-          icon,
-          size: 18,
-          color: readOnly ? _inkTertiary : _primary,
-        ),
-        labelText: label,
-        floatingLabelBehavior: FloatingLabelBehavior.always,
-        labelStyle: const TextStyle(
-          color: _inkTertiary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-        ),
-        floatingLabelStyle: const TextStyle(
-          color: _inkTertiary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-        ),
-        hintText: readOnly ? '—' : 'Enter ${label.toLowerCase()}',
-        hintStyle: const TextStyle(color: _inkTertiary, fontSize: 14),
-        border: InputBorder.none,
-        contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      ),
-    ),
-  );
-
-  Widget _card({required Widget child}) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: const Color(0xFFEDF1F5)),
-      boxShadow: [
-        BoxShadow(
-          blurRadius: 18,
-          color: const Color(0xFF133341).withOpacity(0.06),
-          offset: const Offset(0, 6),
-        ),
-      ],
-    ),
-    child: child,
-  );
-
-  // ── Build ─────────────────────────────────────────────────────────────────
-
-  @override
-  Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Scaffold(
-        backgroundColor: _surfaceSubtle,
-        // ── Custom AppBar inside body so gradient extends under status bar ──
-        body: SafeArea(
-          top: false,
-          child: Column(
+    TextEditingController controller, {
+    bool required = false,
+    String? hint,
+    String? Function(String?)? validator,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text.rich(
+          TextSpan(
+            text: label.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.6,
+              color: AppColors.ink,
+            ),
             children: [
-              // ── Gradient AppBar ──────────────────────────────────────────
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF133341), Color(0xFF0C2029)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+              if (required)
+                const TextSpan(
+                  text: ' *',
+                  style: TextStyle(color: AppColors.brand),
                 ),
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Expanded(
-                          child: Text(
-                            'Edit Profile',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 52),
-                        // if (!_isLoading && _errorMessage == null)
-                        //   TextButton(
-                        //     onPressed: _saveProfile,
-                        //     style: TextButton.styleFrom(
-                        //       backgroundColor: Colors.white.withOpacity(0.15),
-                        //       shape: RoundedRectangleBorder(
-                        //         borderRadius: BorderRadius.circular(10),
-                        //       ),
-                        //       padding: const EdgeInsets.symmetric(
-                        //         horizontal: 14,
-                        //         vertical: 8,
-                        //       ),
-                        //     ),
-                        //     child: const Text(
-                        //       'Save',
-                        //       style: TextStyle(
-                        //         color: Colors.white,
-                        //         fontWeight: FontWeight.w700,
-                        //         fontSize: 13,
-                        //       ),
-                        //     ),
-                        //   ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // ── Body ────────────────────────────────────────────────────
-              Expanded(
-                child:
-                    _isLoading
-                        ? const Center(
-                          child: CircularProgressIndicator(color: _primary),
-                        )
-                        : _errorMessage != null
-                        ? _buildError()
-                        : _buildContent(),
-              ),
             ],
           ),
         ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          enabled: !_saving,
+          validator: validator,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(hintText: hint),
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return UnsavedChangesGuard(
+      isDirty: () => _hasChanges,
+      listenTo: Listenable.merge([_first, _middle, _last, _position]),
+      child: Scaffold(
+        backgroundColor: AppColors.paperSubtle,
+        appBar: AppBar(title: const Text('Edit Profile')),
+        body:
+            _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _loadError != null
+                ? _buildError()
+                : _buildForm(),
       ),
     );
   }
@@ -402,192 +168,167 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage>
     child: Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: _primary.withOpacity(0.08),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.error_outline, color: _primary, size: 32),
-          ),
-          const SizedBox(height: 16),
           Text(
-            _errorMessage!,
+            _loadError!,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xFFE90408), fontSize: 14),
+            style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
           ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: _loadProfile,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brand,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: const StadiumBorder(),
-            ),
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text(
-              'Retry',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
+          const SizedBox(height: 12),
+          OutlinedButton(onPressed: _load, child: const Text('Try again')),
         ],
       ),
     ),
   );
 
-  Widget _buildContent() => AnimatedBuilder(
-    animation: _animController,
-    builder:
-        (context, child) => Opacity(
-          opacity: _animController.value,
-          child: Transform.translate(
-            offset: Offset(0, 20 * (1 - _animController.value)),
-            child: child,
-          ),
-        ),
-    child: Form(
+  Widget _buildForm() {
+    final name = accountText(_profile['name']);
+    final email = accountText(_profile['email']);
+    final role = accountText(_profile['role']).replaceAll('_', ' ');
+    final company = accountText(_profile['company_name']);
+    return Form(
       key: _formKey,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionTitle('PERSONAL INFORMATION'),
-            _card(
-              child: Column(
-                children: [
-                  _field(
-                    _firstNameController,
-                    'First Name',
-                    Icons.person_outline,
-                  ),
-                  const SizedBox(height: 12),
-                  _field(
-                    _lastNameController,
-                    'Last Name',
-                    Icons.person_outline,
-                  ),
-                  const SizedBox(height: 12),
-                  _field(
-                    _middleNameController,
-                    'Middle Name',
-                    Icons.person_outline,
-                  ),
-                  const SizedBox(height: 12),
-                  _field(
-                    _emailController,
-                    'Email Address',
-                    Icons.email_outlined,
-                    readOnly: true,
-                  ),
-                  const SizedBox(height: 12),
-                  _field(_positionController, 'Position', Icons.work_outline),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 22),
-
-            _sectionTitle('ORGANIZATION'),
-            _card(
-              child: Column(
-                children: [
-                  _field(
-                    _companyController,
-                    'Company',
-                    Icons.business_outlined,
-                    readOnly: true,
-                  ),
-                  if (_codeController.text.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _field(
-                      _codeController,
-                      'Code',
-                      Icons.tag_rounded,
-                      readOnly: true,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        children: [
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 26,
+                      backgroundColor: AppColors.navy,
+                      child: Text(
+                        accountInitials(name),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name.isEmpty ? '—' : name,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          if (email.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              email,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.inkMuted,
+                              ),
+                            ),
+                          ],
+                          if (role.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.navy.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                role.toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.3,
+                                  color: AppColors.navy,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  _field(
-                    _roleController,
-                    'Role',
-                    Icons.shield_outlined,
-                    readOnly: true,
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 22),
-
-            const SizedBox(height: 22),
-
-            // _sectionTitle('PREFERENCES'),
-            // _card(
-            //   child: SwitchListTile(
-            //     value: _notificationsEnabled,
-            //     activeThumbColor: _primary,
-            //     title: const Text(
-            //       'Email Notifications',
-            //       style: TextStyle(
-            //         fontSize: 14,
-            //         fontWeight: FontWeight.w600,
-            //         color: _ink,
-            //       ),
-            //     ),
-            //     subtitle: const Text(
-            //       'Receive updates via email',
-            //       style: TextStyle(fontSize: 12, color: _inkSecondary),
-            //     ),
-            //     onChanged: (v) => setState(() => _notificationsEnabled = v),
-            //   ),
-            // ),
-            const SizedBox(height: 28),
-
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: const StadiumBorder(),
                 ),
-                child:
-                    _isSaving
-                        ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                        : const Text(
-                          'Save Changes',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        ),
-              ),
+                const SizedBox(height: 14),
+                const Divider(height: 1),
+                const SizedBox(height: 14),
+                const Text(
+                  'COMPANY',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    color: AppColors.inkMuted,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  company.isEmpty ? '—' : company,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _field(
+                  'First name',
+                  _first,
+                  required: true,
+                  validator:
+                      (v) =>
+                          (v ?? '').trim().isEmpty
+                              ? 'First name is required.'
+                              : null,
+                ),
+                _field('Middle name', _middle),
+                _field(
+                  'Last name',
+                  _last,
+                  required: true,
+                  validator:
+                      (v) =>
+                          (v ?? '').trim().isEmpty
+                              ? 'Last name is required.'
+                              : null,
+                ),
+                _field('Position', _position, hint: 'e.g. IT Manager'),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _saving ? null : _save,
+                    child:
+                        _saving
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                            : const Text('Save details'),
+                  ),
+                ),
+              ],
             ),
-
-            const SizedBox(height: 24),
-            const AppVersionLabel(),
-            const SizedBox(height: 16),
-          ],
-        ),
+          ),
+          const SizedBox(height: 16),
+          const AppVersionLabel(),
+        ],
       ),
-    ),
-  );
+    );
+  }
 }
-
-// ── Dialog Field ──────────────────────────────────────────────────────────────

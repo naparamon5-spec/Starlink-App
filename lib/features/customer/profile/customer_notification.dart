@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:starlink_app/services/notification_service.dart';
@@ -412,12 +413,7 @@ class _CustomerNotificationScreenState extends State<CustomerNotificationScreen>
                         ).refresh();
                         await _loadNotifications();
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('${n['title']} dismissed'),
-                              action: SnackBarAction(
-                                label: 'Undo',
-                                onPressed: () async {
+                          AppToast.info(context, '${n['title']} dismissed', actionLabel: 'Undo', onAction: () async {
                                   await NotificationService.createNotification(
                                     title: deleted['title'],
                                     message: deleted['message'],
@@ -431,10 +427,7 @@ class _CustomerNotificationScreenState extends State<CustomerNotificationScreen>
                                     listen: false,
                                   ).refresh();
                                   await _loadNotifications();
-                                },
-                              ),
-                            ),
-                          );
+                                });
                         }
                       },
               child: Container(

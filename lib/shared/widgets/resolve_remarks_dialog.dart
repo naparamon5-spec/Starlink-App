@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
 import 'package:flutter/material.dart';
 
 /// Asks for the remarks the backend requires to resolve a ticket.
@@ -9,11 +10,9 @@ Future<String?> askResolveRemarks(BuildContext context) async {
     builder:
         (ctx) => StatefulBuilder(
           builder:
-              (ctx, setLocal) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                title: const Text('Resolve ticket'),
+              (ctx, setLocal) => AppDialog(
+                icon: Icons.task_alt_rounded,
+                title: 'Resolve ticket',
                 content: TextField(
                   controller: ctrl,
                   autofocus: true,
@@ -25,19 +24,13 @@ Future<String?> askResolveRemarks(BuildContext context) async {
                     border: OutlineInputBorder(),
                   ),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed:
-                        ctrl.text.trim().isEmpty
-                            ? null
-                            : () => Navigator.of(ctx).pop(ctrl.text.trim()),
-                    child: const Text('Resolve'),
-                  ),
-                ],
+                confirmLabel: 'Resolve',
+                onConfirm:
+                    ctrl.text.trim().isEmpty
+                        ? null
+                        : () => Navigator.of(ctx).pop(ctrl.text.trim()),
+                cancelLabel: 'Cancel',
+                onCancel: () => Navigator.of(ctx).pop(),
               ),
         ),
   );

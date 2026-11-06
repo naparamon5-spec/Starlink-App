@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
@@ -203,20 +204,8 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen>
         _startCooldownTimer();
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                (data['message'] as String?) ??
-                    'Verification code resent successfully',
-              ),
-              backgroundColor: _success,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 3),
-            ),
-          );
+          AppToast.success(context, (data['message'] as String?) ??
+                    'Verification code resent successfully');
         }
       } else {
         final error = data['message'] as String? ?? data['error'] as String?;

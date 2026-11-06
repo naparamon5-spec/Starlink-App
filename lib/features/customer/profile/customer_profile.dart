@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -219,12 +220,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       debugPrint('[CustomerProfile] Error loading user data: $e');
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading profile: ${e.toString()}'),
-            backgroundColor: _primary,
-          ),
-        );
+        AppToast.error(context, 'Error loading profile: ${e.toString()}');
       }
     }
   }
@@ -352,12 +348,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error logging out: ${e.toString()}'),
-          backgroundColor: _primary,
-        ),
-      );
+      AppToast.error(context, 'Error logging out: ${e.toString()}');
     }
   }
 
@@ -583,24 +574,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               );
               if (result != null && result is Map<String, dynamic>) {
                 _updateProfileData(Map<String, String>.from(result));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Row(
-                      children: [
-                        Icon(Icons.check_circle_outline, color: Colors.white),
-                        SizedBox(width: 12),
-                        Text('Profile updated successfully!'),
-                      ],
-                    ),
-                    backgroundColor: _success,
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    margin: const EdgeInsets.all(16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                );
+                AppToast.success(context, 'Profile updated successfully!');
               }
             },
           ),

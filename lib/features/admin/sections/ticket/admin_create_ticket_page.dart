@@ -1,4 +1,6 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
@@ -7,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFF133341);
@@ -497,9 +500,28 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     return Icons.label_outline_rounded;
   }
 
+  /// Label above a field; [required] adds the red star.
+  Widget _label(String text, {bool required = false}) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(
+      children: [
+        FieldLabel(text),
+        if (required)
+          const Text(
+            ' *',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.brand,
+            ),
+          ),
+      ],
+    ),
+  );
+
   Widget _selectorTile({
+    required String label,
     required String hint,
-    required IconData icon,
     required String? selectedLabel,
     required String? selectedSub,
     required bool hasError,
@@ -507,95 +529,86 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
     required VoidCallback onTap,
   }) {
     final hasValue = selectedLabel != null && selectedLabel.isNotEmpty;
+    final radius = BorderRadius.circular(AppRadius.lg);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: hasError ? _errorColor : const Color(0xFFE2E8F0),
-                width: hasError ? 1.5 : 1,
+        _label(label, required: true),
+        Material(
+          color: AppColors.paper,
+          borderRadius: radius,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: radius,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 50),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                border: Border.all(
+                  color: hasError ? AppColors.brand : AppColors.line,
+                  width: 1.5,
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                Icon(icon, size: 18, color: hasError ? _errorColor : _primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child:
-                      hasValue
-                          ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                selectedLabel,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: _ink,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              if (selectedSub != null &&
-                                  selectedSub.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  selectedSub,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: _inkTertiary,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ],
-                          )
-                          : Text(
-                            hint,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color:
-                                  hasError
-                                      ? _errorColor.withOpacity(0.7)
-                                      : _inkTertiary,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          hasValue ? selectedLabel : hint,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight:
+                                hasValue ? FontWeight.w500 : FontWeight.w400,
+                            color: hasValue ? _ink : AppColors.inkFaint,
+                          ),
+                        ),
+                        if (hasValue &&
+                            selectedSub != null &&
+                            selectedSub.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            selectedSub,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: _inkSecondary,
                             ),
                           ),
-                ),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: hasError ? _errorColor : _inkTertiary,
-                  size: 20,
-                ),
-              ],
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: _inkSecondary,
+                    size: 20,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        if (hasError) ...[
-          const SizedBox(height: 8),
+        if (hasError)
           Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Row(
-              children: [
-                const Icon(Icons.error_outline, size: 14, color: _errorColor),
-                const SizedBox(width: 4),
-                Text(
-                  errorText,
-                  style: const TextStyle(
-                    color: _errorColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            padding: const EdgeInsets.only(top: 5, left: 4),
+            child: Text(
+              errorText,
+              style: const TextStyle(
+                color: AppColors.dangerInk,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
-        ],
       ],
     );
   }
@@ -819,25 +832,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: _success,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-              SizedBox(width: 10),
-              Text(
-                'Ticket created successfully!',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-      );
+      AppToast.success(context, 'Ticket created successfully!');
       Navigator.pop(context, true);
     } catch (e) {
       _showError(e.toString().replaceAll('Exception: ', ''));
@@ -848,208 +843,61 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: _errorColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                msg,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    AppToast.error(context, msg);
   }
 
   // ── UI helpers ─────────────────────────────────────────────────────────────
 
-  Widget _sectionLabel(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 10, left: 2),
-    child: Row(
-      children: [
-        Container(
-          width: 4,
-          height: 14,
-          decoration: BoxDecoration(
-            color: _primary,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          t,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: _primary,
-            letterSpacing: 1.1,
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _card({required Widget child}) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: const Color(0xFFEDF1F5)),
-      boxShadow: [
-        BoxShadow(
-          color: const Color(0xFF133341).withOpacity(0.06),
-          blurRadius: 18,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    ),
-    child: child,
-  );
-
-  Widget _textField(
-    TextEditingController c,
-    String hint,
-    IconData icon, {
-    int maxLines = 1,
-    bool hasError = false,
-    String errorText = '',
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: hasError ? _errorColor : const Color(0xFFE2E8F0),
-              width: hasError ? 1.5 : 1,
-            ),
-          ),
-          child: TextField(
-            controller: c,
-            maxLines: maxLines,
-            style: const TextStyle(color: _ink, fontSize: 14),
-            onChanged: (_) {
-              if (hasError) {
-                setState(() {
-                  if (c == _descriptionController) _descriptionError = false;
-                });
-              }
-            },
-            decoration: InputDecoration(
-              prefixIcon:
-                  maxLines == 1
-                      ? Icon(
-                        icon,
-                        size: 18,
-                        color: hasError ? _errorColor : _primary,
-                      )
-                      : null,
-              hintText: hint,
-              hintStyle: TextStyle(
-                color: hasError ? _errorColor.withOpacity(0.7) : _inkTertiary,
-                fontSize: 14,
-              ),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: maxLines > 1 ? 16 : 12,
-                vertical: 14,
-              ),
-            ),
-          ),
-        ),
-        if (hasError) ...[
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Row(
-              children: [
-                const Icon(Icons.error_outline, size: 14, color: _errorColor),
-                const SizedBox(width: 4),
-                Text(
-                  errorText,
-                  style: const TextStyle(
-                    color: _errorColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
   Widget _buildAttachmentsSection() {
-    return _card(
+    final radius = BorderRadius.circular(AppRadius.lg);
+    return AppCard(
       child: Column(
         children: [
-          GestureDetector(
-            onTap: _pickFiles,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _border),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: _primary.withOpacity(0.08),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _primary.withOpacity(0.2)),
+          Material(
+            color: AppColors.paperSubtle,
+            borderRadius: radius,
+            child: InkWell(
+              onTap: _pickFiles,
+              borderRadius: radius,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: radius,
+                  border: Border.all(color: AppColors.line, width: 1.5),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.upload_file_outlined, color: _primary, size: 24),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Add files',
+                            style: TextStyle(
+                              color: _ink,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Images, PDF, DOC, DOCX or TXT',
+                            style: TextStyle(
+                              color: _inkSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.cloud_upload_outlined,
-                      color: _primary,
-                      size: 26,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Tap to select files',
-                    style: TextStyle(color: _inkSecondary, fontSize: 13),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Images, PDF, DOC, DOCX, TXT',
-                    style: TextStyle(color: _inkTertiary, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _pickFiles,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _primary,
-                side: const BorderSide(color: _primary),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: const StadiumBorder(),
-              ),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text(
-                'Choose Files',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1125,125 +973,34 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  final _baseline = FormBaseline();
+  bool get _hasChanges => _baseline.changed(
+    ready: !_isLoadingData,
+    values: [
+      _subjectController.text,
+      _descriptionController.text,
+      _selectedTicketType,
+      _selectedContact,
+      _selectedSubscription,
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Scaffold(
-        backgroundColor: _surfaceSubtle,
-        body: Column(
-          children: [
-            // Gradient AppBar
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF133341), Color(0xFF0C2029)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.14),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.confirmation_number_outlined,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'New Ticket',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                            Text(
-                              'Fill in the details below',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!_isLoadingData && _loadError == null)
-                        GestureDetector(
-                          onTap: _isSubmitting ? null : _submitTicket,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            // decoration: BoxDecoration(
-                            //   color: Colors.white.withOpacity(
-                            //     _isSubmitting ? 0.08 : 0.18,
-                            //   ),
-                            //   borderRadius: BorderRadius.circular(10),
-                            // ),
-                            // child:
-                            //     _isSubmitting
-                            //         ? const SizedBox(
-                            //           width: 16,
-                            //           height: 16,
-                            //           child: CircularProgressIndicator(
-                            //             color: Colors.white,
-                            //             strokeWidth: 2,
-                            //           ),
-                            //         )
-                            //         : const Text(
-                            //           'Submit',
-                            //           style: TextStyle(
-                            //             color: Colors.white,
-                            //             fontWeight: FontWeight.w700,
-                            //             fontSize: 13,
-                            //           ),
-                            //         ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            Expanded(
-              child:
-                  _isLoadingData
-                      ? _buildLoading()
-                      : _loadError != null
-                      ? _buildErrorState()
-                      : _buildForm(),
-            ),
-          ],
+    return UnsavedChangesGuard(
+      isDirty: () => _hasChanges,
+      listenTo: Listenable.merge([_subjectController, _descriptionController]),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,
+        child: Scaffold(
+          backgroundColor: _surfaceSubtle,
+          appBar: AppBar(title: const Text('New Ticket')),
+          body:
+              _isLoadingData
+                  ? _buildLoading()
+                  : _loadError != null
+                  ? _buildErrorState()
+                  : _buildForm(),
         ),
       ),
     );
@@ -1335,29 +1092,19 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
           ),
         ),
     child: SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Subject
-          _sectionLabel('SUBJECT'),
-          _card(
-            child: _textField(
-              _subjectController,
-              'Enter ticket subject (optional)',
-              Icons.title_outlined,
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Ticket Type
-          _sectionLabel('TICKET DETAILS'),
-          _card(
+          const SectionHeading('Ticket details'),
+          AppCard(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _selectorTile(
-                  hint: 'Select Ticket Type',
-                  icon: Icons.confirmation_number_outlined,
+                  label: 'Ticket type',
+                  hint: 'Select ticket type',
                   selectedLabel:
                       _selectedTicketType != null
                           ? _ticketTypeLabel(_selectedTicketType!)
@@ -1367,7 +1114,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                           ? _ticketTypeSub(_selectedTicketType!)
                           : null,
                   hasError: _typeError,
-                  errorText: 'Ticket type is required',
+                  errorText: 'Select a ticket type.',
                   onTap:
                       () => _showPicker<Map<String, dynamic>>(
                         title: 'Select Ticket Type',
@@ -1384,8 +1131,36 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                 ),
                 const SizedBox(height: 14),
                 _selectorTile(
-                  hint: 'Select Contact',
-                  icon: Icons.person_outline,
+                  label: 'Subscription',
+                  hint: 'Select subscription',
+                  selectedLabel:
+                      _selectedSubscription != null
+                          ? _subscriptionLabel(_selectedSubscription!)
+                          : null,
+                  selectedSub:
+                      _selectedSubscription != null
+                          ? _subscriptionSub(_selectedSubscription!)
+                          : null,
+                  hasError: _subscriptionError,
+                  errorText: 'Select a subscription.',
+                  onTap:
+                      () => _showPicker<Map<String, dynamic>>(
+                        title: 'Select Subscription',
+                        items: _subscriptions,
+                        selected: _selectedSubscription,
+                        labelBuilder: _subscriptionLabel,
+                        subtitleBuilder: _subscriptionSub,
+                        onSelect:
+                            (v) => setState(() {
+                              _selectedSubscription = v;
+                              _subscriptionError = false;
+                            }),
+                      ),
+                ),
+                const SizedBox(height: 14),
+                _selectorTile(
+                  label: 'Contact',
+                  hint: 'Select contact',
                   selectedLabel:
                       _selectedContact != null
                           ? _contactLabel(_selectedContact!)
@@ -1395,7 +1170,7 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                           ? _contactSub(_selectedContact!)
                           : null,
                   hasError: _contactError,
-                  errorText: 'Contact is required',
+                  errorText: 'Select a contact.',
                   onTap:
                       () => _showPicker<Map<String, dynamic>>(
                         title: 'Select Contact',
@@ -1410,167 +1185,60 @@ class _AdminCreateTicketPageState extends State<AdminCreateTicketPage>
                             }),
                       ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Subscription
-          _sectionLabel('SUBSCRIPTION'),
-          _card(
-            child: _selectorTile(
-              hint: 'Select Subscription',
-              icon: Icons.router_outlined,
-              selectedLabel:
-                  _selectedSubscription != null
-                      ? _subscriptionLabel(_selectedSubscription!)
-                      : null,
-              selectedSub:
-                  _selectedSubscription != null
-                      ? _subscriptionSub(_selectedSubscription!)
-                      : null,
-              hasError: _subscriptionError,
-              errorText: 'Subscription is required',
-              onTap:
-                  () => _showPicker<Map<String, dynamic>>(
-                    title: 'Select Subscription',
-                    items: _subscriptions,
-                    selected: _selectedSubscription,
-                    labelBuilder: _subscriptionLabel,
-                    subtitleBuilder: _subscriptionSub,
-                    onSelect:
-                        (v) => setState(() {
-                          _selectedSubscription = v;
-                          _subscriptionError = false;
-                        }),
-                  ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Description
-          _sectionLabel('DESCRIPTION'),
-          _card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color:
-                          _descriptionError
-                              ? _errorColor
-                              : const Color(0xFFE2E8F0),
-                      width: _descriptionError ? 1.5 : 1,
-                    ),
-                  ),
-                  child: TextField(
-                    controller: _descriptionController,
-                    maxLines: 6,
-                    onChanged: (_) {
-                      if (_descriptionError) {
-                        setState(() => _descriptionError = false);
-                      }
-                    },
-                    style: const TextStyle(color: _ink, fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: 'Describe the issue in detail...',
-                      hintStyle: TextStyle(
-                        color:
-                            _descriptionError
-                                ? _errorColor.withOpacity(0.6)
-                                : _inkTertiary,
-                        fontSize: 14,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.all(14),
-                    ),
+                const SizedBox(height: 14),
+                _label('Subject (optional)'),
+                TextField(
+                  controller: _subjectController,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.next,
+                  style: const TextStyle(color: _ink, fontSize: 14),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    hintText: 'A short summary',
                   ),
                 ),
-                if (_descriptionError)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8, left: 4),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.error_outline, size: 14, color: _errorColor),
-                        SizedBox(width: 4),
-                        Text(
-                          'Description is required',
-                          style: TextStyle(
-                            color: _errorColor,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
+                const SizedBox(height: 14),
+                _label('Description', required: true),
+                TextField(
+                  controller: _descriptionController,
+                  minLines: 4,
+                  maxLines: 8,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (_) {
+                    if (_descriptionError) {
+                      setState(() => _descriptionError = false);
+                    }
+                  },
+                  style: const TextStyle(color: _ink, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Describe the issue in detail',
+                    errorText: _descriptionError ? 'Describe the issue.' : null,
                   ),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 20),
-
-          // Attachments
-          _sectionLabel('ATTACHMENTS'),
+          const SectionHeading('Attachments'),
           _buildAttachmentsSection(),
-          const SizedBox(height: 28),
-
-          // Action buttons
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed:
-                      _isSubmitting ? null : () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _inkSecondary,
-                    side: const BorderSide(color: _border),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: const StadiumBorder(),
-                  ),
-                  icon: const Icon(Icons.close, size: 16),
-                  label: const Text(
-                    'Cancel',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  onPressed: _isSubmitting ? null : _submitTicket,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brand,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppColors.brand.withOpacity(0.5),
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: const StadiumBorder(),
-                  ),
-                  icon:
-                      _isSubmitting
-                          ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                          : const Icon(Icons.check_circle_outline, size: 18),
-                  label: Text(
-                    _isSubmitting ? 'Submitting...' : 'Submit Ticket',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isSubmitting ? null : _submitTicket,
+              icon:
+                  _isSubmitting
+                      ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                      : const Icon(Icons.send_rounded, size: 18),
+              label: Text(_isSubmitting ? 'Submitting…' : 'Submit Ticket'),
+            ),
           ),
         ],
       ),

@@ -1,3 +1,5 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -313,41 +315,30 @@ Future<bool> showSoftUpdateDialog({
   await showDialog<void>(
     context: context,
     barrierDismissible: true,
-    builder: (dialogContext) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Update Available'),
-      content: Text(
-        'A newer version of the app is available (${remote.latestVersion}). '
-        'Update now for improvements and fixes.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Later'),
-        ),
-        FilledButton(
-          onPressed: () async {
-            final svc = AppVersionService();
-            try {
-              final ok = await svc.launchDownload(remote.downloadUrl);
-              if (!dialogContext.mounted) return;
-              if (ok) {
-                updateInitiated = true;
-                Navigator.of(dialogContext).pop();
-              } else {
-                ScaffoldMessenger.maybeOf(dialogContext)?.showSnackBar(
-                  const SnackBar(
-                    content: Text('Unable to open update link. Please try again.'),
-                  ),
-                );
-              }
-            } finally {
-              svc.dispose();
-            }
-          },
-          child: const Text('Update'),
-        ),
-      ],
+    builder: (dialogContext) => AppDialog(
+      icon: Icons.system_update_rounded,
+      title: 'Update Available',
+      message:
+          'A newer version of the app is available (${remote.latestVersion}). '
+          'Update now for improvements and fixes.',
+      cancelLabel: 'Later',
+      onCancel: () => Navigator.of(dialogContext).pop(),
+      confirmLabel: 'Update',
+      onConfirm: () async {
+        final svc = AppVersionService();
+        try {
+          final ok = await svc.launchDownload(remote.downloadUrl);
+          if (!dialogContext.mounted) return;
+          if (ok) {
+            updateInitiated = true;
+            Navigator.of(dialogContext).pop();
+          } else {
+            AppToast.error(dialogContext, 'Unable to open update link. Please try again.');
+          }
+        } finally {
+          svc.dispose();
+        }
+      },
     ),
   );
   return updateInitiated;
@@ -365,38 +356,28 @@ Future<void> showForceUpdateDialog({
     builder: (dialogContext) {
       return PopScope(
         canPop: false,
-        child: AlertDialog(
-          title: const Text('Update Required'),
-          content: Text(
-            'Your app version is outdated.\n\n'
-            'Current: $current\n'
-            'Latest: ${remote.latestVersion}\n\n'
-            'Tap "Update Now" to download and install the latest version.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                try {
-                  final svc = AppVersionService();
-                  final ok = await svc.launchDownload(remote.downloadUrl);
-                  svc.dispose();
-                  if (!ok) {
-                    final messenger = ScaffoldMessenger.maybeOf(dialogContext);
-                    messenger?.showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Unable to open update link. Check the APK URL.',
-                        ),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  debugPrint('Update launch failed: $e');
-                }
-              },
-              child: const Text('Update Now'),
-            ),
-          ],
+        child: AppDialog(
+          icon: Icons.system_update_rounded,
+          title: 'Update Required',
+          message:
+              'Your app version is outdated.\n\n'
+              'Current: $current\n'
+              'Latest: ${remote.latestVersion}\n\n'
+              'Tap "Update Now" to download and install the latest version.',
+          confirmLabel: 'Update Now',
+          onConfirm: () async {
+            try {
+              final svc = AppVersionService();
+              final ok = await svc.launchDownload(remote.downloadUrl);
+              svc.dispose();
+              if (!ok) {
+                final toast = AppToast.of(dialogContext);
+                toast.showError('Unable to open update link. Check the APK URL.');
+              }
+            } catch (e) {
+              debugPrint('Update launch failed: $e');
+            }
+          },
         ),
       );
     },

@@ -1,6 +1,9 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:starlink_app/services/api_service.dart';
@@ -375,8 +378,7 @@ class _RouterSettingsPageState extends State<RouterSettingsPage> {
       res['message']?.toString() ??
           (res['status'] == 'success'
               ? 'Router settings saved'
-              : 'Could not save'),
-    );
+              : 'Could not save'), isError: res['status'] != 'success');
     if (res['status'] == 'success') await _load();
   }
 
@@ -393,98 +395,88 @@ class _RouterSettingsPageState extends State<RouterSettingsPage> {
     setState(() => _rebooting = false);
     _snack(
       res['message']?.toString() ??
-          (res['status'] == 'success' ? 'Restart sent' : 'Could not restart'),
-    );
+          (res['status'] == 'success' ? 'Restart sent' : 'Could not restart'), isError: res['status'] != 'success');
   }
 
-  Future<bool?> _confirm(String title, String body, String action) =>
-      showDialog<bool>(
-        context: context,
-        builder:
-            (ctx) => AlertDialog(
-              title: Text(title),
-              content: SingleChildScrollView(child: Text(body)),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: Text(action),
-                ),
-              ],
-            ),
-      );
+  Future<bool> _confirm(String title, String body, String action) =>
+      showAppConfirm(context, title: title, message: body, confirmLabel: action, icon: Icons.router_outlined);
 
-  void _snack(String msg) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _snack(String msg, {bool isError = false}) =>
+      AppToast.result(context, msg, ok: !isError);
 
   // ── UI ─────────────────────────────────────────────────────────────────────
 
+  bool get _hasEditChanges =>
+      _editing && (_changes.isNotEmpty || _settingChanges.isNotEmpty);
+
+  Future<void> _cancelEdit() async {
+    if (_hasEditChanges && !await confirmDiscardChanges(context)) return;
+    if (mounted) setState(() => _editing = false);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Router settings'),
-        actions: [
-          if (_result != null && !_editing)
-            IconButton(
-              tooltip: 'Restart router',
-              onPressed: _rebooting ? null : _reboot,
-              icon:
-                  _rebooting
-                      ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+    return UnsavedChangesGuard(
+      isDirty: () => _hasEditChanges,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Router settings'),
+          actions: [
+            if (_result != null && !_editing)
+              IconButton(
+                tooltip: 'Restart router',
+                onPressed: _rebooting ? null : _reboot,
+                icon:
+                    _rebooting
+                        ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                        : const Icon(Icons.power_settings_new_rounded),
+              ),
+          ],
+        ),
+        bottomNavigationBar:
+            _editing
+                ? SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _saving ? null : _cancelEdit,
+                            child: const Text('Cancel'),
+                          ),
                         ),
-                      )
-                      : const Icon(Icons.power_settings_new_rounded),
-            ),
-        ],
-      ),
-      bottomNavigationBar:
-          _editing
-              ? SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed:
-                              _saving
-                                  ? null
-                                  : () => setState(() => _editing = false),
-                          child: const Text('Cancel'),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _canSave && !_saving ? _save : null,
+                            child:
+                                _saving
+                                    ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                    : const Text('Save'),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _canSave && !_saving ? _save : null,
-                          child:
-                              _saving
-                                  ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                  : const Text('Save'),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              )
-              : null,
-      body: _buildBody(),
+                )
+                : null,
+        body: _buildBody(),
+      ),
     );
   }
 

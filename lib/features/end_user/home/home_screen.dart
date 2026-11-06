@@ -1,7 +1,11 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:starlink_app/core/utils/list_export.dart';
+import 'package:starlink_app/core/utils/subscription_export.dart';
+import 'package:starlink_app/core/utils/ticket_export.dart';
 import 'package:starlink_app/shared/widgets/whats_new_dialog.dart';
 import 'package:starlink_app/shared/widgets/notifications.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -46,6 +50,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  final _ticketExport = ListExportController();
+  final _subscriptionExport = ListExportController();
   _QuickActionType? _quickAction;
   bool _quickMenuOpen = false;
   OverlayEntry? _overlayEntry;
@@ -83,28 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // Notifications disabled: the backend has no /v1/notifications route.
       // Provider.of<NotificationProvider>(context, listen: false).refresh();
       if (widget.loginMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(
-                  Icons.check_circle_outline,
-                  color: Colors.white,
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Expanded(child: Text(widget.loginMessage!)),
-              ],
-            ),
-            backgroundColor: _success,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        AppToast.success(context, widget.loginMessage!);
       }
     });
   }
@@ -912,9 +897,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_currentIndex == 2) return const ProfileScreen();
     switch (_quickAction) {
       case _QuickActionType.tickets:
-        return const TicketScreen();
+        return TicketScreen(exportController: _ticketExport);
       case _QuickActionType.subscriptions:
-        return const UserSubscriptionPage();
+        return UserSubscriptionPage(exportController: _subscriptionExport);
       default:
         return Center(
           child: Column(
@@ -1023,6 +1008,11 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Container(height: 3, color: const Color(0xFF1E4A5E)),
         ),
         actions: [
+          if (_currentIndex == 1 && _quickAction == _QuickActionType.tickets)
+            ExportTicketsButton(controller: _ticketExport),
+          if (_currentIndex == 1 &&
+              _quickAction == _QuickActionType.subscriptions)
+            ExportSubscriptionsButton(controller: _subscriptionExport),
           const Padding(
             padding: EdgeInsets.only(right: 6),
             child: NotificationBell(),

@@ -1,3 +1,5 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:starlink_app/services/api_service.dart';
@@ -65,15 +67,9 @@ class AccountLimitCardState extends State<AccountLimitCard> {
     final res = await ApiService.setAccountLimit(widget.code, result.value);
     if (!mounted) return;
     final ok = res['status'] == 'success';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
+    AppToast.result(context, ok
               ? 'Account limit saved'
-              : res['message']?.toString() ?? 'Could not save the limit',
-        ),
-      ),
-    );
+              : res['message']?.toString() ?? 'Could not save the limit', ok: ok);
     if (ok) {
       final data = res['data'];
       if (data is Map) {
@@ -159,52 +155,35 @@ class _LimitDialogState extends State<_LimitDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('User account limit'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'How many portal accounts this company or end user may have. '
-            "Active accounts and invitations not yet accepted count; "
-            "deactivated ones don't. The default is 3.",
-            style: TextStyle(fontSize: 13, color: AppColors.inkMuted),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: widget.controller,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: 'Maximum accounts',
-              errorText: _problem,
-            ),
-          ),
-        ],
+    return AppDialog(
+      icon: Icons.group_outlined,
+      title: 'User account limit',
+      message:
+          'How many portal accounts this company or end user may have. '
+          "Active accounts and invitations not yet accepted count; "
+          "deactivated ones don't. The default is 3.",
+      content: TextField(
+        controller: widget.controller,
+        keyboardType: TextInputType.number,
+        autofocus: true,
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(
+          labelText: 'Maximum accounts',
+          errorText: _problem,
+        ),
       ),
-      actions: [
-        if (!widget.isDefault)
-          TextButton(
-            onPressed: () => Navigator.pop(context, const _LimitChoice(null)),
-            child: const Text('Use default (3)'),
-          ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed:
-              _problem != null
-                  ? null
-                  : () => Navigator.pop(
-                    context,
-                    _LimitChoice(int.parse(widget.controller.text.trim())),
-                  ),
-          child: const Text('Save'),
-        ),
-      ],
+      confirmLabel: 'Save',
+      onConfirm:
+          _problem != null
+              ? null
+              : () => Navigator.pop(
+                context,
+                _LimitChoice(int.parse(widget.controller.text.trim())),
+              ),
+      cancelLabel: 'Cancel',
+      onCancel: () => Navigator.pop(context),
+      extraLabel: widget.isDefault ? null : 'Use default (3)',
+      onExtra: () => Navigator.pop(context, const _LimitChoice(null)),
     );
   }
 }

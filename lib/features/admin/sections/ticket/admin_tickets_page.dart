@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/shared/widgets/ticket_list_card.dart';
+import 'package:starlink_app/core/utils/list_export.dart';
+import 'package:starlink_app/core/utils/ticket_export.dart';
 import 'dart:async';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
 import 'package:starlink_app/features/admin/sections/ticket/admin_ticket_details_page.dart';
 import 'package:starlink_app/features/admin/sections/ticket/admin_create_ticket_page.dart';
 
 class AdminTicketsPage extends StatefulWidget {
-  const AdminTicketsPage({super.key});
+  const AdminTicketsPage({super.key, this.exportController});
+
+  final ListExportController? exportController;
 
   @override
   State<AdminTicketsPage> createState() => _AdminTicketsPageState();
 }
 
-class _AdminTicketsPageState extends State<AdminTicketsPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
+class _AdminTicketsPageState extends State<AdminTicketsPage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Timer? _searchDebounce;
@@ -29,13 +32,22 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   int _totalItems = 0;
   int _totalPages = 1;
   int _currentPage = 1;
-  static const int _pageSize = 10;
+  int _pageSize = 10;
+
+  // Filters, applied by the server like the web portal ('' = any).
+  String _status = '';
+  String _type = '';
+  String _creator = '';
+  String _requester = '';
+  List<SelectOption<String>> _typeOptions = const [];
+  List<SelectOption<String>> _creatorOptions = const [];
+  List<SelectOption<String>> _requesterOptions = const [];
+
+  // Only the latest request may update the list (filters can change quickly).
+  int _requestSeq = 0;
 
   // ── Design tokens ──────────────────────────────────────────────────────────
   static const _primary = Color(0xFF133341);
-  static const _inProgressColor = Color(0xFF3B82F6);
-  static const _success = Color(0xFF10B981);
-  static const _warning = Color(0xFFF59E0B);
   static const _ink = Color(0xFF111111);
   static const _inkSecondary = Color(0xFF666666);
   static const _inkTertiary = Color(0xFF888888);
@@ -46,11 +58,10 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) setState(() {});
-    });
+    widget.exportController?.loader =
+        () => fetchAllTickets(fetchPage: _fetchTickets);
     _loadFirstPage();
+    _loadFilterOptions();
     _loadUserRole();
     _scrollController.addListener(_onScroll);
   }
@@ -69,8 +80,8 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   @override
   void dispose() {
+    widget.exportController?.loader = null;
     _searchDebounce?.cancel();
-    _tabController.dispose();
     _searchController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -90,85 +101,61 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   // ── Filtering ──────────────────────────────────────────────────────────────
 
-  List<Map<String, dynamic>> get _filteredTickets {
-    final search = _searchController.text.toLowerCase().trim();
-    return _allTickets.where((t) {
-      final status = (t['status'] ?? '').toString().toLowerCase();
-      bool tabMatch;
-      switch (_tabController.index) {
-        case 0:
-          tabMatch = true;
-          break;
-        case 1:
-          tabMatch = status.contains('open');
-          break;
-        case 2:
-          tabMatch = status.contains('progress');
-          break;
-        case 3:
-          tabMatch = status.contains('resolved');
-          break;
-        case 4:
-          tabMatch = status.contains('closed') && !status.contains('resolved');
-          break;
-        default:
-          tabMatch = true;
-      }
-      if (!tabMatch) return false;
-      if (search.isNotEmpty) {
-        final subject = (t['subject'] ?? '').toString().toLowerCase();
-        final id = (t['id'] ?? '').toString();
-        final createdBy = (t['created_by'] ?? '').toString().toLowerCase();
-        final requester = (t['requester'] ?? '').toString().toLowerCase();
-        final ticketType = (t['ticket_type'] ?? '').toString().toLowerCase();
-        return subject.contains(search) ||
-            id.contains(search) ||
-            createdBy.contains(search) ||
-            requester.contains(search) ||
-            ticketType.contains(search);
-      }
-      return true;
-    }).toList();
+  bool get _hasFilters =>
+      _status.isNotEmpty ||
+      _type.isNotEmpty ||
+      _creator.isNotEmpty ||
+      _requester.isNotEmpty ||
+      _searchController.text.trim().isNotEmpty;
+
+  void _clearFilters() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    setState(() {
+      _status = _type = _creator = _requester = '';
+    });
+    _loadFirstPage();
   }
 
-  int get _openCount =>
-      _allTickets
-          .where(
-            (t) =>
-                (t['status'] ?? '').toString().toLowerCase().contains('open'),
-          )
-          .length;
+  /// Sets one filter and reloads from the first page.
+  void _setFilter(VoidCallback change) {
+    setState(change);
+    _loadFirstPage();
+  }
 
-  int get _inProgressCount =>
-      _allTickets
-          .where(
-            (t) => (t['status'] ?? '').toString().toLowerCase().contains(
-              'progress',
+  /// One page with the current filters; also what Export reads.
+  Future<Map<String, dynamic>> _fetchTickets(int page, int limit) =>
+      ApiService.getTickets(
+        page: page,
+        limit: limit,
+        status: _status,
+        ticketType: _type,
+        createdBy: _creator,
+        requestedBy: _requester,
+        search: _searchController.text.trim(),
+      );
+
+  Future<void> _loadFilterOptions() async {
+    final res = await ApiService.getTicketFilterOptions();
+    final data = res['data'];
+    // Filters are optional: without them the list still works.
+    if (!mounted || res['status'] != 'success' || data is! Map) return;
+    List<SelectOption<String>> options(dynamic list) => [
+      if (list is List)
+        for (final o in list.whereType<Map>())
+          if ('${o['value'] ?? ''}'.isNotEmpty)
+            SelectOption(
+              '${o['value']}',
+              '${o['label'] ?? o['value']}',
+              subtitle: o['email']?.toString(),
             ),
-          )
-          .length;
-
-  int get _resolvedCount =>
-      _allTickets
-          .where(
-            (t) => (t['status'] ?? '').toString().toLowerCase().contains(
-              'resolved',
-            ),
-          )
-          .length;
-
-  int get _closedCount =>
-      _allTickets
-          .where(
-            (t) =>
-                (t['status'] ?? '').toString().toLowerCase().contains(
-                  'closed',
-                ) &&
-                !(t['status'] ?? '').toString().toLowerCase().contains(
-                  'resolved',
-                ),
-          )
-          .length;
+    ];
+    setState(() {
+      _typeOptions = options(data['ticket_types']);
+      _creatorOptions = options(data['created_by']);
+      _requesterOptions = options(data['assigned_by']);
+    });
+  }
 
   // ── Parse ──────────────────────────────────────────────────────────────────
 
@@ -208,7 +195,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
   // ── Data loading ───────────────────────────────────────────────────────────
 
   Future<void> _loadFirstPage() async {
-    if (_loading) return;
+    final seq = ++_requestSeq;
     setState(() {
       _loading = true;
       _error = null;
@@ -219,8 +206,8 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
     });
 
     try {
-      final response = await ApiService.getTickets(page: 1, limit: _pageSize);
-      if (!mounted) return;
+      final response = await _fetchTickets(1, _pageSize);
+      if (!mounted || seq != _requestSeq) return;
 
       if (response['status'] != 'success') {
         setState(() {
@@ -240,7 +227,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _requestSeq) return;
       setState(() {
         _error = e.toString().replaceAll('Exception: ', '');
         _loading = false;
@@ -250,15 +237,13 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   Future<void> _loadNextPage() async {
     if (_fetchingMore || _currentPage >= _totalPages) return;
+    final seq = _requestSeq;
     setState(() => _fetchingMore = true);
 
     try {
       final nextPage = _currentPage + 1;
-      final response = await ApiService.getTickets(
-        page: nextPage,
-        limit: _pageSize,
-      );
-      if (!mounted) return;
+      final response = await _fetchTickets(nextPage, _pageSize);
+      if (!mounted || seq != _requestSeq) return;
 
       if (response['status'] == 'success') {
         final parsed = _parsePage(response);
@@ -286,39 +271,6 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  Color _statusColor(String status) {
-    final s = status.toLowerCase();
-    if (s.contains('open')) return _warning;
-    if (s.contains('progress')) return _inProgressColor;
-    if (s.contains('resolved')) return _success;
-    if (s.contains('closed')) return _inkTertiary;
-    return _inkTertiary;
-  }
-
-  String _formatDate(String? raw) {
-    if (raw == null || raw.isEmpty) return '—';
-    try {
-      final dt = DateTime.parse(raw).toUtc().add(const Duration(hours: 8));
-      const m = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return '${m[dt.month - 1]} ${dt.day}, ${dt.year}';
-    } catch (_) {
-      return raw;
-    }
-  }
-
   void _openTicket(Map<String, dynamic> t) {
     Navigator.push(
       context,
@@ -329,7 +281,9 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
               subject: t['subject'] ?? '',
             ),
       ),
-    );
+    ).then((changed) {
+      if (changed != null && mounted) _loadFirstPage();
+    });
   }
 
   Future<void> _openCreateTicket() async {
@@ -344,7 +298,7 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredTickets;
+    final filtered = _allTickets;
 
     if (_role == null) {
       return const Scaffold(
@@ -359,14 +313,8 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
               ? null
               : FloatingActionButton.extended(
                 onPressed: _openCreateTicket,
-                backgroundColor: _primary,
-                foregroundColor: Colors.white,
-                elevation: 4,
                 icon: const Icon(Icons.add_rounded, size: 20),
-                label: const Text(
-                  'Create Ticket',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
+                label: const Text('Create Ticket'),
               ),
       body: Column(
         children: [
@@ -384,9 +332,9 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                 onChanged: (_) {
                   _searchDebounce?.cancel();
                   _searchDebounce = Timer(
-                    const Duration(milliseconds: 250),
+                    const Duration(milliseconds: 350),
                     () {
-                      if (mounted) setState(() {});
+                      if (mounted) _loadFirstPage();
                     },
                   );
                 },
@@ -403,8 +351,9 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                       _searchController.text.isNotEmpty
                           ? GestureDetector(
                             onTap: () {
+                              _searchDebounce?.cancel();
                               _searchController.clear();
-                              setState(() {});
+                              _loadFirstPage();
                             },
                             child: const Icon(
                               Icons.close_rounded,
@@ -423,29 +372,70 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
             ),
           ),
 
-          // Tab bar
+          // Filters
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: TabBar(
-              controller: _tabController,
-              labelColor: _primary,
-              unselectedLabelColor: _inkTertiary,
-              indicatorColor: _primary,
-              indicatorSize: TabBarIndicatorSize.label,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              dividerColor: Colors.transparent,
-              tabs: [
-                _tab(
-                  'All',
-                  _totalItems > 0 ? _totalItems : _allTickets.length,
-                  _inkSecondary,
-                ),
-                _tab('Open', _openCount, _warning),
-                _tab('In Progress', _inProgressCount, _inProgressColor),
-                _tab('Resolved', _resolvedCount, _success),
-                _tab('Closed', _closedCount, _inkTertiary),
-              ],
+            padding: const EdgeInsets.only(top: 10),
+            child: FadingHScroll(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  _filter(
+                    width: 138,
+                    value: _status,
+                    title: 'Status',
+                    anyLabel: 'All statuses',
+                    options: const [
+                      SelectOption('open', 'Open'),
+                      SelectOption('in_progress', 'In Progress'),
+                      SelectOption('resolved', 'Resolved'),
+                      SelectOption('closed', 'Closed'),
+                    ],
+                    onChanged: (v) => _setFilter(() => _status = v),
+                  ),
+                  if (_typeOptions.isNotEmpty)
+                    _filter(
+                      width: 138,
+                      value: _type,
+                      title: 'Type',
+                      anyLabel: 'All types',
+                      options: _typeOptions,
+                      onChanged: (v) => _setFilter(() => _type = v),
+                    ),
+                  if (_creatorOptions.isNotEmpty)
+                    _filter(
+                      width: 148,
+                      value: _creator,
+                      title: 'Creator',
+                      anyLabel: 'Any creator',
+                      options: _creatorOptions,
+                      onChanged: (v) => _setFilter(() => _creator = v),
+                    ),
+                  if (_requesterOptions.isNotEmpty)
+                    _filter(
+                      width: 148,
+                      value: _requester,
+                      title: 'Requester',
+                      anyLabel: 'Any requester',
+                      options: _requesterOptions,
+                      onChanged: (v) => _setFilter(() => _requester = v),
+                    ),
+                  SizedBox(
+                    width: 132,
+                    child: AppSelect<int>(
+                      dense: true,
+                      sheetTitle: 'Per page',
+                      value: _pageSize,
+                      options: const [
+                        SelectOption(5, '5 per page'),
+                        SelectOption(10, '10 per page'),
+                        SelectOption(20, '20 per page'),
+                        SelectOption(50, '50 per page'),
+                      ],
+                      onChanged: (v) => _setFilter(() => _pageSize = v),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -483,6 +473,16 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                   ),
                 ),
                 const Spacer(),
+                if (_hasFilters)
+                  TextButton(
+                    onPressed: _clearFilters,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 30),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Clear filters'),
+                  ),
                 // GestureDetector(
                 //   onTap: _loadFirstPage,
                 //   child: const Padding(
@@ -557,15 +557,19 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: RepaintBoundary(
-                              child: _TicketCard(
-                                ticket: t,
+                              child: TicketListCard(
+                                id: '${t['id'] ?? '-'}',
+                                subject: (t['subject'] ?? '').toString(),
+                                status: (t['status'] ?? '').toString(),
+                                description:
+                                    (t['description'] ?? '').toString(),
+                                type: (t['ticket_type'] ?? '').toString(),
+                                createdBy:
+                                    (t['created_by'] ?? t['requester'] ?? '')
+                                        .toString(),
+                                createdAt: t['created_at']?.toString(),
+                                searchQuery: _searchController.text,
                                 onTap: () => _openTicket(t),
-                                statusColor: _statusColor(
-                                  (t['status'] ?? '').toString(),
-                                ),
-                                formattedDate: _formatDate(
-                                  t['created_at']?.toString(),
-                                ),
                               ),
                             ),
                           );
@@ -580,31 +584,24 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
 
   // ── Stats banner ───────────────────────────────────────────────────────────
 
-  Tab _tab(String label, int count, Color color) => Tab(
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(width: 5),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            '$count',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ),
-      ],
+  Widget _filter({
+    required double width,
+    required String value,
+    required String title,
+    required String anyLabel,
+    required List<SelectOption<String>> options,
+    required ValueChanged<String> onChanged,
+  }) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: SizedBox(
+      width: width,
+      child: AppSelect<String>(
+        dense: true,
+        sheetTitle: title,
+        value: value,
+        options: [SelectOption('', anyLabel), ...options],
+        onChanged: onChanged,
+      ),
     ),
   );
 
@@ -673,9 +670,9 @@ class _AdminTicketsPageState extends State<AdminTicketsPage>
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
-          'No tickets found',
-          style: TextStyle(fontSize: 14, color: _inkSecondary),
+        Text(
+          _hasFilters ? 'No tickets match your filters' : 'No tickets found',
+          style: const TextStyle(fontSize: 14, color: _inkSecondary),
         ),
       ],
     ),
@@ -819,199 +816,3 @@ class _SkeletonListState extends State<_SkeletonList>
 }
 
 // ── Ticket card ────────────────────────────────────────────────────────────────
-
-class _TicketCard extends StatelessWidget {
-  final Map<String, dynamic> ticket;
-  final VoidCallback onTap;
-  final Color statusColor;
-  final String formattedDate;
-
-  static const _ink = Color(0xFF111111);
-  static const _inkTertiary = Color(0xFF888888);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFD7D7D7);
-
-  const _TicketCard({
-    required this.ticket,
-    required this.onTap,
-    required this.statusColor,
-    required this.formattedDate,
-  });
-
-  String get _subject => (ticket['subject'] ?? 'No subject').toString();
-  String get _id => (ticket['id'] ?? '-').toString();
-  String get _status => (ticket['status'] ?? '').toString();
-  String get _requester =>
-      (ticket['created_by'] ?? ticket['requester'] ?? '—').toString();
-  String get _ticketType => (ticket['ticket_type'] ?? '').toString();
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    _subject.isNotEmpty ? _subject[0].toUpperCase() : '?',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                      color: statusColor,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _subject,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              color: _ink,
-                              letterSpacing: -0.2,
-                              height: 1.3,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _status.toUpperCase().replaceAll('_', ' '),
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: statusColor,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        _MetaTag(value: _id),
-                        if (_ticketType.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          _MetaTag(value: _ticketType),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Container(height: 1, color: _border),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.person_outline_rounded,
-                          size: 11,
-                          color: _inkTertiary,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            _requester,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _inkTertiary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          Icons.calendar_today_outlined,
-                          size: 11,
-                          color: _inkTertiary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          formattedDate,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: _inkTertiary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          size: 18,
-                          color: _inkTertiary,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MetaTag extends StatelessWidget {
-  final String value;
-  static const _inkTertiary = Color(0xFF888888);
-  static const _surfaceSubtle = Color(0xFFF8F8F8);
-  static const _border = Color(0xFFD7D7D7);
-
-  const _MetaTag({required this.value});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-    decoration: BoxDecoration(
-      color: _surfaceSubtle,
-      borderRadius: BorderRadius.circular(5),
-      border: Border.all(color: _border),
-    ),
-    child: Text(
-      value,
-      style: const TextStyle(
-        fontSize: 9,
-        color: _inkTertiary,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-  );
-}

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:starlink_app/core/utils/status_labels.dart';
+import 'package:starlink_app/features/admin/sections/admin_dashboard_view.dart';
+import 'package:starlink_app/core/utils/list_export.dart';
+import 'package:starlink_app/core/utils/subscription_export.dart';
+import 'package:starlink_app/core/utils/ticket_export.dart';
 import 'package:starlink_app/features/admin/tools/announcements_admin_page.dart';
-import 'package:starlink_app/features/admin/tools/billing_import_page.dart';
 import 'package:starlink_app/features/admin/tools/report_builder_page.dart';
 import 'package:starlink_app/features/admin/tools/reports_page.dart';
 import 'package:starlink_app/shared/widgets/whats_new_dialog.dart';
@@ -11,25 +13,21 @@ import 'package:starlink_app/shared/widgets/modern_nav.dart';
 import 'package:starlink_app/shared/widgets/logout_confirm_dialog.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/admin/sections/ticket/admin_tickets_page.dart';
-import 'package:starlink_app/features/admin/sections/ticket/admin_ticket_details_page.dart';
-import 'package:starlink_app/features/admin/sections/ticket/admin_create_ticket_page.dart';
 import 'package:starlink_app/features/admin/sections/agent/admin_agents_page.dart';
+import 'package:starlink_app/features/billing/billing_actions_button.dart';
 import 'package:starlink_app/features/admin/sections/billing/admin_billing_page.dart';
 import 'package:starlink_app/features/admin/sections/subscription/admin_subscriptions_page.dart';
-import 'package:starlink_app/features/admin/sections/subscription/admin_subscription_details_page.dart';
 import 'package:starlink_app/features/admin/sections/enduser/admin_end_users_page.dart';
 import 'package:starlink_app/features/admin/profile/admin_edit_profile_page.dart';
 import 'package:starlink_app/features/admin/profile/admin_manage_users_page.dart';
 // User Guide is disabled for now (see the Settings section).
 // import 'package:starlink_app/features/admin/profile/admin_user_guide_page.dart';
-import 'package:starlink_app/features/admin/sections/agent/admin_create_agent_page.dart';
 import 'package:starlink_app/features/auth/change_password.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFF133341);
 const _primaryDark = Color(0xFF0C2029);
-const _inProgress = Color(0xFF3B82F6);
 const _success = Color(0xFF10B981);
 const _warning = Color(0xFFF59E0B);
 const _danger = Color(0xFFE90408);
@@ -51,6 +49,9 @@ enum QuickActionType { tickets, subscriptions, billing }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _selectedIndex = 0;
+  final _ticketExport = ListExportController();
+  final _subscriptionExport = ListExportController();
+  final _billingActions = BillingListController();
   QuickActionType? _quickAction;
   bool _quickMenuOpen = false;
 
@@ -65,6 +66,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _closedCount = 0;
   List<dynamic> _recentActivity = const [];
   List<dynamic> _expiringSubscriptions = const [];
+  List<Map<String, dynamic>> _announcements = const [];
 
   @override
   void initState() {
@@ -171,6 +173,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         (meRes['data'] is Map<String, dynamic>)
             ? meRes['data'] as Map<String, dynamic>
             : <String, dynamic>{};
+
+    _loadAnnouncements();
 
     final results = await Future.wait([
       ApiService.getMyOpenTickets(),
@@ -291,24 +295,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     });
   }
 
-  Future<void> _openCreateTicket() async {
-    final token = await ApiService.getValidAccessToken();
-    if (!mounted) return;
-    final created = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AdminCreateTicketPage(bearerToken: token),
-      ),
-    );
-    if (created == true) _loadDashboard();
-  }
-
-  Future<void> _openCreateAgent() async {
-    final created = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminCreateAgentPage()),
-    );
-    if (created == true) _loadDashboard();
+  Future<void> _loadAnnouncements() async {
+    final res = await ApiService.getAnnouncementFeed();
+    if (!mounted || res['status'] != 'success' || res['data'] is! List) return;
+    setState(() {
+      _announcements = [
+        for (final m in (res['data'] as List).whereType<Map>())
+          Map<String, dynamic>.from(m),
+      ];
+    });
   }
 
   void _selectQuickAction(QuickActionType type) {
@@ -336,30 +331,32 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       case 0:
         return [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                _QuickCreateSection(
-                  onNewTicket: _openCreateTicket,
-                  onNewAgent: _openCreateAgent,
-                ),
-                const SizedBox(height: 16),
-                _TicketOverviewCard(
-                  isLoading: _loadingDashboard,
+                AdminDashboardView(
+                  loading: _loadingDashboard,
+                  firstName:
+                      '${_me?['first_name'] ?? _me?['firstName'] ?? _me?['name'] ?? ''}'
+                          .trim()
+                          .split(' ')
+                          .first,
                   open: _openCount,
                   inProgress: _inProgressCount,
                   resolved: _resolvedCount,
                   closed: _closedCount,
-                ),
-                const SizedBox(height: 16),
-                _SubscriptionSection(
-                  isLoading: _loadingDashboard,
-                  subscriptions: _expiringSubscriptions,
-                ),
-                const SizedBox(height: 16),
-                _RecentActivitySection(
-                  isLoading: _loadingDashboard,
-                  activities: _recentActivity,
+                  announcements: _announcements,
+                  recent: [
+                    for (final r in _recentActivity.whereType<Map>())
+                      Map<String, dynamic>.from(r),
+                  ],
+                  expiring: [
+                    for (final r in _expiringSubscriptions.whereType<Map>())
+                      Map<String, dynamic>.from(r),
+                  ],
+                  onViewTickets:
+                      () => _selectQuickAction(QuickActionType.tickets),
+                  error: _dashboardError,
                 ),
               ]),
             ),
@@ -375,23 +372,25 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       case 2:
         if (_quickAction == QuickActionType.tickets) {
           return [
-            const SliverFillRemaining(
+            SliverFillRemaining(
               hasScrollBody: true,
-              child: AdminTicketsPage(),
+              child: AdminTicketsPage(exportController: _ticketExport),
             ),
           ];
         } else if (_quickAction == QuickActionType.subscriptions) {
           return [
-            const SliverFillRemaining(
+            SliverFillRemaining(
               hasScrollBody: true,
-              child: AdminSubscriptionsPage(),
+              child: AdminSubscriptionsPage(
+                exportController: _subscriptionExport,
+              ),
             ),
           ];
         } else if (_quickAction == QuickActionType.billing) {
           return [
-            const SliverFillRemaining(
+            SliverFillRemaining(
               hasScrollBody: true,
-              child: AdminBillingPage(),
+              child: AdminBillingPage(actionsController: _billingActions),
             ),
           ];
         } else {
@@ -458,7 +457,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       case 0:
         return 'Dashboard';
       case 1:
-        return 'Agents';
+        return 'Customers';
       case 2:
         switch (_quickAction) {
           case QuickActionType.tickets:
@@ -511,8 +510,17 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   preferredSize: const Size.fromHeight(3),
                   child: Container(height: 3, color: const Color(0xFF1E4D62)),
                 ),
-                actions: const [
-                  Padding(
+                actions: [
+                  if (_selectedIndex == 2 &&
+                      _quickAction == QuickActionType.tickets)
+                    ExportTicketsButton(controller: _ticketExport),
+                  if (_selectedIndex == 2 &&
+                      _quickAction == QuickActionType.subscriptions)
+                    ExportSubscriptionsButton(controller: _subscriptionExport),
+                  if (_selectedIndex == 2 &&
+                      _quickAction == QuickActionType.billing)
+                    BillingActionsButton(controller: _billingActions),
+                  const Padding(
                     padding: EdgeInsets.only(right: 6),
                     child: NotificationBell(),
                   ),
@@ -588,428 +596,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 }
 
-// ── Admin Quick Menu Overlay (full-screen, renders above bottom nav) ───────────
-
-// ─── Quick Create Buttons ─────────────────────────────────────────────────────
-
-class _QuickCreateSection extends StatelessWidget {
-  final VoidCallback onNewTicket;
-  final VoidCallback onNewAgent;
-  const _QuickCreateSection({
-    required this.onNewTicket,
-    required this.onNewAgent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _QuickCreateButton(
-            icon: Icons.confirmation_number_outlined,
-            label: 'New Ticket',
-            color: _primary,
-            onTap: onNewTicket,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _QuickCreateButton(
-            icon: Icons.person_add_outlined,
-            label: 'New Agent',
-            color: _primaryDark,
-            onTap: onNewAgent,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _QuickCreateButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _QuickCreateButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.25)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 16),
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Ticket Overview Card ─────────────────────────────────────────────────────
-
-class _TicketOverviewCard extends StatelessWidget {
-  final bool isLoading;
-  final int open, inProgress, resolved, closed;
-
-  const _TicketOverviewCard({
-    required this.isLoading,
-    required this.open,
-    required this.inProgress,
-    required this.resolved,
-    required this.closed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final total = open + inProgress + resolved + closed;
-    final segments = <Widget>[
-      if (open > 0) _BarSegment(flex: open, color: _warning),
-      if (inProgress > 0) _BarSegment(flex: inProgress, color: _inProgress),
-      if (resolved > 0) _BarSegment(flex: resolved, color: _success),
-      if (closed > 0) _BarSegment(flex: closed, color: const Color(0xFFA8A8A8)),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF133341), Color(0xFF0C2029)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: _primaryDark.withOpacity(0.38),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.confirmation_number_outlined,
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'Ticket Overview',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                isLoading ? '…' : '$total total',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(5),
-            child:
-                segments.isEmpty
-                    ? Container(
-                      height: 8,
-                      color: Colors.white.withOpacity(0.15),
-                    )
-                    : Row(children: segments),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _BarLegend(color: _warning, label: 'Open', count: open),
-              _BarLegend(
-                color: _inProgress,
-                label: 'In Progress',
-                count: inProgress,
-              ),
-              _BarLegend(color: _success, label: 'Resolved', count: resolved),
-              _BarLegend(
-                color: const Color(0xFFA8A8A8),
-                label: 'Closed',
-                count: closed,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BarSegment extends StatelessWidget {
-  final int flex;
-  final Color color;
-  const _BarSegment({required this.flex, required this.color});
-
-  @override
-  Widget build(BuildContext context) =>
-      Flexible(flex: flex, child: Container(height: 8, color: color));
-}
-
-class _BarLegend extends StatelessWidget {
-  final Color color;
-  final String label;
-  final int count;
-  const _BarLegend({
-    required this.color,
-    required this.label,
-    required this.count,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.white.withOpacity(0.65),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 3),
-        Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: Text(
-            '$count',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Subscription Section ─────────────────────────────────────────────────────
-
-class _SubscriptionSection extends StatelessWidget {
-  final bool isLoading;
-  final List<dynamic> subscriptions;
-
-  const _SubscriptionSection({
-    required this.isLoading,
-    required this.subscriptions,
-  });
-
-  String _nameFromSub(dynamic sub) {
-    if (sub is Map) {
-      final n =
-          (sub['name'] ??
-                  sub['customer_name'] ??
-                  sub['end_user_name'] ??
-                  sub['customer'] ??
-                  sub['user'] ??
-                  '')
-              .toString();
-      if (n.trim().isNotEmpty) return n.trim();
-    }
-    return 'Subscription';
-  }
-
-  String _nicknameFromSub(dynamic sub) {
-    if (sub is Map) {
-      final n = (sub['nickname'] ?? sub['name'] ?? '').toString();
-      if (n.trim().isNotEmpty) return n.trim();
-    }
-    return '';
-  }
-
-  String _serviceLineFromSub(dynamic sub) {
-    if (sub is Map) {
-      final s =
-          (sub['serviceLineNumber'] ??
-                  sub['service_line_number'] ??
-                  sub['serviceLine'] ??
-                  '')
-              .toString();
-      if (s.trim().isNotEmpty) return s.trim();
-    }
-    return '';
-  }
-
-  String _endDateFromSub(dynamic sub) {
-    if (sub is Map) {
-      final r =
-          (sub['end_date'] ??
-                  sub['expires_at'] ??
-                  sub['expiry_date'] ??
-                  sub['endDate'] ??
-                  sub['end'] ??
-                  '')
-              .toString();
-      if (r.trim().isNotEmpty) return r.trim();
-    }
-    return '';
-  }
-
-  String _activeFromSub(dynamic sub) {
-    if (sub is Map) {
-      final a = subscriptionStatusLabel(sub['active'] ?? sub['status']);
-      if (a != '—') return a;
-    }
-    return '';
-  }
-
-  void _openSubscriptionDetails(
-    BuildContext context, {
-    required String serviceLineNumber,
-    required String nickname,
-  }) {
-    if (serviceLineNumber.trim().isEmpty || serviceLineNumber.trim() == '—') {
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder:
-            (_) => AdminSubscriptionDetailsPage(
-              serviceLineNumber: serviceLineNumber.trim(),
-              title:
-                  nickname.trim().isEmpty
-                      ? serviceLineNumber.trim()
-                      : nickname.trim(),
-            ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionHeader(title: 'SUBSCRIPTION END DATES'),
-          SizedBox(height: 12),
-          _SkeletonTile(),
-          SizedBox(height: 10),
-          _SkeletonTile(),
-        ],
-      );
-    }
-    final top = subscriptions.take(3).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionHeader(title: 'SUBSCRIPTION END DATES'),
-        const SizedBox(height: 12),
-        if (top.isEmpty)
-          _EmptyState(
-            icon: Icons.subscriptions_outlined,
-            message: 'No expiring subscriptions found.',
-          )
-        else
-          ...List.generate(top.length, (i) {
-            final sub = top[i];
-            final endDate = _endDateFromSub(sub);
-            final nickname = _nicknameFromSub(sub);
-            final serviceLine = _serviceLineFromSub(sub);
-            final active = _activeFromSub(sub);
-            final displayName =
-                nickname.isNotEmpty ? nickname : _nameFromSub(sub);
-            return Padding(
-              padding: EdgeInsets.only(bottom: i == top.length - 1 ? 0 : 10),
-              child: _SubscriptionTile(
-                nickname: displayName,
-                serviceLineNumber: serviceLine.isEmpty ? '—' : serviceLine,
-                endDate: endDate.isEmpty ? '—' : endDate,
-                active: active.isEmpty ? '—' : active,
-                onTap:
-                    serviceLine.trim().isEmpty
-                        ? null
-                        : () => _openSubscriptionDetails(
-                          context,
-                          serviceLineNumber: serviceLine,
-                          nickname: displayName,
-                        ),
-              ),
-            );
-          }),
-      ],
-    );
-  }
-}
-
 // ─── Section Header ───────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
@@ -1026,359 +612,6 @@ class _SectionHeader extends StatelessWidget {
       letterSpacing: 1.1,
     ),
   );
-}
-
-// ─── Empty State ──────────────────────────────────────────────────────────────
-
-class _EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-  const _EmptyState({required this.icon, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: _inkTertiary, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                color: _inkSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Recent Activity ──────────────────────────────────────────────────────────
-
-class _RecentActivitySection extends StatelessWidget {
-  final bool isLoading;
-  final List<dynamic> activities;
-
-  const _RecentActivitySection({
-    required this.isLoading,
-    required this.activities,
-  });
-
-  String _idFromActivity(dynamic a) {
-    if (a is Map) {
-      final v = (a['id'] ?? a['ticket_id'] ?? '').toString();
-      if (v.trim().isNotEmpty) return v.trim();
-    }
-    return '—';
-  }
-
-  String _createdByFromActivity(dynamic a) {
-    if (a is Map) {
-      final v = (a['created_by'] ?? a['createdBy'] ?? '').toString();
-      if (v.trim().isNotEmpty) return v.trim();
-    }
-    return '—';
-  }
-
-  String _createdAtFromActivity(dynamic a) {
-    if (a is Map) {
-      final v =
-          (a['created_at'] ?? a['createdAt'] ?? a['timestamp'] ?? '')
-              .toString();
-      if (v.trim().isNotEmpty) return v.trim();
-    }
-    return '—';
-  }
-
-  String _statusFromActivity(dynamic a) {
-    if (a is Map) {
-      final v = (a['status'] ?? a['ticket_status'] ?? '').toString();
-      if (v.trim().isNotEmpty) return v.trim();
-    }
-    return '—';
-  }
-
-  String _subjectFromActivity(dynamic a) {
-    if (a is Map) {
-      final v =
-          (a['subject'] ?? a['title'] ?? a['ticket_type'] ?? '').toString();
-      if (v.trim().isNotEmpty) return v.trim();
-    }
-    return 'Ticket activity';
-  }
-
-  String _formatDate(String raw) {
-    if (raw.isEmpty || raw == '—') return '—';
-    try {
-      final dt = DateTime.parse(raw);
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return '${months[dt.month - 1]} ${dt.day.toString().padLeft(2, '0')}, ${dt.year}';
-    } catch (_) {
-      return raw;
-    }
-  }
-
-  Color _statusColor(String s) {
-    final v = s.toLowerCase();
-    if (v.contains('open')) return _warning;
-    if (v.contains('progress')) return _inProgress;
-    if (v.contains('resolved')) return _success;
-    if (v.contains('closed')) return const Color(0xFFA8A8A8);
-    return _inkTertiary;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionHeader(title: 'RECENT ACTIVITY'),
-          SizedBox(height: 12),
-          _SkeletonTile(),
-          SizedBox(height: 10),
-          _SkeletonTile(),
-        ],
-      );
-    }
-    final top = activities.take(3).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionHeader(title: 'RECENT ACTIVITY'),
-        const SizedBox(height: 12),
-        if (top.isEmpty)
-          const _EmptyState(
-            icon: Icons.history_outlined,
-            message: 'No recent activity.',
-          )
-        else
-          ...List.generate(top.length, (i) {
-            final a = top[i];
-            final id = _idFromActivity(a);
-            final createdBy = _createdByFromActivity(a);
-            final createdAt = _formatDate(_createdAtFromActivity(a));
-            final subject = _subjectFromActivity(a);
-            final status = _statusFromActivity(a);
-            final color = _statusColor(status);
-            return Padding(
-              padding: EdgeInsets.only(bottom: i == top.length - 1 ? 0 : 10),
-              child: _ActivityTile(
-                title: 'Ticket #$id',
-                subtitle: '$subject · By: $createdBy · $createdAt',
-                status: status,
-                statusColor: color,
-                onTap:
-                    id != '—'
-                        ? () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder:
-                                (_) => AdminTicketDetailsPage(
-                                  ticketId: id,
-                                  subject:
-                                      subject != 'Ticket activity'
-                                          ? subject
-                                          : null,
-                                ),
-                          ),
-                        )
-                        : null,
-              ),
-            );
-          }),
-      ],
-    );
-  }
-}
-
-// ─── Skeleton Tile ────────────────────────────────────────────────────────────
-
-class _SkeletonTile extends StatelessWidget {
-  const _SkeletonTile();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 70,
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 16),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _surfaceSubtle,
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  height: 11,
-                  width: 150,
-                  decoration: BoxDecoration(
-                    color: _surfaceSubtle,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  height: 9,
-                  width: 100,
-                  decoration: BoxDecoration(
-                    color: _surfaceSubtle,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Activity Tile ────────────────────────────────────────────────────────────
-
-class _ActivityTile extends StatelessWidget {
-  final String title, subtitle, status;
-  final Color statusColor;
-  final VoidCallback? onTap;
-
-  const _ActivityTile({
-    required this.title,
-    required this.subtitle,
-    required this.status,
-    required this.statusColor,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  Icons.history_toggle_off_outlined,
-                  color: statusColor,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: _ink,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(fontSize: 11, color: _inkTertiary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: statusColor.withOpacity(0.2)),
-                ),
-                child: Text(
-                  status.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: statusColor,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              if (onTap != null) ...[
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: _inkTertiary,
-                  size: 16,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ─── Settings Section ─────────────────────────────────────────────────────────
@@ -1540,19 +773,6 @@ class _SettingsSection extends StatelessWidget {
           const _SectionHeader(title: 'ACCOUNT'),
           const SizedBox(height: 12),
           _SettingsCard(
-            icon: Icons.manage_accounts_outlined,
-            iconColor: _primary,
-            title: 'Manage Users',
-            subtitle: 'Create, update, and deactivate platform users.',
-            onTap:
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const AdminManageUsersPage(),
-                  ),
-                ),
-          ),
-          const SizedBox(height: 10),
-          _SettingsCard(
             icon: Icons.person_outline,
             iconColor: _primaryDark,
             title: 'Edit Profile',
@@ -1581,6 +801,19 @@ class _SettingsSection extends StatelessWidget {
           // Same tools as the web portal's sidebar (admins and agents).
           const _SectionHeader(title: 'TOOLS'),
           const SizedBox(height: 12),
+          _SettingsCard(
+            icon: Icons.manage_accounts_outlined,
+            iconColor: _primary,
+            title: 'Users',
+            subtitle: 'Create, update, and deactivate platform users.',
+            onTap:
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AdminManageUsersPage(),
+                  ),
+                ),
+          ),
+          const SizedBox(height: 10),
           _SettingsCard(
             icon: Icons.bar_chart_rounded,
             iconColor: _primary,
@@ -1615,21 +848,6 @@ class _SettingsSection extends StatelessWidget {
                   ),
                 ),
           ),
-          if (role.toLowerCase() == 'admin') ...[
-            const SizedBox(height: 10),
-            _SettingsCard(
-              icon: Icons.upload_file_outlined,
-              iconColor: _primary,
-              title: 'Import Billing',
-              subtitle: 'Upload billing records from an Excel or CSV file.',
-              onTap:
-                  () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const BillingImportPage(),
-                    ),
-                  ),
-            ),
-          ],
           const SizedBox(height: 20),
           const _SectionHeader(title: 'HELP'),
           const SizedBox(height: 12),
@@ -1831,7 +1049,7 @@ class _BottomNavBar extends StatelessWidget {
         ModernNavItem(
           icon: Icons.group_outlined,
           activeIcon: Icons.group_rounded,
-          label: 'Agents',
+          label: 'Customers',
           selected: selectedIndex == 1,
           onTap: () => onTap(1),
         ),
@@ -1867,133 +1085,6 @@ class _BottomNavBar extends StatelessWidget {
           onTap: () => onTap(4),
         ),
       ],
-    );
-  }
-}
-
-// ─── Subscription Tile ────────────────────────────────────────────────────────
-
-class _SubscriptionTile extends StatelessWidget {
-  final String nickname, serviceLineNumber, endDate, active;
-  final VoidCallback? onTap;
-
-  const _SubscriptionTile({
-    required this.nickname,
-    required this.serviceLineNumber,
-    required this.endDate,
-    required this.active,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final au = active.toUpperCase();
-    final Color color;
-    final IconData icon;
-    if (au.contains('EXPIRED') || au.contains('INACTIVE')) {
-      color = _primaryDark;
-      icon = Icons.cancel_outlined;
-    } else if (au.contains('EXPIR')) {
-      color = _warning;
-      icon = Icons.schedule;
-    } else {
-      color = _success;
-      icon = Icons.check_circle_outline;
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      nickname,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: _ink,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      serviceLineNumber,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: _inkSecondary,
-                      ),
-                    ),
-                    Text(
-                      'Expires: $endDate',
-                      style: const TextStyle(fontSize: 11, color: _inkTertiary),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      active,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: color,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: _inkTertiary,
-                    size: 18,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

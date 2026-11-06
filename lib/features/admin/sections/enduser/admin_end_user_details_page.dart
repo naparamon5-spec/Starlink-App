@@ -1,22 +1,28 @@
+import 'package:starlink_app/shared/widgets/app_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
-import 'package:starlink_app/services/api_service.dart';
-import 'package:starlink_app/shared/widgets/account_limit_card.dart';
+import 'package:starlink_app/core/utils/status_labels.dart';
 import 'package:starlink_app/features/admin/profile/admin_manage_users_page.dart';
-import 'package:starlink_app/features/admin/sections/subscription/admin_subscription_details_page.dart';
 import 'package:starlink_app/features/admin/profile/view-user/admin_view_user_details_page.dart';
+import 'package:starlink_app/features/admin/sections/subscription/admin_subscription_details_page.dart';
+import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/account_detail_parts.dart';
+import 'package:starlink_app/shared/widgets/account_limit_card.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
 
+/// One end user: name, codes and status, then subscriptions and users.
 class AdminEndUserDetailsPage extends StatefulWidget {
-  final String endUserId;
-  final String endUserCode;
-  final String endUserName;
-
   const AdminEndUserDetailsPage({
     super.key,
     required this.endUserId,
     required this.endUserCode,
     required this.endUserName,
   });
+
+  final String endUserId;
+  final String endUserCode;
+  final String endUserName;
 
   @override
   State<AdminEndUserDetailsPage> createState() =>
@@ -26,262 +32,159 @@ class AdminEndUserDetailsPage extends StatefulWidget {
 class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
   bool _loading = true;
   String? _error;
-  bool _isTogglingStatus = false;
+  bool _toggling = false;
+  int _tab = 0;
+  int _limitVersion = 0;
 
   Map<String, dynamic>? _endUser;
-  List<Map<String, dynamic>> _subscriptions = [];
-  List<Map<String, dynamic>> _users = [];
+  List<Map<String, dynamic>> _subscriptions = const [];
+  List<Map<String, dynamic>> _users = const [];
 
-  static const _primary = Color(0xFF133341);
-  static const _primaryDark = Color(0xFF0C2029);
-  static const _success = Color(0xFF10B981);
-  static const _danger = Color(0xFFE90408);
-  static const _ink = Color(0xFF111111);
-  static const _inkSecondary = Color(0xFF666666);
-  static const _inkTertiary = Color(0xFF888888);
-  static const _surfaceSubtle = Color(0xFFF8F8F8);
-  static const _purple = Color(0xFF6929C4);
+  String get _code {
+    final code = accountText(_endUser?['eu_code']);
+    if (code.isNotEmpty) return code;
+    return widget.endUserCode.trim().isNotEmpty
+        ? widget.endUserCode.trim()
+        : widget.endUserId.trim();
+  }
+
+  String get _name {
+    final name = accountText(_endUser?['eu_name']);
+    return name.isNotEmpty ? name : widget.endUserName;
+  }
+
+  bool get _active => accountText(_endUser?['inactive']) == 'N';
 
   @override
   void initState() {
     super.initState();
-    _loadAll();
+    _load();
   }
 
-  List<Map<String, dynamic>> _extractList(Map<String, dynamic> result) {
-    if (result['status'] != 'success') return [];
-    final payload = result['data'];
-    if (payload is List) {
-      return payload
-          .whereType<Map>()
-          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-    if (payload is Map) {
-      final inner = payload['data'];
-      if (inner is List) {
-        return inner
-            .whereType<Map>()
-            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-            .toList();
-      }
-    }
-    final raw = result['raw'];
-    if (raw is Map) {
-      final rawData = raw['data'];
-      if (rawData is List) {
-        return rawData
-            .whereType<Map>()
-            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-            .toList();
-      }
-    }
-    return [];
+  List<Map<String, dynamic>> _rows(Map<String, dynamic> res) {
+    if (res['status'] != 'success') return const [];
+    final d = res['data'];
+    final list =
+        d is List
+            ? d
+            : (d is Map && d['data'] is List ? d['data'] as List : []);
+    return list
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
   }
 
-  Future<void> _loadAll() async {
+  Future<void> _load() async {
+    final code = _code;
+    if (code.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = '';
+      });
+      return;
+    }
     setState(() {
-      _loading = true;
+      _loading = _endUser == null;
       _error = null;
     });
-    try {
-      final euCode =
-          [
-            widget.endUserCode,
-            widget.endUserId,
-          ].firstWhere((v) => v.trim().isNotEmpty, orElse: () => '').trim();
-      if (euCode.isEmpty) {
-        setState(() {
-          _loading = false;
-          _error = 'No valid end user code provided.';
-        });
-        return;
-      }
-      final results = await Future.wait([
-        ApiService.getEndUserById(euCode),
-        ApiService.getSubscriptionsByEndUserId(euCode),
-        ApiService.getUsersByCompanyCode(euCode),
-      ]);
-      if (!mounted) return;
+    final results = await Future.wait(<Future<Map<String, dynamic>>>[
+      ApiService.getEndUserById(code),
+      ApiService.getSubscriptionsByEndUserId(code),
+      ApiService.getUsersByCompanyCode(code),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
       if (results[0]['status'] != 'success') {
-        setState(() {
-          _loading = false;
-          _error =
-              results[0]['message']?.toString() ?? 'Failed to load end user';
-        });
+        _error = accountText(results[0]['message']);
         return;
       }
-      final rawEu = results[0]['data'];
-      Map<String, dynamic> endUser;
-      if (rawEu is Map<String, dynamic>) {
-        endUser = rawEu;
-      } else if (rawEu is Map)
-        endUser = Map<String, dynamic>.from(rawEu);
-      else
-        endUser = {'eu_code': euCode, 'eu_name': widget.endUserName};
-
-      setState(() {
-        _endUser = endUser;
-        _subscriptions = _extractList(results[1]);
-        _users = _extractList(results[2]);
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString().replaceAll('Exception: ', '');
-      });
-    }
+      final d = results[0]['data'];
+      _endUser = d is Map ? Map<String, dynamic>.from(d) : const {};
+      _subscriptions = _rows(results[1]);
+      _users = _rows(results[2]);
+      _limitVersion++;
+    });
   }
 
-  String get _euCode =>
-      _str(_endUser?['eu_code'] ?? widget.endUserCode) == '—'
-          ? widget.endUserCode
-          : _str(_endUser?['eu_code'] ?? widget.endUserCode);
+  void _snack(String message, {bool isError = false}) => AppToast.result(context, message, ok: !isError);
 
-  String get _displayName =>
-      _str(_endUser?['eu_name'] ?? widget.endUserName) == '—'
-          ? 'End User Details'
-          : _str(_endUser?['eu_name'] ?? widget.endUserName);
-
-  void _snack(String msg) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-
-  /// Activates / deactivates the end user (PUT /end-user/(de)activate/:eu_code).
-  Future<void> _toggleStatus(bool newActiveValue) async {
-    if (!newActiveValue) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder:
-            (ctx) => AlertDialog(
-              title: const Text('Deactivate end user?'),
-              content: Text(
-                '$_displayName will be marked inactive. You can activate it again later.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Deactivate'),
-                ),
-              ],
-            ),
-      );
+  Future<void> _toggleStatus() async {
+    final activate = !_active;
+    if (!activate) {
+      final ok = await showAppConfirm(context, title: 'Deactivate end user?', message: '$_name will be marked inactive. You can activate it again later.', confirmLabel: 'Deactivate', icon: Icons.person_off_outlined, tone: AppDialogTone.danger);
       if (ok != true || !mounted) return;
     }
-    setState(() => _isTogglingStatus = true);
+    setState(() => _toggling = true);
     final res =
-        newActiveValue
-            ? await ApiService.activateEndUser(_euCode)
-            : await ApiService.deactivateEndUser(_euCode);
+        activate
+            ? await ApiService.activateEndUser(_code)
+            : await ApiService.deactivateEndUser(_code);
     if (!mounted) return;
     final ok = res['status'] == 'success';
     setState(() {
-      _isTogglingStatus = false;
+      _toggling = false;
       if (ok) {
-        _endUser = Map<String, dynamic>.from(_endUser ?? {})
-          ..['inactive'] = newActiveValue ? 'N' : 'Y';
+        _endUser = {...?_endUser, 'inactive': activate ? 'N' : 'Y'};
       }
     });
     _snack(
       ok
           ? 'Status updated'
-          : res['message']?.toString() ?? 'Could not update the status',
-    );
+          : accountText(res['message']).isNotEmpty
+          ? accountText(res['message'])
+          : "Couldn't update the status.", isError: !ok);
   }
 
-  /// Renames the end user (PUT /end-user/name/:eu_code).
   Future<void> _rename() async {
-    final ctrl = TextEditingController(
-      text: _displayName == 'End User Details' ? '' : _displayName,
-    );
     final name = await showDialog<String>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('Rename end user'),
-            content: TextField(
-              controller: ctrl,
-              autofocus: true,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(labelText: 'End user name'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-                child: const Text('Save'),
-              ),
-            ],
-          ),
+      builder: (_) => _RenameDialog(initial: _name),
     );
-    ctrl.dispose();
-    if (name == null || name.isEmpty || !mounted) return;
-    final res = await ApiService.renameEndUser(_euCode, name);
+    if (name == null || name.isEmpty || name == _name || !mounted) return;
+    final res = await ApiService.renameEndUser(_code, name);
     if (!mounted) return;
     final ok = res['status'] == 'success';
-    if (ok) {
-      setState(
-        () =>
-            _endUser = Map<String, dynamic>.from(_endUser ?? {})
-              ..['eu_name'] = name,
-      );
-    }
+    if (ok) setState(() => _endUser = {...?_endUser, 'eu_name': name});
     _snack(
-      ok ? 'Name updated' : res['message']?.toString() ?? 'Could not rename',
-    );
+      ok
+          ? 'Name updated'
+          : accountText(res['message']).isNotEmpty
+          ? accountText(res['message'])
+          : "Couldn't rename this end user.", isError: !ok);
   }
 
-  String _str(dynamic v) =>
-      (v == null || v.toString() == 'null' || v.toString().trim().isEmpty)
-          ? '—'
-          : v.toString().trim();
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
-
-  // ── Navigate to subscription detail ───────────────────────────────────────
-  void _openSubscription(Map<String, dynamic> sub) {
-    final sln = _str(sub['serviceLineNumber'] ?? sub['service_line_number']);
-    if (sln == '—') return;
-    final nickname = _str(sub['nickname'] ?? sub['site_name'] ?? sln);
-    Navigator.push(
+  Future<void> _openSubscription(Map<String, dynamic> s) async {
+    final sln = accountText(s['serviceLineNumber']);
+    if (sln.isEmpty) return;
+    final nickname = accountText(s['nickname']);
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder:
             (_) => AdminSubscriptionDetailsPage(
               serviceLineNumber: sln,
-              title: nickname,
+              title: nickname.isNotEmpty ? nickname : sln,
             ),
       ),
     );
+    if (mounted) _load();
   }
 
-  // ── Navigate to user detail ────────────────────────────────────────────────
-  void _openUser(Map<String, dynamic> user) {
-    final userId = user['id']?.toString() ?? '';
-    if (userId.isEmpty || userId == 'null') return;
-    Navigator.push(
+  Future<void> _openUser(Map<String, dynamic> u) async {
+    final id = accountText(u['id']);
+    if (id.isEmpty) return;
+    await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => AdminUserDetailPage(userId: userId)),
+      MaterialPageRoute(builder: (_) => AdminUserDetailPage(userId: id)),
     );
+    if (mounted) _load();
   }
 
-  // ── Add User bottom sheet ──────────────────────────────────────────────────
-  void _showAddUserSheet() {
+  void _addUser() {
     showModalBottomSheet(
       context: context,
+      enableDrag: false,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       useSafeArea: true,
@@ -289,41 +192,13 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
           (_) => CreateUserSheet(
             currentUserRole: 'admin',
             prefilledRole: 'end_user',
-            prefilledCompanyCode: widget.endUserCode,
-            prefilledCompanyName: widget.endUserName,
+            prefilledCompanyCode: _code,
+            prefilledCompanyName: _name,
             onCreated: () {
-              _loadAll();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                    'User created successfully.',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  backgroundColor: _success,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  margin: const EdgeInsets.all(16),
-                ),
-              );
+              _snack('User invited — an email has been sent');
+              _load();
             },
-            onError: (msg) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    msg,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  backgroundColor: _primary,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  margin: const EdgeInsets.all(16),
-                ),
-              );
-            },
+            onError: (message) => _snack(message, isError: true),
           ),
     );
   }
@@ -331,721 +206,296 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _surfaceSubtle,
-      appBar: AppBar(
-        title: Column(
-          children: [
-            Text(_displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(
-              _euCode,
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.white70,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (!_loading && _error == null)
-            IconButton(
-              tooltip: 'Rename',
-              icon: const Icon(Icons.edit_outlined, size: 20),
-              onPressed: _rename,
-            ),
-        ],
-      ),
+      backgroundColor: AppColors.paperSubtle,
+      appBar: AppBar(title: const Text('End User')),
       body:
           _loading
-              ? _buildLoader()
+              ? const Center(child: CircularProgressIndicator())
               : _error != null
               ? _buildError()
               : RefreshIndicator(
-                onRefresh: _loadAll,
-                color: _primary,
-                strokeWidth: 2,
+                onRefresh: _load,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
                   children: [
-                    _buildEndUserCard(),
-                    const SizedBox(height: 12),
-                    AccountLimitCard(code: _euCode),
-                    const SizedBox(height: 12),
-                    _buildSubscriptionsCard(),
-                    const SizedBox(height: 12),
-                    _buildUsersCard(),
+                    _buildHeader(),
+                    const SizedBox(height: 14),
+                    AccountTabs(
+                      tabs: [
+                        ('Subscriptions', _subscriptions.length),
+                        ('Users', _users.length),
+                      ],
+                      selected: _tab,
+                      onSelected: (i) => setState(() => _tab = i),
+                    ),
+                    const SizedBox(height: 14),
+                    if (_tab == 0) _buildSubscriptions() else _buildUsers(),
                   ],
                 ),
               ),
     );
   }
 
-  Widget _buildEndUserCard() {
-    final e = _endUser ?? {};
-    final code = _str(
-      e['eu_code'] ?? e['code'] ?? e['customer_code'] ?? widget.endUserCode,
-    );
-    final name = _str(e['eu_name'] ?? e['name'] ?? widget.endUserName);
-    final customerCode = _str(e['customer_code']);
-    final inactiveRaw = _str(e['inactive'] ?? e['status']);
-    final isActive =
-        inactiveRaw == 'N' ||
-        inactiveRaw == '0' ||
-        inactiveRaw.toUpperCase() == 'ACTIVE';
-
-    return _SectionCard(
-      icon: Icons.person_outline_rounded,
-      iconColor: _primary,
-      title: 'End User',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _StatusBadge(
-            label: isActive ? 'Active' : 'Inactive',
-            color: isActive ? _success : _primaryDark,
-          ),
-          const SizedBox(width: 8),
-          Transform.scale(
-            scale: 0.78,
-            alignment: Alignment.centerRight,
-            child: Switch(
-              value: isActive,
-              onChanged: _isTogglingStatus ? null : _toggleStatus,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          _KVRow(label: 'Name', value: name),
-          const SizedBox(height: 10),
-          _KVRow(label: 'EU Code', value: code),
-          if (customerCode != '—') const SizedBox(height: 10),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubscriptionsCard() {
-    return _SectionCard(
-      icon: Icons.router_rounded,
-      iconColor: _purple,
-      title: 'Subscriptions',
-      trailing: _CountBadge(count: _subscriptions.length, color: _purple),
-      child:
-          _subscriptions.isEmpty
-              ? const _EmptyRow(message: 'No subscriptions found')
-              : Column(
-                children:
-                    _subscriptions.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final s = entry.value;
-                      final nickname = _str(s['nickname'] ?? s['site_name']);
-                      final sln = _str(
-                        s['serviceLineNumber'] ?? s['service_line_number'],
-                      );
-                      final kit = _str(s['kit_number'] ?? s['kitNumber']);
-                      final address = _str(s['address']);
-                      final startDate = _str(s['startDate'] ?? s['start_date']);
-                      final endDate = _str(s['endDate'] ?? s['end_date']);
-                      final totalGB = _str(s['totalPriorityGB']);
-                      final dataplan = _str(s['dataplan']);
-                      final activeRaw = _str(s['active'] ?? s['status']);
-                      final isActive =
-                          activeRaw.toUpperCase() == 'ACTIVE' ||
-                          activeRaw == '1';
-                      final usedGB = totalGB == '—' ? '0.00' : totalGB;
-                      final planGB =
-                          (dataplan == '—' || dataplan == '0') ? '0' : dataplan;
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (i > 0) const _HDivider(),
-                          InkWell(
-                            onTap:
-                                sln == '—' ? null : () => _openSubscription(s),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              nickname,
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w700,
-                                                color: _ink,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              sln,
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: _inkTertiary,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _StatusBadge(
-                                            label:
-                                                isActive
-                                                    ? 'ACTIVE'
-                                                    : 'INACTIVE',
-                                            color:
-                                                isActive
-                                                    ? _success
-                                                    : _primaryDark,
-                                          ),
-                                          const SizedBox(width: 6),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  _KVRow(
-                                    label: 'Data Usage',
-                                    value: '$usedGB GB / $planGB GB',
-                                  ),
-                                  if (kit != '—') ...[
-                                    const SizedBox(height: 6),
-                                    _KVRow(label: 'Kit Number', value: kit),
-                                  ],
-                                  if (address != '—') ...[
-                                    const SizedBox(height: 6),
-                                    _KVRow(label: 'Address', value: address),
-                                  ],
-                                  if (startDate != '—') ...[
-                                    const SizedBox(height: 6),
-                                    _KVRow(
-                                      label: 'Start Date',
-                                      value: startDate,
-                                    ),
-                                  ],
-                                  if (endDate != '—' &&
-                                      endDate != '0000-00-00') ...[
-                                    const SizedBox(height: 6),
-                                    _KVRow(label: 'End Date', value: endDate),
-                                  ],
-                                  if (sln != '—') ...[
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      children: [
-                                        const Spacer(),
-                                        // Container(
-                                        //   padding: const EdgeInsets.symmetric(
-                                        //     horizontal: 10,
-                                        //     vertical: 5,
-                                        //   ),
-                                        //   decoration: BoxDecoration(
-                                        //     color: _purple.withOpacity(0.07),
-                                        //     borderRadius: BorderRadius.circular(
-                                        //       8,
-                                        //     ),
-                                        //     border: Border.all(
-                                        //       color: _purple.withOpacity(0.2),
-                                        //     ),
-                                        //   ),
-                                        //   child: const Row(
-                                        //     mainAxisSize: MainAxisSize.min,
-                                        //     children: [
-                                        //       Icon(
-                                        //         Icons.open_in_new_rounded,
-                                        //         size: 11,
-                                        //         color: _purple,
-                                        //       ),
-                                        //       SizedBox(width: 4),
-                                        //       Text(
-                                        //         'View Details',
-                                        //         style: TextStyle(
-                                        //           fontSize: 11,
-                                        //           fontWeight: FontWeight.w600,
-                                        //           color: _purple,
-                                        //         ),
-                                        //       ),
-                                        //     ],
-                                        //   ),
-                                        // ),
-                                      ],
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
-              ),
-    );
-  }
-
-  Widget _buildUsersCard() {
-    return _SectionCard(
-      icon: Icons.people_outline_rounded,
-      iconColor: _success,
-      title: 'Users',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _CountBadge(count: _users.length, color: _success),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _showAddUserSheet,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: _ink,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add, size: 13, color: Colors.white),
-                  SizedBox(width: 4),
-                  Text(
-                    'Add User',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-      child:
-          _users.isEmpty
-              ? const _EmptyRow(message: 'No users found')
-              : Column(
-                children:
-                    _users.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final u = entry.value;
-                      final firstName = _str(u['first_name']);
-                      final lastName = _str(u['last_name']);
-                      final name = _str(
-                        u['name'] ??
-                            (firstName != '—' || lastName != '—'
-                                ? '$firstName $lastName'.trim()
-                                : null),
-                      );
-                      final email = _str(u['email']);
-                      final role = _str(u['role']);
-                      final position = _str(u['position']);
-                      final inactiveRaw = _str(u['inactive']);
-                      final isActive =
-                          inactiveRaw == 'N' ||
-                          inactiveRaw == '0' ||
-                          inactiveRaw.toUpperCase() == 'ACTIVE';
-                      final initials = _initials(name == '—' ? 'U' : name);
-                      final userId = u['id']?.toString() ?? '';
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (i > 0) const _HDivider(),
-                          InkWell(
-                            onTap: () => _openUser(u),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: _primary.withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        initials,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w800,
-                                          color: _primary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                name,
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: _ink,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            _StatusBadge(
-                                              label:
-                                                  isActive
-                                                      ? 'Active'
-                                                      : 'Inactive',
-                                              color:
-                                                  isActive
-                                                      ? _success
-                                                      : _primaryDark,
-                                            ),
-                                          ],
-                                        ),
-                                        if (email != '—') ...[
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            email,
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: _inkSecondary,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                        if (role != '—' || position != '—') ...[
-                                          const SizedBox(height: 6),
-                                          Wrap(
-                                            spacing: 6,
-                                            runSpacing: 4,
-                                            children: [
-                                              if (role != '—')
-                                                _Chip(
-                                                  label: role.toUpperCase(),
-                                                  icon: Icons.shield_outlined,
-                                                ),
-                                              if (position != '—')
-                                                _Chip(
-                                                  label: position,
-                                                  icon:
-                                                      Icons
-                                                          .work_outline_rounded,
-                                                ),
-                                            ],
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // Chevron — indicates row is tappable
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
-              ),
-    );
-  }
-
-  Widget _buildLoader() => const Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
-        ),
-        SizedBox(height: 14),
-        Text(
-          'Loading end user details…',
-          style: TextStyle(fontSize: 13, color: _inkSecondary),
-        ),
-      ],
-    ),
-  );
-
   Widget _buildError() => Center(
     child: Padding(
-      padding: const EdgeInsets.all(40),
+      padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: _danger.withOpacity(0.08),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.error_outline_rounded,
-              color: _danger,
-              size: 26,
-            ),
+          const Icon(Icons.error_outline, size: 34, color: AppColors.inkFaint),
+          const SizedBox(height: 10),
+          const Text(
+            'End user not found',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 16),
-          Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFFE90408),
-              height: 1.5,
+          if (_error!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
             ),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: _loadAll,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brand,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: const Text(
-              'Try Again',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
+          ],
+          const SizedBox(height: 14),
+          OutlinedButton(onPressed: _load, child: const Text('Try again')),
         ],
       ),
     ),
   );
-}
 
-// ── Shared sub-widgets ────────────────────────────────────────────────────────
-
-class _SectionCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final Widget? trailing;
-  final Widget child;
-
-  const _SectionCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.child,
-    this.trailing,
-  });
-
-  static const _ink = Color(0xFF111111);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFD7D7D7);
-  static const _surfaceSubtle = Color(0xFFF8F8F8);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+  Widget _buildHeader() {
+    final customer = accountText(_endUser?['customer_code']);
+    const compact = Size(0, 34);
+    const padding = EdgeInsets.symmetric(horizontal: 14);
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(9),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: AppColors.navy,
+                child: Text(
+                  accountInitials(_name),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
                   ),
-                  child: Icon(icon, color: iconColor, size: 17),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: _ink,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _name.isEmpty ? '—' : _name,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        height: 1.2,
+                        letterSpacing: -0.3,
+                        color: AppColors.navy,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$_code  ·  ${customer.isEmpty ? '—' : customer}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.inkFaint,
+                      ),
+                    ),
+                  ],
                 ),
-                if (trailing != null) trailing!,
+              ),
+              IconButton(
+                tooltip: 'Rename',
+                visualDensity: VisualDensity.compact,
+                onPressed: _rename,
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: AppColors.inkFaint,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 6,
+              children: [
+                DotBadge(
+                  _active ? 'ACTIVE' : 'INACTIVE',
+                  color: _active ? AppColors.successInk : AppColors.inkMuted,
+                ),
+                if (_active)
+                  TextButton(
+                    onPressed: _toggling ? null : _toggleStatus,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.ink,
+                      minimumSize: compact,
+                      padding: padding,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Deactivate'),
+                  )
+                else
+                  OutlinedButton(
+                    onPressed: _toggling ? null : _toggleStatus,
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: compact,
+                      padding: padding,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Activate'),
+                  ),
               ],
             ),
-          ),
-          Container(height: 1, color: _surfaceSubtle),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            child: child,
           ),
         ],
       ),
     );
   }
-}
 
-class _HDivider extends StatelessWidget {
-  const _HDivider();
-  @override
-  Widget build(BuildContext context) =>
-      Container(height: 1, color: const Color(0xFFF4F4F4));
-}
-
-class _StatusBadge extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _StatusBadge({required this.label, required this.color});
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: color.withOpacity(0.25)),
-    ),
-    child: Text(
-      label,
-      style: TextStyle(
-        fontSize: 9,
-        fontWeight: FontWeight.w800,
-        color: color,
-        letterSpacing: 0.4,
-      ),
-    ),
-  );
-}
-
-class _CountBadge extends StatelessWidget {
-  final int count;
-  final Color color;
-  const _CountBadge({required this.count, required this.color});
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      '$count',
-      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color),
-    ),
-  );
-}
-
-class _KVRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _KVRow({required this.label, required this.value});
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(
-        width: 110,
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Color(0xFFA8A8A8),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(
-          value,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Color(0xFF000000),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  const _Chip({required this.label, required this.icon});
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF4F4F4),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
+  Widget _buildSubscriptions() {
+    if (_subscriptions.isEmpty) {
+      return const AccountEmptyCard('No subscriptions.');
+    }
+    return Column(
       children: [
-        Icon(icon, size: 11, color: const Color(0xFFA8A8A8)),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: Color(0xFF6F6F6F),
-            fontWeight: FontWeight.w500,
+        for (final s in _subscriptions)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildSubscriptionCard(s),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSubscriptionCard(Map<String, dynamic> s) {
+    final sln = accountText(s['serviceLineNumber']);
+    final nickname = accountText(s['nickname']);
+    final used = num.tryParse(accountText(s['totalPriorityGB']));
+    final plan = accountText(s['dataplan']);
+    final kit = accountText(s['kit_number']);
+    final status = subscriptionStatusLabel(s['active'] ?? s['status']);
+    return AccountRowCard(
+      onTap: () => _openSubscription(s),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  nickname.isNotEmpty ? nickname : sln,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                    color: AppColors.navy,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              DotBadge(
+                status,
+                color:
+                    status == 'ACTIVE'
+                        ? AppColors.successInk
+                        : AppColors.inkMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            sln,
+            style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: 10),
+          AccountDetailRow(
+            'Current plan usage',
+            '${(used ?? 0).toStringAsFixed(2)} GB / '
+                '${plan.isEmpty ? '—' : plan} GB',
+          ),
+          const SizedBox(height: 4),
+          AccountDetailRow('Kit', kit.isEmpty ? '—' : kit),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUsers() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            onPressed: _addUser,
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize: const Size(0, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: const Icon(Icons.add_rounded, size: 17),
+            label: const Text('Add user', style: TextStyle(fontSize: 12.5)),
           ),
         ),
+        const SizedBox(height: 12),
+        AccountLimitCard(key: ValueKey(_limitVersion), code: _code),
+        const SizedBox(height: 12),
+        if (_users.isEmpty)
+          const AccountEmptyCard('No users.')
+        else
+          for (final u in _users)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: AccountUserCard(user: u, onTap: () => _openUser(u)),
+            ),
       ],
-    ),
-  );
+    );
+  }
 }
 
-class _EmptyRow extends StatelessWidget {
-  final String message;
-  const _EmptyRow({required this.message});
+class _RenameDialog extends StatefulWidget {
+  const _RenameDialog({required this.initial});
+  final String initial;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 16),
-    child: Center(
-      child: Text(
-        message,
-        style: const TextStyle(fontSize: 13, color: Color(0xFFA8A8A8)),
-      ),
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final _ctrl = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AppDialog(
+    icon: Icons.edit_outlined,
+    title: 'Rename end user',
+    content: TextField(
+      controller: _ctrl,
+      autofocus: true,
+      textCapitalization: TextCapitalization.characters,
+      decoration: const InputDecoration(hintText: 'End user name'),
     ),
+    confirmLabel: 'Save',
+    onConfirm: () => Navigator.pop(context, _ctrl.text.trim()),
+    cancelLabel: 'Cancel',
+    onCancel: () => Navigator.pop(context),
   );
 }

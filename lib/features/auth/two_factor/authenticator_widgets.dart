@@ -1,3 +1,4 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
@@ -74,22 +75,14 @@ class AuthenticatorLinkPanel extends StatelessWidget {
       } catch (_) {}
     }
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No authenticator app found. Install Google or Microsoft '
-            'Authenticator, or enter the setup key manually.',
-          ),
-        ),
-      );
+      AppToast.error(context, 'No authenticator app found. Install Google or Microsoft '
+            'Authenticator, or enter the setup key manually.');
     }
   }
 
   void _copySecret(BuildContext context) {
     Clipboard.setData(ClipboardData(text: info.secret.replaceAll(' ', '')));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Setup key copied')));
+    AppToast.success(context, 'Setup key copied');
   }
 
   @override

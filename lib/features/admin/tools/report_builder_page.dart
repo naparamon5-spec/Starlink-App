@@ -1,8 +1,11 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
+import 'package:starlink_app/core/utils/billing_export.dart';
 import 'package:starlink_app/core/utils/sheet_export.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/shared/widgets/ui_kit.dart';
@@ -81,6 +84,70 @@ const _opLabels = {
   'not_empty': 'is not empty',
 };
 
+/// The web portal's address for a report setup, so it opens there as built.
+String reportShareLink(Map<String, dynamic> request) {
+  final code = base64Url.encode(utf8.encode(json.encode(request)));
+  return 'https://starlink.ardentnetworks.com.ph/report-builder'
+      '?r=${code.replaceAll('=', '')}';
+}
+
+String _humanize(String v) {
+  final t = v.replaceAll('_', ' ').trim();
+  return t.isEmpty ? t : '${t[0].toUpperCase()}${t.substring(1)}';
+}
+
+/// A result cell as the web portal shows it. [options] are an enum field's.
+String reportCellText(dynamic value, String type, {List<dynamic>? options}) {
+  if (value == null || '$value'.isEmpty) return '—';
+  final text = '$value';
+  final n = num.tryParse(text);
+  switch (type) {
+    case 'money':
+      return n == null ? text : billingMoney(n);
+    case 'gb':
+      return n == null ? text : '${NumberFormat('#,##0.00').format(n)} GB';
+    case 'percent':
+      return n == null ? text : '${NumberFormat('#,##0.0').format(n)}%';
+    case 'number':
+      return n == null
+          ? text
+          : NumberFormat(
+            n == n.roundToDouble() ? '#,##0' : '#,##0.00',
+          ).format(n);
+    case 'date':
+      return billingDate(value);
+    case 'datetime':
+      final d = DateTime.tryParse(text.replaceFirst(' ', 'T'));
+      if (d == null || d.year < 1900) return '—';
+      return DateFormat('MMM dd, y, h:mm a').format(d.toLocal());
+    case 'enum':
+      for (final o in options ?? const []) {
+        if (o is Map && '${o['value']}' == text) return '${o['label']}';
+      }
+      return _humanize(text);
+    default:
+      return text;
+  }
+}
+
+/// A result cell for Excel: real numbers, no placeholder dates, enum labels.
+Object? reportExportValue(
+  dynamic value,
+  String type, {
+  List<dynamic>? options,
+}) {
+  if (value == null || '$value'.isEmpty) return null;
+  final text = '$value';
+  if (_numeric.contains(type)) return num.tryParse(text) ?? text;
+  if (_dates.contains(type)) return text.startsWith('0000') ? null : text;
+  if (type == 'enum') {
+    for (final o in options ?? const []) {
+      if (o is Map && '${o['value']}' == text) return '${o['label']}';
+    }
+  }
+  return text;
+}
+
 dynamic _defaultValue(String op) {
   if (op == 'in' || op == 'not_in') return <String>[];
   if (op == 'between') return ['', ''];
@@ -127,6 +194,33 @@ const _templates = <Map<String, dynamic>>[
       ],
       'measures': [],
       'sort': {'key': 'g0', 'dir': 'desc'},
+    },
+  },
+  {
+    'name': 'Tickets open longer than 7 days',
+    'description': 'Unresolved tickets, oldest first.',
+    'request': {
+      'source': 'tickets',
+      'columns': [
+        'id',
+        'subject',
+        'company',
+        'status',
+        'assigned_agent',
+        'created_at',
+        'days_open',
+      ],
+      'filters': [
+        {
+          'field': 'status',
+          'op': 'in',
+          'value': ['open', 'in_progress'],
+        },
+        {'field': 'days_open', 'op': 'gte', 'value': 7},
+      ],
+      'groupBy': [],
+      'measures': [],
+      'sort': {'key': 'days_open', 'dir': 'desc'},
     },
   },
   {
@@ -254,6 +348,10 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
   bool _running = false;
   String? _runError;
   Map<String, dynamic>? _result;
+  int _page = 0;
+  final _resultKey = GlobalKey();
+
+  static const _perPage = 25;
 
   @override
   void initState() {
@@ -282,6 +380,9 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
             res['message']?.toString() ?? 'Could not load report sources';
       }
     });
+    if (_sources.isNotEmpty && _source.isEmpty) {
+      _pickSource('${_sources.first['key']}');
+    }
   }
 
   Map<String, dynamic>? get _src => _sources
@@ -326,9 +427,7 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
   void _applyTemplate(Map<String, dynamic> t) {
     final r = Map<String, dynamic>.from(t['request'] as Map);
     if (!_sources.any((s) => s['key'] == r['source'])) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("This report isn't available to you")),
-      );
+      AppToast.error(context, "This report isn't available to you");
       return;
     }
     setState(() {
@@ -415,7 +514,7 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
   // ── Run ────────────────────────────────────────────────────────────────────
 
   Future<void> _run() async {
-    if (_source.isEmpty) return;
+    if (!_canRun || _running) return;
     setState(() {
       _running = true;
       _runError = null;
@@ -435,9 +534,20 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
       _running = false;
       if (res['status'] == 'success' && data is Map) {
         _result = Map<String, dynamic>.from(data);
+        _page = 0;
       } else {
         _result = null;
         _runError = res['message']?.toString() ?? "The report couldn't be run";
+      }
+    });
+    // The form is long: bring the outcome into view.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final at = _resultKey.currentContext;
+      if (at != null && at.mounted) {
+        Scrollable.ensureVisible(
+          at,
+          duration: const Duration(milliseconds: 250),
+        );
       }
     });
   }
@@ -454,65 +564,168 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
           .map((m) => Map<String, dynamic>.from(m))
           .toList();
 
+  List<dynamic>? _optionsOf(Map<String, dynamic> col) =>
+      _field('${col['field'] ?? col['key']}')?['options'] as List?;
+
   void _export() {
     final cols = _resultColumns;
-    if (cols.isEmpty) return;
+    final rows = _resultRows;
+    if (cols.isEmpty || rows.isEmpty) return;
+    if (_result?['truncated'] == true) {
+      final total = int.tryParse('${_result?['total']}') ?? rows.length;
+      AppToast.info(context, 'Only the first ${NumberFormat('#,##0').format(rows.length)} of '
+            '${NumberFormat('#,##0').format(total)} rows are in this file.');
+    }
     final stamp = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    exportSheets(context, 'report-${_source}-$stamp.xlsx', [
+    final label = (_src?['label'] ?? 'Report').toString();
+    exportSheets(context, 'report-$_source-$stamp.xlsx', [
       ExportSheet(
-        (_src?['label'] ?? 'Report').toString(),
+        label.length > 31 ? label.substring(0, 31) : label,
         [for (final c in cols) '${c['label']}'],
         [
-          for (final r in _resultRows)
+          for (final r in rows)
             [
               for (final c in cols)
-                _numeric.contains(c['type'])
-                    ? (num.tryParse('${r[c['key']] ?? ''}') ?? r[c['key']])
-                    : r[c['key']],
+                reportExportValue(
+                  r[c['key']],
+                  '${c['type']}',
+                  options: _optionsOf(c),
+                ),
             ],
         ],
       ),
     ]);
   }
 
-  // ── UI ─────────────────────────────────────────────────────────────────────
+  bool get _canRun => _source.isNotEmpty && (_grouped || _columns.isNotEmpty);
+
+  Map<String, dynamic> get _request => {
+    'source': _source,
+    'columns': _columns,
+    'filters': _filters,
+    'groupBy': _groupBy,
+    'measures': _measures,
+    'sort': _sort,
+    'limit': _limit,
+  };
+
+  Future<void> _copyLink() async {
+    final toast = AppToast.of(context);
+    await Clipboard.setData(ClipboardData(text: reportShareLink(_request)));
+    toast.showSuccess('Link copied. Anyone with staff access can open this report.');
+  }
+
+  void _openTemplates() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder:
+          (ctx) => ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.8,
+            ),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                    child: Text(
+                      'Templates',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  ),
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+                      children: [
+                        for (final t in _templates)
+                          ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                            ),
+                            title: Text(
+                              '${t['name']}',
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.ink,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${t['description']}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.inkMuted,
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _applyTemplate(t);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+    );
+  }
+
+  /// Keys and labels of the result's columns, the same ones the API returns.
+  List<SelectOption<String>> get _outputColumns {
+    String label(dynamic key) => '${_field('$key')?['label'] ?? key}';
+    if (!_grouped) {
+      return [for (final k in _columns) SelectOption(k, label(k))];
+    }
+    const fn = {'sum': 'Sum', 'avg': 'Average', 'min': 'Min', 'max': 'Max'};
+    return [
+      for (var i = 0; i < _groupBy.length; i++)
+        SelectOption(
+          'g$i',
+          label(_groupBy[i]['field']) +
+              (_groupBy[i]['bucket'] != null
+                  ? ' (${_groupBy[i]['bucket']})'
+                  : ''),
+        ),
+      const SelectOption('count', 'Count'),
+      for (var i = 0; i < _measures.length; i++)
+        SelectOption(
+          'm$i',
+          '${fn[_measures[i]['fn']]} of '
+              '${label(_measures[i]['field']).toLowerCase()}',
+        ),
+    ];
+  }
+
+  /// A sort on a column no longer shown falls back to the first column.
+  void _keepSortValid() {
+    final cols = _outputColumns;
+    if (_sort != null && !cols.any((c) => c.value == _sort!['key'])) {
+      _sort =
+          cols.isEmpty
+              ? null
+              : {'key': cols.first.value, 'dir': _sort!['dir'] ?? 'asc'};
+    }
+  }
+
+  // ── UI ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    _keepSortValid();
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Report Builder'),
-        actions: [
-          IconButton(
-            tooltip: 'Export to Excel',
-            onPressed: _resultRows.isEmpty ? null : _export,
-            icon: const Icon(Icons.download_rounded),
-          ),
-        ],
-      ),
-      bottomNavigationBar:
-          _source.isEmpty
-              ? null
-              : SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: ElevatedButton.icon(
-                    onPressed: _running ? null : _run,
-                    icon:
-                        _running
-                            ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                            : const Icon(Icons.play_arrow_rounded),
-                    label: Text(_running ? 'Running…' : 'Run report'),
-                  ),
-                ),
-              ),
+      backgroundColor: AppColors.paperSubtle,
+      appBar: AppBar(title: const Text('Report Builder')),
       body:
           _loadingSources
               ? const Center(child: CircularProgressIndicator())
@@ -533,80 +746,281 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
                   ],
                 ),
               )
-              : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              : Column(
                 children: [
-                  _section('READY-MADE REPORTS'),
-                  FadingHScroll(
-                    child: Row(
+                  _buildActions(),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
                       children: [
-                        for (var i = 0; i < _templates.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 10),
-                          _TemplateCard(
-                            t: _templates[i],
-                            onTap: () => _applyTemplate(_templates[i]),
-                          ),
-                        ],
+                        _buildSetup(),
+                        const SizedBox(height: 16),
+                        KeyedSubtree(key: _resultKey, child: _buildResult()),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  _section('SOURCE'),
-                  _card(
-                    AppSelect<String>(
-                      value: _source.isEmpty ? null : _source,
-                      hint: 'What do you want to report on?',
-                      options: [
-                        for (final s in _sources)
-                          SelectOption('${s['key']}', '${s['label']}'),
-                      ],
-                      onChanged: _pickSource,
-                    ),
-                    note: _src?['description']?.toString(),
-                  ),
-                  if (_source.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    _buildFilters(),
-                    const SizedBox(height: 16),
-                    _buildGrouping(),
-                    if (!_grouped) ...[
-                      const SizedBox(height: 16),
-                      _buildColumns(),
-                    ],
-                    const SizedBox(height: 16),
-                    _buildSortLimit(),
-                    const SizedBox(height: 20),
-                    _buildResult(),
-                  ],
                 ],
               ),
     );
   }
 
+  /// Stays on screen while the form and results scroll.
+  Widget _buildActions() {
+    const pad = EdgeInsets.symmetric(horizontal: 6);
+    const text = TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600);
+    Widget fit(Widget child) => FittedBox(fit: BoxFit.scaleDown, child: child);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      decoration: const BoxDecoration(
+        color: AppColors.paper,
+        border: Border(bottom: BorderSide(color: AppColors.line)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: OutlinedButton(
+              onPressed: _openTemplates,
+              style: OutlinedButton.styleFrom(padding: pad),
+              child: fit(
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.dashboard_outlined, size: 16),
+                    SizedBox(width: 5),
+                    Text('Templates', style: text),
+                    SizedBox(width: 2),
+                    Icon(Icons.keyboard_arrow_down_rounded, size: 16),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            flex: 4,
+            child: TextButton(
+              onPressed: _canRun ? _copyLink : null,
+              style: TextButton.styleFrom(
+                padding: pad,
+                foregroundColor: AppColors.ink,
+              ),
+              child: fit(
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.link_rounded, size: 16),
+                    SizedBox(width: 5),
+                    Text('Copy link', style: text),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            flex: 3,
+            child: TextButton(
+              onPressed: _resultRows.isEmpty ? null : _export,
+              style: TextButton.styleFrom(
+                padding: pad,
+                foregroundColor: AppColors.ink,
+              ),
+              child: fit(
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.file_download_outlined, size: 16),
+                    SizedBox(width: 5),
+                    Text('Export', style: text),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSetup() {
+    final description = _src?['description']?.toString() ?? '';
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppSelect<String>(
+            label: 'Report on',
+            sheetTitle: 'Report on',
+            value: _source.isEmpty ? null : _source,
+            hint: 'Pick a source',
+            options: [
+              for (final s in _sources)
+                SelectOption('${s['key']}', '${s['label']}'),
+            ],
+            onChanged: _pickSource,
+          ),
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(description, style: _noteStyle),
+          ],
+          if (_source.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            _buildGrouping(),
+            const SizedBox(height: 18),
+            if (_grouped) _buildTotals() else _buildColumns(),
+            const SizedBox(height: 18),
+            _buildFilters(),
+            const SizedBox(height: 18),
+            _buildSortLimit(),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _canRun && !_running ? _run : null,
+                icon:
+                    _running
+                        ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                        : const Icon(Icons.play_arrow_rounded),
+                label: Text(_running ? 'Running…' : 'Run report'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static const _noteStyle = TextStyle(fontSize: 12, color: AppColors.inkFaint);
+
+  /// Section title with its actions on the right, like the web form.
+  Widget _heading(String title, List<Widget> actions) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            title.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+              color: AppColors.inkMuted,
+            ),
+          ),
+        ),
+        ...actions,
+      ],
+    ),
+  );
+
+  Widget _link(String label, VoidCallback onTap, {bool add = false}) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(AppRadius.sm),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (add) ...[
+            const Icon(Icons.add_rounded, size: 15, color: AppColors.brand),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.brand,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _removeButton(String tooltip, VoidCallback onTap) => IconButton(
+    tooltip: tooltip,
+    visualDensity: VisualDensity.compact,
+    onPressed: onTap,
+    icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.inkFaint),
+  );
+
   Widget _buildColumns() {
+    final defaults = List<String>.from(_src?['defaultColumns'] ?? const []);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _section('COLUMNS'),
-        _card(
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final f in _fields)
-                TogglePill(
-                  label: '${f['label']}',
-                  selected: _columns.contains(f['key']),
-                  onChanged:
-                      (v) => setState(() {
-                        if (v) {
-                          _columns.add(f['key']);
-                        } else {
-                          _columns.remove(f['key']);
-                        }
-                      }),
+        _heading('Columns', [
+          _link(
+            'All',
+            () => setState(
+              () => _columns = [for (final f in _fields) '${f['key']}'],
+            ),
+          ),
+          const SizedBox(width: 6),
+          _link('Default', () => setState(() => _columns = [...defaults])),
+        ]),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.line),
+          ),
+          child: LayoutBuilder(
+            builder:
+                (context, box) => Wrap(
+                  children: [
+                    for (final f in _fields)
+                      SizedBox(
+                        width: box.maxWidth / 2,
+                        child: InkWell(
+                          onTap:
+                              () => setState(() {
+                                if (!_columns.remove(f['key'])) {
+                                  _columns.add('${f['key']}');
+                                }
+                              }),
+                          child: Row(
+                            children: [
+                              IgnorePointer(
+                                child: Checkbox(
+                                  value: _columns.contains(f['key']),
+                                  onChanged: (_) {},
+                                  visualDensity: const VisualDensity(
+                                    horizontal: -4,
+                                    vertical: -4,
+                                  ),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  activeColor: AppColors.brand,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Expanded(
+                                child: Text(
+                                  '${f['label']}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-            ],
           ),
         ),
       ],
@@ -617,23 +1031,9 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(child: _section('FILTERS')),
-            TextButton.icon(
-              onPressed: _addFilter,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add filter'),
-            ),
-          ],
-        ),
+        _heading('Filters', [_link('Add', _addFilter, add: true)]),
         if (_filters.isEmpty)
-          _card(
-            const Text(
-              'No filters: every row is included.',
-              style: TextStyle(color: AppColors.inkMuted, fontSize: 13),
-            ),
-          )
+          const Text('No filters: every row is included.', style: _noteStyle)
         else
           for (var i = 0; i < _filters.length; i++) ...[
             _FilterEditor(
@@ -643,7 +1043,7 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
               onChanged: (f) => setState(() => _filters[i] = f),
               onRemove: () => setState(() => _filters.removeAt(i)),
             ),
-            const SizedBox(height: 8),
+            if (i < _filters.length - 1) const SizedBox(height: 8),
           ],
       ],
     );
@@ -651,134 +1051,123 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
 
   Widget _buildGrouping() {
     final groupable = _fields.where((f) => f['type'] != 'id').toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _heading('Group by', [
+          if (_groupBy.length < 2) _link('Add', _addGroup, add: true),
+        ]),
+        if (_groupBy.isEmpty)
+          Text(
+            'No grouping: one row per '
+            '${'${_src?['label'] ?? 'record'}'.toLowerCase().replaceFirst(RegExp(r's$'), '')}.',
+            style: _noteStyle,
+          ),
+        for (var i = 0; i < _groupBy.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: AppSelect<String>(
+                    dense: true,
+                    value: _groupBy[i]['field'],
+                    options: [
+                      for (final f in groupable)
+                        SelectOption('${f['key']}', '${f['label']}'),
+                    ],
+                    onChanged:
+                        (v) => setState(() => _groupBy[i] = _groupFor(v)),
+                  ),
+                ),
+                if (_dates.contains(_field(_groupBy[i]['field'])?['type'])) ...[
+                  const SizedBox(width: 6),
+                  Expanded(
+                    flex: 2,
+                    child: AppSelect<String>(
+                      dense: true,
+                      value: _groupBy[i]['bucket'] ?? 'month',
+                      options: const [
+                        SelectOption('day', 'Day'),
+                        SelectOption('week', 'Week'),
+                        SelectOption('month', 'Month'),
+                        SelectOption('year', 'Year'),
+                      ],
+                      onChanged:
+                          (v) => setState(() => _groupBy[i]['bucket'] = v),
+                    ),
+                  ),
+                ],
+                _removeButton('Remove grouping', () => _removeGroup(i)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTotals() {
     final measurable =
         _fields.where((f) => _measurable.contains(f['type'])).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(child: _section('GROUP BY')),
-            if (_groupBy.length < 2)
-              TextButton.icon(
-                onPressed: _addGroup,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Group'),
+        _heading('Totals', [
+          if (measurable.isNotEmpty)
+            _link(
+              'Add',
+              () => setState(
+                () => _measures.add({
+                  'field': measurable.first['key'],
+                  'fn': 'sum',
+                }),
               ),
-          ],
-        ),
-        if (_groupBy.isEmpty)
-          _card(
-            const Text(
-              'Not grouped: one row per record.',
-              style: TextStyle(color: AppColors.inkMuted, fontSize: 13),
+              add: true,
             ),
-          )
-        else
-          _card(
-            Column(
+        ]),
+        Text(
+          measurable.isEmpty
+              ? 'Each group shows its row count.'
+              : 'Each group shows its row count, plus any totals added here.',
+          style: _noteStyle,
+        ),
+        for (var i = 0; i < _measures.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
               children: [
-                for (var i = 0; i < _groupBy.length; i++)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: AppSelect<String>(
-                          dense: true,
-                          value: _groupBy[i]['field'],
-                          options: [
-                            for (final f in groupable)
-                              SelectOption('${f['key']}', '${f['label']}'),
-                          ],
-                          onChanged:
-                              (v) => setState(() => _groupBy[i] = _groupFor(v)),
-                        ),
-                      ),
-                      if (_dates.contains(
-                        _field(_groupBy[i]['field'])?['type'],
-                      )) ...[
-                        const SizedBox(width: 8),
-                        AppSelect<String>(
-                          dense: true,
-                          value: _groupBy[i]['bucket'] ?? 'month',
-                          options: const [
-                            SelectOption('day', 'Day'),
-                            SelectOption('week', 'Week'),
-                            SelectOption('month', 'Month'),
-                            SelectOption('year', 'Year'),
-                          ],
-                          onChanged:
-                              (v) => setState(() => _groupBy[i]['bucket'] = v),
-                        ),
-                      ],
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => _removeGroup(i),
-                      ),
+                Expanded(
+                  flex: 2,
+                  child: AppSelect<String>(
+                    dense: true,
+                    value: _measures[i]['fn'],
+                    options: const [
+                      SelectOption('sum', 'Sum'),
+                      SelectOption('avg', 'Average'),
+                      SelectOption('min', 'Min'),
+                      SelectOption('max', 'Max'),
                     ],
+                    onChanged: (v) => setState(() => _measures[i]['fn'] = v),
                   ),
-                if (measurable.isNotEmpty) ...[
-                  const Divider(),
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Totals (besides the count)',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: AppColors.inkMuted,
-                          ),
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed:
-                            () => setState(
-                              () => _measures.add({
-                                'field': measurable.first['key'],
-                                'fn': 'sum',
-                              }),
-                            ),
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Total'),
-                      ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  flex: 3,
+                  child: AppSelect<String>(
+                    dense: true,
+                    value: _measures[i]['field'],
+                    options: [
+                      for (final f in measurable)
+                        SelectOption('${f['key']}', '${f['label']}'),
                     ],
+                    onChanged: (v) => setState(() => _measures[i]['field'] = v),
                   ),
-                  for (var i = 0; i < _measures.length; i++)
-                    Row(
-                      children: [
-                        AppSelect<String>(
-                          dense: true,
-                          value: _measures[i]['fn'],
-                          options: const [
-                            SelectOption('sum', 'Sum'),
-                            SelectOption('avg', 'Average'),
-                            SelectOption('min', 'Min'),
-                            SelectOption('max', 'Max'),
-                          ],
-                          onChanged:
-                              (v) => setState(() => _measures[i]['fn'] = v),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: AppSelect<String>(
-                            dense: true,
-                            value: _measures[i]['field'],
-                            options: [
-                              for (final f in measurable)
-                                SelectOption('${f['key']}', '${f['label']}'),
-                            ],
-                            onChanged:
-                                (v) =>
-                                    setState(() => _measures[i]['field'] = v),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed:
-                              () => setState(() => _measures.removeAt(i)),
-                        ),
-                      ],
-                    ),
-                ],
+                ),
+                _removeButton(
+                  'Remove total',
+                  () => setState(() => _measures.removeAt(i)),
+                ),
               ],
             ),
           ),
@@ -787,75 +1176,44 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
   }
 
   Widget _buildSortLimit() {
-    // Sort keys: output columns of the last run, else the chosen columns.
-    final keys = <String, String>{
-      if (_resultColumns.isNotEmpty)
-        for (final c in _resultColumns) '${c['key']}': '${c['label']}'
-      else if (!_grouped)
-        for (final k in _columns) k: '${_field(k)?['label'] ?? k}'
-      else ...{
-        'count': 'Count',
-        for (var i = 0; i < _groupBy.length; i++)
-          'g$i':
-              '${_field(_groupBy[i]['field'])?['label'] ?? 'Group ${i + 1}'}',
-      },
-    };
-    final sortKey = _sort?['key']?.toString();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _section('SORT & LIMIT'),
-        _card(
-          Row(
-            children: [
-              Expanded(
-                child: AppSelect<String>(
-                  dense: true,
-                  value: keys.containsKey(sortKey) ? sortKey : null,
-                  hint: 'Sort by',
-                  options: [
-                    for (final e in keys.entries) SelectOption(e.key, e.value),
-                  ],
-                  onChanged:
-                      (v) => setState(
-                        () => _sort = {'key': v, 'dir': _sort?['dir'] ?? 'asc'},
-                      ),
-                ),
+        AppSelect<String>(
+          label: 'Sort by',
+          dense: true,
+          value: _sort?['key']?.toString(),
+          hint: 'No sorting',
+          options: _outputColumns,
+          onChanged:
+              (v) => setState(
+                () => _sort = {'key': v, 'dir': _sort?['dir'] ?? 'asc'},
               ),
-              IconButton(
-                tooltip: 'Direction',
-                icon: Icon(
-                  _sort?['dir'] == 'desc'
-                      ? Icons.arrow_downward
-                      : Icons.arrow_upward,
-                  size: 18,
-                ),
-                onPressed:
-                    _sort == null
-                        ? null
-                        : () => setState(
-                          () =>
-                              _sort = {
-                                ..._sort!,
-                                'dir': _sort!['dir'] == 'desc' ? 'asc' : 'desc',
-                              },
-                        ),
-              ),
-              const SizedBox(width: 8),
-              AppSelect<int>(
-                dense: true,
-                value: _limit,
-                options: const [
-                  SelectOption(100, '100 rows'),
-                  SelectOption(500, '500 rows'),
-                  SelectOption(1000, '1,000 rows'),
-                  SelectOption(5000, '5,000 rows'),
-                  SelectOption(10000, '10,000 rows'),
-                ],
-                onChanged: (v) => setState(() => _limit = v),
-              ),
-            ],
-          ),
+        ),
+        const SizedBox(height: 8),
+        AppSelect<String>(
+          dense: true,
+          enabled: _sort != null,
+          value: _sort?['dir']?.toString() ?? 'asc',
+          options: const [
+            SelectOption('asc', 'Ascending'),
+            SelectOption('desc', 'Descending'),
+          ],
+          onChanged: (v) => setState(() => _sort = {..._sort!, 'dir': v}),
+        ),
+        const SizedBox(height: 12),
+        AppSelect<int>(
+          label: 'Show up to',
+          dense: true,
+          value: _limit,
+          options: const [
+            SelectOption(100, '100 rows'),
+            SelectOption(500, '500 rows'),
+            SelectOption(1000, '1,000 rows'),
+            SelectOption(5000, '5,000 rows'),
+            SelectOption(10000, '10,000 rows'),
+          ],
+          onChanged: (v) => setState(() => _limit = v),
         ),
       ],
     );
@@ -863,69 +1221,161 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
 
   Widget _buildResult() {
     if (_runError != null) {
-      return _card(
-        Text(
-          _runError!,
-          style: const TextStyle(color: AppColors.dangerInk, fontSize: 13),
+      return AppCard(
+        child: Center(
+          child: Column(
+            children: [
+              const Text(
+                "The report couldn't be run",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.navy,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _runError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.dangerInk,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
-    if (_result == null) return const SizedBox.shrink();
+    if (_result == null) {
+      return const AppCard(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 18),
+          child: Column(
+            children: [
+              Text(
+                'Set up a report and press Run',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.navy,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Pick what to report on, choose columns or group rows to count '
+                'and total them, add filters, then export the result to Excel. '
+                'Or start from one of the templates.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: AppColors.inkMuted),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final cols = _resultColumns;
     final rows = _resultRows;
     final total = int.tryParse('${_result!['total']}') ?? rows.length;
+    final count = NumberFormat('#,##0').format(total);
+    final noun =
+        _grouped
+            ? (total == 1 ? 'group' : 'groups')
+            : (total == 1 ? 'row' : 'rows');
+    final pages = rows.isEmpty ? 1 : ((rows.length - 1) ~/ _perPage) + 1;
+    final page = _page.clamp(0, pages - 1);
+    final visible = rows.skip(page * _perPage).take(_perPage).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _section('RESULT'),
-        Text(
-          _result!['truncated'] == true
-              ? 'Showing ${rows.length} of $total rows. Raise the limit or add filters to see the rest.'
-              : '$total row${total == 1 ? '' : 's'}',
-          style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
+        Text.rich(
+          TextSpan(
+            text: '$count $noun',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.navy,
+            ),
+            children: [
+              if (_result!['truncated'] == true)
+                TextSpan(
+                  text:
+                      ' · showing the first '
+                      '${NumberFormat('#,##0').format(rows.length)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.warningInk,
+                  ),
+                ),
+            ],
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 2),
+        Text(
+          '${_src?['label'] ?? ''} · ${_result!['ms'] ?? 0} ms',
+          style: _noteStyle,
+        ),
+        const SizedBox(height: 10),
         if (rows.isEmpty)
-          _card(
-            const Text(
-              'No rows match.',
-              style: TextStyle(color: AppColors.inkMuted),
+          const AppCard(
+            child: Center(
+              child: Text(
+                'No rows match these filters.',
+                style: TextStyle(fontSize: 13, color: AppColors.inkMuted),
+              ),
             ),
           )
         else
           Container(
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: AppColors.paper,
               borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.line),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            child: FadingHScroll(
               child: DataTable(
                 headingRowHeight: 40,
-                dataRowMinHeight: 36,
-                dataRowMaxHeight: 52,
+                dataRowMinHeight: 38,
+                dataRowMaxHeight: 56,
+                horizontalMargin: 14,
+                columnSpacing: 22,
+                headingRowColor: const WidgetStatePropertyAll(AppColors.navy),
                 headingTextStyle: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.navy,
+                  letterSpacing: 0.5,
+                  color: Colors.white,
                 ),
                 columns: [
                   for (final c in cols)
                     DataColumn(
-                      label: Text('${c['label']}'),
-                      numeric: _numeric.contains(c['type']),
+                      label: Text('${c['label']}'.toUpperCase()),
+                      numeric: _measurable.contains(c['type']),
                     ),
                 ],
                 rows: [
-                  for (final r in rows.take(500))
+                  for (final r in visible)
                     DataRow(
                       cells: [
                         for (final c in cols)
                           DataCell(
-                            Text(
-                              _fmt(r[c['key']], '${c['type']}'),
-                              style: const TextStyle(fontSize: 12.5),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 170),
+                              child: Text(
+                                reportCellText(
+                                  r[c['key']],
+                                  '${c['type']}',
+                                  options: _optionsOf(c),
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: AppColors.ink,
+                                ),
+                              ),
                             ),
                           ),
                       ],
@@ -934,139 +1384,39 @@ class _ReportBuilderPageState extends State<ReportBuilderPage> {
               ),
             ),
           ),
-        if (rows.length > 500)
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Text(
-              'The first 500 rows are shown; export to see them all.',
-              style: TextStyle(fontSize: 12, color: AppColors.inkMuted),
-            ),
-          ),
-      ],
-    );
-  }
-
-  static String _fmt(dynamic v, String type) {
-    if (v == null || '$v'.isEmpty) return '—';
-    final n = num.tryParse('$v');
-    if (n != null) {
-      if (type == 'money')
-        return NumberFormat.currency(symbol: '₱', decimalDigits: 2).format(n);
-      if (type == 'gb') return '${NumberFormat('#,##0.##').format(n)} GB';
-      if (type == 'percent') return '${NumberFormat('#,##0.#').format(n)}%';
-      if (type == 'number') return NumberFormat('#,##0.##').format(n);
-    }
-    return '$v';
-  }
-
-  Widget _section(String t) => SectionHeading(t);
-
-  Widget _card(Widget child, {String? note}) => AppCard(
-    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        child,
-        if (note != null && note.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            note,
-            style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
-          ),
-        ],
-      ],
-    ),
-  );
-}
-
-class _TemplateCard extends StatelessWidget {
-  const _TemplateCard({required this.t, required this.onTap});
-  final Map<String, dynamic> t;
-  final VoidCallback onTap;
-
-  static const _icons = {
-    'tickets': Icons.confirmation_number_outlined,
-    'service_lines': Icons.satellite_alt_outlined,
-    'billing': Icons.receipt_long_outlined,
-    'usage_cycles': Icons.data_usage_rounded,
-    'daily_usage': Icons.show_chart_rounded,
-    'accounts': Icons.groups_outlined,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final source = '${(t['request'] as Map)['source']}';
-    return SizedBox(
-      width: 210,
-      height: 132,
-      child: Material(
-        color: AppColors.paper,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              border: Border.all(color: AppColors.lineSoft),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        if (pages > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: AppColors.brand.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Icon(
-                        _icons[source] ?? Icons.table_chart_outlined,
-                        size: 17,
-                        color: AppColors.brand,
-                      ),
-                    ),
-                    const Spacer(),
-                    const Icon(
-                      Icons.play_circle_outline_rounded,
-                      size: 18,
-                      color: AppColors.inkFaint,
-                    ),
-                  ],
+                IconButton(
+                  tooltip: 'Previous page',
+                  onPressed:
+                      page > 0 ? () => setState(() => _page = page - 1) : null,
+                  icon: const Icon(Icons.chevron_left_rounded),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  '${t['name']}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
-                    height: 1.25,
-                  ),
-                ),
-                const SizedBox(height: 4),
                 Expanded(
                   child: Text(
-                    '${t['description']}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    'Page ${page + 1} of $pages',
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 11.5,
+                      fontSize: 12.5,
                       color: AppColors.inkMuted,
-                      height: 1.3,
                     ),
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Next page',
+                  onPressed:
+                      page < pages - 1
+                          ? () => setState(() => _page = page + 1)
+                          : null,
+                  icon: const Icon(Icons.chevron_right_rounded),
                 ),
               ],
             ),
           ),
-        ),
-      ),
+      ],
     );
   }
 }
@@ -1232,17 +1582,16 @@ class _FilterEditorState extends State<_FilterEditor> {
     }
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 6, 4, 10),
+      padding: const EdgeInsets.fromLTRB(10, 8, 4, 10),
       decoration: BoxDecoration(
-        color: AppColors.paper,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.line),
       ),
       child: Column(
         children: [
           Row(
             children: [
               Expanded(
-                flex: 5,
                 child: AppSelect<String>(
                   dense: true,
                   value: '${widget.filter['field']}',
@@ -1261,33 +1610,39 @@ class _FilterEditorState extends State<_FilterEditor> {
                   },
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 4,
-                child: AppSelect<String>(
-                  dense: true,
-                  value: ops.contains(op) ? op : ops.first,
-                  options: [
-                    for (final o in ops) SelectOption(o, _opLabels[o] ?? o),
-                  ],
-                  onChanged:
-                      (o) => widget.onChanged({
-                        ...widget.filter,
-                        'op': o,
-                        'value': _defaultValue(o),
-                      }),
-                ),
-              ),
               IconButton(
-                icon: const Icon(Icons.close, size: 18),
+                tooltip: 'Remove filter',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: AppColors.inkFaint,
+                ),
                 onPressed: widget.onRemove,
               ),
             ],
           ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: AppSelect<String>(
+              dense: true,
+              value: ops.contains(op) ? op : ops.first,
+              options: [
+                for (final o in ops) SelectOption(o, _opLabels[o] ?? o),
+              ],
+              onChanged:
+                  (o) => widget.onChanged({
+                    ...widget.filter,
+                    'op': o,
+                    'value': _defaultValue(o),
+                  }),
+            ),
+          ),
           if (valueInput != null)
             Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: valueInput,
+              padding: const EdgeInsets.only(top: 6, right: 6),
+              child: SizedBox(width: double.infinity, child: valueInput),
             ),
         ],
       ),

@@ -1,21 +1,14 @@
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:starlink_app/shared/widgets/ui_kit.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
-import 'package:flutter/services.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/ui_kit.dart';
+import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 
-// ── Design tokens (identical to create-ticket page) ──────────────────────────
-const _primary = Color(0xFF133341);
-const _primaryDark = Color(0xFF0C2029);
-const _success = Color(0xFF10B981);
-const _ink = Color(0xFF111111);
-const _inkSecondary = Color(0xFF666666);
-const _inkTertiary = Color(0xFF888888);
-const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF8F8F8);
-const _border = Color(0xFFD7D7D7);
-
+/// Onboard customers: pick companies from the directory, then create them
+/// (POST /customers/).
 class AdminCreateAgentPage extends StatefulWidget {
   const AdminCreateAgentPage({super.key});
 
@@ -23,1011 +16,486 @@ class AdminCreateAgentPage extends StatefulWidget {
   State<AdminCreateAgentPage> createState() => _AdminCreateAgentPageState();
 }
 
-class _AdminCreateAgentPageState extends State<AdminCreateAgentPage>
-    with TickerProviderStateMixin {
-  // ── Pagination state ───────────────────────────────────────────────────────
+class _AdminCreateAgentPageState extends State<AdminCreateAgentPage> {
+  /// Picked companies: code -> company name.
+  final Map<String, String> _rows = {};
+  bool _saving = false;
 
-  final List<Map<String, dynamic>> _items = [];
-  final ScrollController _scrollCtrl = ScrollController();
-  final TextEditingController _searchCtrl = TextEditingController();
-
-  int _currentPage = 1;
-  int _totalPages = 1;
-  bool _loadingFirst = true;
-  bool _loadingMore = false;
-  bool _submitting = false;
-  String? _loadError;
-  String _lastQuery = '';
-  Set<String>? _existingCodes;
-
-  // Multi-select
-  final Map<String, Map<String, dynamic>> _selected = {};
-
-  // Debounce
-  Timer? _debounce;
-
-  // Search focus
-  final FocusNode _searchFocus = FocusNode();
-  bool _searchFocused = false;
-
-  // Animation
-  late AnimationController _animController;
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  @override
-  void initState() {
-    super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
+  Future<void> _openDirectory() async {
+    final picked = await showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (_) => _DirectorySheet(alreadyPicked: _rows.keys.toSet()),
     );
-    _fetchPage(page: 1, query: '', reset: true);
-    _scrollCtrl.addListener(_onScroll);
-    _searchCtrl.addListener(_onSearchChanged);
-    _searchFocus.addListener(() {
-      setState(() => _searchFocused = _searchFocus.hasFocus);
-    });
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _animController.dispose();
-    _scrollCtrl.removeListener(_onScroll);
-    _scrollCtrl.dispose();
-    _searchCtrl.removeListener(_onSearchChanged);
-    _searchCtrl.dispose();
-    _searchFocus.dispose();
-    super.dispose();
-  }
-
-  // ── Infinite scroll trigger ────────────────────────────────────────────────
-  void _onScroll() {
-    if (_scrollCtrl.position.pixels >=
-            _scrollCtrl.position.maxScrollExtent - 200 &&
-        !_loadingMore &&
-        _currentPage < _totalPages) {
-      _fetchPage(page: _currentPage + 1, query: _lastQuery);
-    }
-  }
-
-  // ── Debounced search ───────────────────────────────────────────────────────
-  void _onSearchChanged() {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      final q = _searchCtrl.text.trim();
-      if (q != _lastQuery) {
-        _fetchPage(page: 1, query: q, reset: true);
-      }
-    });
-  }
-
-  // ── Core fetch ─────────────────────────────────────────────────────────────
-  Future<void> _fetchPage({
-    required int page,
-    required String query,
-    bool reset = false,
-  }) async {
-    if (reset) {
-      setState(() {
-        _loadingFirst = true;
-        _loadError = null;
-        _lastQuery = query;
-        _currentPage = 1;
-        _totalPages = 1;
-        _items.clear();
-      });
-    } else {
-      if (_loadingMore) return;
-      setState(() => _loadingMore = true);
-    }
-
-    try {
-      // Companies already registered can't be created again (code is unique),
-      // so hide them from the external directory.
-      if (_existingCodes == null) {
-        final existing = await ApiService.getCustomersListAll();
-        final raw = existing['data'];
-        _existingCodes = {
-          for (final e in (raw is List ? raw : const []).whereType<Map>())
-            (e['value']?.toString() ?? '').trim(),
-        };
-      }
-
-      final res = await ApiService.getExternalCustomers(
-        page: page,
-        limit: 30,
-        search: query,
-      );
-      if (!mounted) return;
-      if (res['status'] != 'success') {
-        setState(() {
-          _loadError = res['message']?.toString() ?? 'Failed to load companies';
-          _loadingFirst = false;
-          _loadingMore = false;
-        });
-        return;
-      }
-      // Ignore a response for a search the user has already replaced.
-      if (query != _lastQuery) return;
-
-      final raw = res['data'];
-      final newItems =
-          (raw is List ? raw : const [])
-              .whereType<Map>()
-              .map(
-                (e) => <String, dynamic>{
-                  'label': (e['label']?.toString() ?? '').trim(),
-                  'value': (e['value']?.toString() ?? '').trim(),
-                },
-              )
-              .where(
-                (e) =>
-                    e['label']!.isNotEmpty &&
-                    e['value']!.isNotEmpty &&
-                    !_existingCodes!.contains(e['value']),
-              )
-              .toList();
-      final pagination = res['raw'] is Map ? res['raw']['pagination'] : null;
-      final totalPages =
-          pagination is Map
-              ? int.tryParse('${pagination['totalPages']}') ?? page
-              : page;
-
-      setState(() {
-        if (reset) _items.clear();
-        _items.addAll(newItems);
-        _currentPage = page;
-        _totalPages = totalPages;
-        _loadingFirst = false;
-        _loadingMore = false;
-        _loadError = null;
-      });
-
-      // A page may be all already-registered companies; keep filling the list.
-      if (_items.length < 15 && page < totalPages) {
-        _fetchPage(page: page + 1, query: query);
-      }
-
-      if (reset) {
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _animController.forward(from: 0),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loadError = e.toString().replaceAll('Exception: ', '');
-        _loadingFirst = false;
-        _loadingMore = false;
-      });
-    }
-  }
-
-  // ── Selection helpers ──────────────────────────────────────────────────────
-  void _toggle(Map<String, dynamic> c) {
-    final key = c['value']?.toString() ?? '';
-    if (key.isEmpty) return;
+    if (picked == null || picked.isEmpty || !mounted) return;
     setState(() {
-      _selected.containsKey(key) ? _selected.remove(key) : _selected[key] = c;
+      _rows.addAll(picked);
     });
   }
 
-  bool _isSelected(Map<String, dynamic> c) =>
-      _selected.containsKey(c['value']?.toString() ?? '');
-
-  // ── Save ───────────────────────────────────────────────────────────────────
-  Future<void> _save() async {
-    if (_selected.isEmpty) {
-      _showSnack('Please select at least one company.', isError: true);
-      return;
-    }
-    setState(() => _submitting = true);
-
-    final failures = <String>[];
-    var created = 0;
+  Future<void> _submit() async {
+    if (_rows.isEmpty || _saving) return;
+    setState(() {
+      _saving = true;
+    });
     final res = await ApiService.createAgent({
       'formData': [
-        for (final c in _selected.values)
-          {
-            'customer_code': c['value']?.toString() ?? '',
-            'customer_name': c['label']?.toString() ?? '',
-          },
+        for (final e in _rows.entries)
+          {'customer_code': e.key, 'customer_name': e.value},
       ],
     });
-    if (res['status'] == 'success') {
-      created = _selected.length;
-    } else {
-      failures.add(res['message']?.toString() ?? 'Failed');
-    }
-
     if (!mounted) return;
-    setState(() => _submitting = false);
-
-    if (failures.isNotEmpty) {
-      _showSnack(
-        created > 0
-            ? '$created created, ${failures.length} failed — ${failures.first}'
-            : failures.first,
-        isError: true,
+    setState(() => _saving = false);
+    if (res['status'] != 'success') {
+      AppToast.error(
+        context,
+        res['message']?.toString() ?? "Couldn't create the customers.",
       );
-      if (created == 0) return;
-    } else {
-      _showSnack(
-        '$created agent${created > 1 ? 's' : ''} created successfully!',
-        isError: false,
-      );
+      return;
     }
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (mounted) Navigator.of(context).pop(true);
+    final toast = AppToast.of(context);
+    final count = _rows.length;
+    Navigator.pop(context, true);
+    toast.showSuccess('Created $count customer${count == 1 ? '' : 's'}');
   }
 
-  void _showSnack(String message, {required bool isError}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isError
-                  ? Icons.error_outline_rounded
-                  : Icons.check_circle_outline_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: isError ? _primaryDark : _success,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+  String get _createLabel {
+    final n = _rows.length;
+    return n == 0
+        ? 'Create customers'
+        : 'Create $n customer${n == 1 ? '' : 's'}';
   }
 
-  // ── UI helpers ─────────────────────────────────────────────────────────────
-  Widget _sectionLabel(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(
-      t,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: _inkTertiary,
-        letterSpacing: 1.1,
-      ),
-    ),
-  );
-
-  Widget _card({required Widget child}) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.03),
-          blurRadius: 8,
-          offset: const Offset(0, 3),
-        ),
-      ],
-    ),
-    child: child,
-  );
-
-  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
+    return UnsavedChangesGuard(
+      isDirty: () => _rows.isNotEmpty,
       child: Scaffold(
-        backgroundColor: _surfaceSubtle,
-        body: Column(
+        backgroundColor: AppColors.paperSubtle,
+        appBar: AppBar(title: const Text('New Customers')),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            // ── Gradient AppBar ────────────────────────────────────────────
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF133341), Color(0xFF0C2029)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+            const Text(
+              'Pick companies from the directory to onboard.',
+              style: TextStyle(fontSize: 13, color: AppColors.inkMuted),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _saving ? null : _openDirectory,
+                style: FilledButton.styleFrom(backgroundColor: AppColors.navy),
+                icon: const Icon(Icons.add_rounded, size: 19),
+                label: const Text('Add from directory'),
               ),
-              child: SafeArea(
-                bottom: false,
+            ),
+            const SizedBox(height: 14),
+            if (_rows.isEmpty)
+              const AppCard(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
-                  child: Row(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Column(
                     children: [
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white,
-                          size: 20,
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: AppColors.paperMuted,
+                        child: Icon(
+                          Icons.inbox_outlined,
+                          size: 22,
+                          color: AppColors.inkMuted,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Create Agent',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                            Text(
-                              'Select companies to assign',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
+                      SizedBox(height: 12),
+                      Text(
+                        'No customers added yet',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
                         ),
                       ),
-                      // if (!_loadingFirst &&
-                      //     _loadError == null &&
-                      //     _selected.isNotEmpty)
-                      //   GestureDetector(
-                      //     onTap: _submitting ? null : _save,
-                      //     child: AnimatedContainer(
-                      //       duration: const Duration(milliseconds: 200),
-                      //       padding: const EdgeInsets.symmetric(
-                      //         horizontal: 16,
-                      //         vertical: 8,
-                      //       ),
-                      //       decoration: BoxDecoration(
-                      //         color: Colors.white.withOpacity(
-                      //           _submitting ? 0.08 : 0.18,
-                      //         ),
-                      //         borderRadius: BorderRadius.circular(10),
-                      //       ),
-                      //       child:
-                      //           _submitting
-                      //               ? const SizedBox(
-                      //                 width: 16,
-                      //                 height: 16,
-                      //                 child: CircularProgressIndicator(
-                      //                   color: Colors.white,
-                      //                   strokeWidth: 2,
-                      //                 ),
-                      //               )
-                      //               : Text(
-                      //                 'Create (${_selected.length})',
-                      //                 style: const TextStyle(
-                      //                   color: Colors.white,
-                      //                   fontWeight: FontWeight.w700,
-                      //                   fontSize: 13,
-                      //                 ),
-                      //               ),
-                      //     ),
-                      //   ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Body ──────────────────────────────────────────────────────
-            Expanded(
-              child:
-                  _loadingFirst
-                      ? _buildLoading()
-                      : _loadError != null && _items.isEmpty
-                      ? _buildErrorState()
-                      : _buildContent(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Loading state ──────────────────────────────────────────────────────────
-  Widget _buildLoading() => Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: _primary.withOpacity(0.08),
-            shape: BoxShape.circle,
-          ),
-          child: const Center(
-            child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Loading companies...',
-          style: TextStyle(
-            color: _inkSecondary,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Fetching available companies',
-          style: TextStyle(color: _inkTertiary, fontSize: 12),
-        ),
-      ],
-    ),
-  );
-
-  // ── Error state ────────────────────────────────────────────────────────────
-  Widget _buildErrorState() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: _primary.withOpacity(0.08),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.cloud_off_outlined,
-              color: _primary,
-              size: 32,
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Could not load companies',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-              color: _ink,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            _loadError ?? '',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: Color(0xFFE90408)),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed:
-                () => _fetchPage(page: 1, query: _lastQuery, reset: true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brand,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: const StadiumBorder(),
-            ),
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text(
-              'Retry',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  // ── Main content ───────────────────────────────────────────────────────────
-  Widget _buildContent() {
-    return AnimatedBuilder(
-      animation: _animController,
-      builder:
-          (_, child) => Opacity(
-            opacity: _animController.value,
-            child: Transform.translate(
-              offset: Offset(0, 20 * (1 - _animController.value)),
-              child: child,
-            ),
-          ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Search bar + selected chips ──────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _sectionLabel('SELECT COMPANIES'),
-
-                // ── Search bar ─────────────────────────────────────────────
-                Container(
-                  height: 48,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: _surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _border),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.search_rounded,
-                        size: 20,
-                        color: _inkTertiary,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchCtrl,
-                          focusNode: _searchFocus,
-                          textAlignVertical: TextAlignVertical.center,
-                          style: const TextStyle(fontSize: 14, color: _ink),
-                          decoration: InputDecoration(
-                            hintText: 'Search companies…',
-                            hintStyle: const TextStyle(
-                              fontSize: 14,
-                              color: _inkTertiary,
-                            ),
-                            border: InputBorder.none,
-                            isCollapsed: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                            ),
-                            suffixIcon:
-                                _searchCtrl.text.isNotEmpty
-                                    ? GestureDetector(
-                                      onTap: () {
-                                        _searchCtrl.clear();
-                                        _fetchPage(
-                                          page: 1,
-                                          query: '',
-                                          reset: true,
-                                        );
-                                      },
-                                      child: const Icon(
-                                        Icons.close_rounded,
-                                        size: 16,
-                                        color: _inkTertiary,
-                                      ),
-                                    )
-                                    : null,
-                          ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Use “Add from directory” to search and select companies.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.inkMuted,
                         ),
                       ),
                     ],
                   ),
                 ),
-
-                // ── Selected chips — single horizontal scrollable row ───────
-                if (_selected.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    height: 26,
+              )
+            else
+              for (final e in _rows.entries)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.paper,
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      border: Border.all(color: AppColors.line),
+                    ),
                     child: Row(
                       children: [
-                        // "N selected" badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _primary.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${_selected.length}',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: _primary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-
-                        // Scrollable chips
                         Expanded(
-                          child: EdgeFade(
-                            child: ListView(
-                              scrollDirection: Axis.horizontal,
-                              children:
-                                  _selected.values.map((c) {
-                                    final lbl =
-                                        (c['label'] as String? ?? '').trim();
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 5),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 7,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: _primary.withOpacity(0.07),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                          border: Border.all(
-                                            color: _primary.withOpacity(0.25),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              lbl,
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: _primary,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            GestureDetector(
-                                              onTap: () => _toggle(c),
-                                              child: const Icon(
-                                                Icons.close_rounded,
-                                                size: 11,
-                                                color: _primary,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                e.key,
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.ink,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                e.value,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  height: 1.3,
+                                  color: AppColors.inkSoft,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-
-                        // Clear all
-                        const SizedBox(width: 6),
-                        GestureDetector(
-                          onTap: () => setState(() => _selected.clear()),
-                          child: const Text(
-                            'Clear',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: _inkTertiary,
-                            ),
+                        IconButton(
+                          tooltip: 'Remove ${e.value}',
+                          onPressed:
+                              _saving
+                                  ? null
+                                  : () => setState(() => _rows.remove(e.key)),
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 20,
+                            color: AppColors.inkFaint,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // ── Section label for results ────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                _sectionLabel('COMPANIES'),
-                const SizedBox(width: 8),
-                if (!_loadingFirst && _loadError == null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    // decoration: BoxDecoration(
-                    //   color: _primary.withOpacity(0.08),
-                    //   borderRadius: BorderRadius.circular(20),
-                    // ),
-                    // child: Text(
-                    //   '${_items.length}',
-                    //   style: const TextStyle(
-                    //     fontSize: 11,
-                    //     fontWeight: FontWeight.w700,
-                    //     color: _primary,
-                    //   ),
-                    // ),
-                  ),
-              ],
-            ),
-          ),
-
-          // ── Company list ─────────────────────────────────────────────────
-          Expanded(
-            child: Padding(
-              // FIX: bottom padding creates visual gap between list card
-              // and the Cancel / Create button bar
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: _buildList(),
-            ),
-          ),
-
-          // ── Pinned action buttons ─────────────────────────────────────────
-          Container(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              8,
-              16,
-              8 + MediaQuery.of(context).padding.bottom,
-            ),
-            // decoration: const BoxDecoration(
-            //   color: _surface,
-            //   border: Border(top: BorderSide(color: _border)),
-            // ),
-            child: Row(
+                ),
+            const SizedBox(height: 6),
+            Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
+                  flex: 2,
+                  child: OutlinedButton(
                     onPressed:
-                        _submitting ? null : () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _inkSecondary,
-                      side: const BorderSide(
-                        color: Color.fromARGB(255, 240, 233, 233),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: const StadiumBorder(),
-                    ),
-                    icon: const Icon(Icons.close, size: 14),
-                    label: const Text(
-                      'Cancel',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
+                        _saving ? null : () => Navigator.maybePop(context),
+                    child: const Text('Cancel'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  flex: 2,
-                  child: ElevatedButton.icon(
-                    onPressed: _submitting ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brand,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: AppColors.brand.withOpacity(0.5),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: const StadiumBorder(),
+                  flex: 3,
+                  child: FilledButton(
+                    onPressed: _rows.isEmpty || _saving ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
                     ),
-                    icon:
-                        _submitting
+                    child:
+                        _saving
                             ? const SizedBox(
-                              width: 14,
-                              height: 14,
+                              width: 18,
+                              height: 18,
                               child: CircularProgressIndicator(
-                                color: Colors.white,
                                 strokeWidth: 2,
+                                color: Colors.white,
                               ),
                             )
-                            : const Icon(
-                              Icons.support_agent_outlined,
-                              size: 15,
+                            : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(_createLabel),
                             ),
-                    label: Text(
-                      _submitting
-                          ? 'Creating...'
-                          : _selected.isEmpty
-                          ? 'Create Agent'
-                          : 'Create ${_selected.length} Agent${_selected.length > 1 ? 's' : ''}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The company directory: search, tick several, and load more while scrolling.
+/// Companies that are already customers aren't offered.
+class _DirectorySheet extends StatefulWidget {
+  const _DirectorySheet({required this.alreadyPicked});
+  final Set<String> alreadyPicked;
+
+  @override
+  State<_DirectorySheet> createState() => _DirectorySheetState();
+}
+
+class _DirectorySheetState extends State<_DirectorySheet> {
+  final _search = TextEditingController();
+  final _scroll = ScrollController();
+  Timer? _debounce;
+
+  final List<Map<String, String>> _items = [];
+  final Map<String, String> _selected = {};
+  Set<String>? _existing;
+  int _requestSeq = 0;
+  int _page = 1;
+  int _totalPages = 1;
+  bool _loading = true;
+  bool _loadingMore = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      if (_scroll.position.extentAfter < 200 &&
+          !_loadingMore &&
+          !_loading &&
+          _page < _totalPages) {
+        _fetch(page: _page + 1);
+      }
+    });
+    _fetch();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _search.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetch({int page = 1}) async {
+    final seq = ++_requestSeq;
+    final more = page > 1;
+    setState(() {
+      _error = null;
+      if (more) {
+        _loadingMore = true;
+      } else {
+        _loading = true;
+        _loadingMore = false;
+      }
+    });
+    if (_existing == null) {
+      final existing = await ApiService.getCustomersListAll();
+      if (!mounted || seq != _requestSeq) return;
+      final raw = existing['data'];
+      _existing = {
+        for (final e in (raw is List ? raw : const []).whereType<Map>())
+          '${e['value'] ?? ''}'.trim(),
+      };
+    }
+    final res = await ApiService.getExternalCustomers(
+      page: page,
+      limit: 30,
+      search: _search.text.trim(),
+    );
+    if (!mounted || seq != _requestSeq) return;
+    if (res['status'] != 'success') {
+      setState(() {
+        _loading = false;
+        _loadingMore = false;
+        _error = res['message']?.toString() ?? "Couldn't load the directory.";
+      });
+      return;
+    }
+    final raw = res['data'];
+    final rows = [
+      for (final e in (raw is List ? raw : const []).whereType<Map>())
+        {
+          'label': '${e['label'] ?? ''}'.trim(),
+          'value': '${e['value'] ?? ''}'.trim(),
+        },
+    ].where((e) {
+      final code = e['value']!;
+      return e['label']!.isNotEmpty &&
+          code.isNotEmpty &&
+          !_existing!.contains(code) &&
+          !widget.alreadyPicked.contains(code);
+    });
+    final pagination =
+        res['pagination'] ??
+        (res['raw'] is Map ? (res['raw'] as Map)['pagination'] : null);
+    final total =
+        pagination is Map
+            ? int.tryParse('${pagination['totalPages']}') ?? page
+            : page;
+    setState(() {
+      if (!more) _items.clear();
+      _items.addAll(rows);
+      _page = page;
+      _totalPages = total;
+      _loading = false;
+      _loadingMore = false;
+    });
+    // A page may be all existing customers; keep the list long enough to scroll.
+    if (_items.length < 15 && page < total) _fetch(page: page + 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.85,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          12 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Search customer directory',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.navy,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _search,
+              onChanged: (_) {
+                _debounce?.cancel();
+                _debounce = Timer(
+                  const Duration(milliseconds: 350),
+                  () => _fetch(),
+                );
+              },
+              decoration: const InputDecoration(
+                hintText: 'Search…',
+                prefixIcon: Icon(Icons.search_rounded, size: 20),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(child: _buildList()),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            Text(
+              '${_selected.length} selected',
+              style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 3,
+                  child: FilledButton(
+                    onPressed:
+                        _selected.isEmpty
+                            ? null
+                            : () => Navigator.pop(context, _selected),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                    ),
+                    child: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Add selected'),
                     ),
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // ── Company list ───────────────────────────────────────────────────────────
   Widget _buildList() {
-    if (_items.isEmpty && !_loadingMore) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
       return Center(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: _primary.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.business_outlined,
-                color: _primary,
-                size: 26,
-              ),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'No companies found',
-              style: TextStyle(
-                color: _inkSecondary,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Try a different search term',
-              style: TextStyle(color: _inkTertiary, fontSize: 12),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: () => _fetch(),
+              child: const Text('Try again'),
             ),
           ],
         ),
       );
     }
-
-    return _card(
-      child: ListView.separated(
-        controller: _scrollCtrl,
-        padding: EdgeInsets.zero,
-        itemCount: _items.length + (_loadingMore ? 1 : 0),
-        separatorBuilder:
-            (_, __) => const Divider(height: 1, color: _border, indent: 36),
-        itemBuilder: (context, i) {
-          if (i == _items.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    color: _primary,
-                    strokeWidth: 2,
-                  ),
-                ),
-              ),
-            );
-          }
-
-          final c = _items[i];
-          final lbl = (c['label'] as String? ?? '').trim();
-          final val = c['value']?.toString().trim() ?? '';
-          final selected = _isSelected(c);
-
-          final parts =
-              lbl.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-          final ini =
-              parts.length >= 2
-                  ? '${parts.first[0]}${parts.last[0]}'.toUpperCase()
-                  : lbl.isNotEmpty
-                  ? lbl[0].toUpperCase()
-                  : '?';
-
-          return RepaintBoundary(
-            child: InkWell(
-              onTap: () => _toggle(c),
-              borderRadius: BorderRadius.circular(8),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color:
-                      selected
-                          ? _primary.withOpacity(0.04)
-                          : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    // Checkbox
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: selected ? _primary : Colors.transparent,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: selected ? _primary : _inkTertiary,
-                          width: 1.5,
-                        ),
-                      ),
-                      child:
-                          selected
-                              ? const Icon(
-                                Icons.check_rounded,
-                                color: Colors.white,
-                                size: 12,
-                              )
-                              : null,
-                    ),
-                    const SizedBox(width: 8),
-
-                    // Avatar
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color:
-                            selected
-                                ? _primary.withOpacity(0.12)
-                                : _surfaceSubtle,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Text(
-                          ini,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: selected ? _primary : _inkSecondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-
-                    // Label + code
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            lbl,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight:
-                                  selected ? FontWeight.w700 : FontWeight.w500,
-                              color: selected ? _primary : _ink,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (val.isNotEmpty)
-                            Text(
-                              val,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: _inkTertiary,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+    if (_items.isEmpty) {
+      return const Center(
+        child: Text(
+          'No companies found.',
+          style: TextStyle(fontSize: 13, color: AppColors.inkMuted),
+        ),
+      );
+    }
+    return ListView.builder(
+      controller: _scroll,
+      itemCount: _items.length + (_loadingMore ? 1 : 0),
+      itemBuilder: (context, i) {
+        if (i == _items.length) {
+          return const Padding(
+            padding: EdgeInsets.all(14),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
           );
-        },
-      ),
+        }
+        final item = _items[i];
+        final code = item['value']!;
+        return CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          activeColor: AppColors.brand,
+          value: _selected.containsKey(code),
+          title: Text(
+            item['label']!,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
+            ),
+          ),
+          subtitle: Text(
+            code,
+            style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
+          ),
+          onChanged:
+              (v) => setState(() {
+                if (v == true) {
+                  _selected[code] = item['label']!;
+                } else {
+                  _selected.remove(code);
+                }
+              }),
+        );
+      },
     );
   }
 }

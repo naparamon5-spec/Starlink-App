@@ -1,11 +1,11 @@
-import 'dart:convert';
-import 'dart:typed_data';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
-import 'package:starlink_app/shared/widgets/ui_kit.dart';
-import 'package:starlink_app/shared/widgets/collapsible_list.dart';
+import 'package:starlink_app/features/ticket/ticket_details_view.dart';
+import 'package:starlink_app/shared/widgets/ticket_list_card.dart';
+import 'package:starlink_app/core/utils/list_export.dart';
+import 'package:starlink_app/shared/widgets/ticket_filter_bar.dart';
 import 'package:starlink_app/features/end_user/ticket/ticket_modal.dart';
 import 'package:starlink_app/services/api_service.dart';
-import 'package:starlink_app/core/utils/file_download/file_downloader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // import 'package:provider/provider.dart'; // notifications disabled
@@ -13,9 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFF133341);
-const _inProgress = Color(0xFF3B82F6);
 const _success = Color(0xFF10B981);
-const _warning = Color(0xFFF59E0B);
 const _danger = Color(0xFFE57373);
 const _ink = Color(0xFF111111);
 const _inkSecondary = Color(0xFF666666);
@@ -25,10 +23,6 @@ const _surfaceSubtle = Color(0xFFF8F8F8);
 const _border = Color(0xFFD7D7D7);
 
 // ── Extended detail-screen tokens (matches CustomerViewScreen) ────────────────
-const _detailBg = Color(0xFFF5F7FA);
-const _detailBorder = Color(0xFFE8ECF0);
-const _detailInkSecondary = Color(0xFF374151);
-const _detailInkTertiary = Color(0xFF8A96A3);
 
 // ── Status tint pairs (background, foreground) ────────────────────────────────
 
@@ -37,7 +31,9 @@ const _detailInkTertiary = Color(0xFF8A96A3);
 // ─────────────────────────────────────────────────────────────────────────────
 
 class TicketScreen extends StatefulWidget {
-  const TicketScreen({super.key});
+  const TicketScreen({super.key, this.exportController});
+
+  final ListExportController? exportController;
 
   @override
   _TicketScreenState createState() => _TicketScreenState();
@@ -48,6 +44,8 @@ class _TicketScreenState extends State<TicketScreen> {
   final ScrollController _scrollController = ScrollController();
 
   String _selectedFilter = 'All';
+  String _typeFilter = '';
+  String _requesterFilter = '';
   List<Map<String, dynamic>> _tickets = [];
   List<Map<String, dynamic>> _filteredTickets = [];
   bool _isLoading = true;
@@ -59,17 +57,10 @@ class _TicketScreenState extends State<TicketScreen> {
   int _visibleCount = _pageSize;
   bool _isLoadingMore = false;
 
-  final List<String> _filterOptions = [
-    'All',
-    'Open',
-    'In Progress',
-    'Resolved',
-    'Closed',
-  ];
-
   @override
   void initState() {
     super.initState();
+    widget.exportController?.loader = _ticketsForExport;
     _loadUserData();
     _loadCategoriesAndTickets();
     _searchController.addListener(_handleSearch);
@@ -82,6 +73,7 @@ class _TicketScreenState extends State<TicketScreen> {
 
   @override
   void dispose() {
+    widget.exportController?.loader = null;
     _searchController.removeListener(_handleSearch);
     _searchController.dispose();
     _scrollController.removeListener(_onScroll);
@@ -118,28 +110,37 @@ class _TicketScreenState extends State<TicketScreen> {
     if (mounted) setState(() => _userId = prefs.getInt('user_id')?.toString());
   }
 
-  void _handleSearch() {
+  /// Tickets passing the search box and every filter.
+  List<Map<String, dynamic>> _computeFiltered() {
     final query = _searchController.text.toLowerCase();
+    return _tickets.where((ticket) {
+      bool matchesFilter = true;
+      if (_selectedFilter != 'All') {
+        final ticketStatus =
+            (ticket['status']?.toString() ?? '').toUpperCase().trim();
+        final filterStatus = _selectedFilter.toUpperCase().trim();
+        matchesFilter =
+            ticketStatus.replaceAll('_', ' ') ==
+            filterStatus.replaceAll('_', ' ');
+      }
+      bool matchesQuery =
+          query.isEmpty ||
+          ticket.values.any(
+            (v) => v != null && v.toString().toLowerCase().contains(query),
+          );
+      return matchesFilter &&
+          matchesQuery &&
+          ticketMatchesDropdowns(
+            ticket,
+            type: _typeFilter,
+            requester: _requesterFilter,
+          );
+    }).toList();
+  }
+
+  void _handleSearch() {
     setState(() {
-      _filteredTickets =
-          _tickets.where((ticket) {
-            bool matchesFilter = true;
-            if (_selectedFilter != 'All') {
-              final ticketStatus =
-                  (ticket['status']?.toString() ?? '').toUpperCase().trim();
-              final filterStatus = _selectedFilter.toUpperCase().trim();
-              matchesFilter =
-                  ticketStatus.replaceAll('_', ' ') ==
-                  filterStatus.replaceAll('_', ' ');
-            }
-            bool matchesQuery =
-                query.isEmpty ||
-                ticket.values.any(
-                  (v) =>
-                      v != null && v.toString().toLowerCase().contains(query),
-                );
-            return matchesFilter && matchesQuery;
-          }).toList();
+      _filteredTickets = _computeFiltered();
       _visibleCount = _pageSize.clamp(0, _filteredTickets.length);
     });
   }
@@ -156,6 +157,11 @@ class _TicketScreenState extends State<TicketScreen> {
 
   Future<void> _loadCategoriesAndTickets() async {
     await _loadSubscriptionsAndTickets();
+  }
+
+  Future<List<Map<String, dynamic>>> _ticketsForExport() async {
+    if (_isLoading) throw Exception('Tickets are still loading.');
+    return _filteredTickets;
   }
 
   Future<void> _loadTickets({bool forceRefresh = false}) async {
@@ -244,8 +250,8 @@ class _TicketScreenState extends State<TicketScreen> {
       if (!mounted) return;
       setState(() {
         _tickets = loaded;
-        _filteredTickets = List.from(_tickets);
-        _visibleCount = _pageSize.clamp(0, _tickets.length);
+        _filteredTickets = _computeFiltered();
+        _visibleCount = _pageSize.clamp(0, _filteredTickets.length);
         _isLoading = false;
       });
     } catch (e) {
@@ -255,12 +261,7 @@ class _TicketScreenState extends State<TicketScreen> {
         _filteredTickets = [];
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading tickets: $e'),
-          backgroundColor: _danger,
-        ),
-      );
+      AppToast.error(context, 'Error loading tickets: $e');
     }
   }
 
@@ -320,7 +321,7 @@ class _TicketScreenState extends State<TicketScreen> {
                       'contact_name': contactName,
                     },
                   });
-                  _filteredTickets = List.from(_tickets);
+                  _filteredTickets = _computeFiltered();
                   _visibleCount = _pageSize.clamp(0, _filteredTickets.length);
                 });
               }
@@ -330,21 +331,7 @@ class _TicketScreenState extends State<TicketScreen> {
     );
 
     if (result != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle_outline, color: Colors.white),
-              SizedBox(width: 12),
-              Text('Ticket created successfully'),
-            ],
-          ),
-          backgroundColor: _success,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+      AppToast.success(context, 'Ticket created successfully');
       setState(() => _isLoading = true);
       await _loadTickets(forceRefresh: true);
     }
@@ -384,208 +371,42 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
-  Color _filterDotColor(String filterLabel) {
-    switch (filterLabel.toUpperCase()) {
-      case 'OPEN':
-        return _warning;
-      case 'IN PROGRESS':
-        return _inProgress;
-      case 'RESOLVED':
-        return _success;
-      case 'CLOSED':
-        return _inkTertiary;
-      default:
-        return _primary;
-    }
-  }
-
-  Color _statusColorFromLabel(String status) => _filterDotColor(status);
-
-  IconData _statusIcon(String status) {
-    switch (status.toUpperCase()) {
-      case 'OPEN':
-        return Icons.error_outline;
-      case 'IN PROGRESS':
-        return Icons.sync;
-      case 'RESOLVED':
-        return Icons.check_circle_outline;
-      case 'CLOSED':
-        return Icons.lock_outline;
-      default:
-        return Icons.help_outline;
-    }
-  }
-
   // ── Ticket card (matches CustomerTicketScreen rich card) ───────────────────
 
   Widget _buildTicketCard(Map<String, dynamic> ticket) {
-    final String ticketType = ticket['type']?.toString() ?? 'N/A';
-    final String createdAt = ticket['created_at']?.toString() ?? 'N/A';
-    final String description =
-        ticket['description']?.toString() ?? 'No description';
-    final String contact = ticket['contact']?.toString() ?? '—';
-    final String subject = ticket['subject']?.toString() ?? '—';
-    final String status = ticket['status']?.toString() ?? 'OPEN';
-    final String ticketId = ticket['id']?.toString() ?? '';
-    final Color statusColor = _statusColorFromLabel(status);
-    final String query = _searchController.text.trim().toLowerCase();
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () async {
-          final updated = await Navigator.push<Map<String, dynamic>>(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (_) => EndUserTicketDetailsScreen(
-                    ticketId: ticketId,
-                    ticket: ticket,
-                  ),
-            ),
-          );
-          if (updated != null && mounted) {
-            setState(() {
-              final idx = _tickets.indexWhere(
-                (t) => t['id'].toString() == ticketId,
-              );
-              if (idx != -1) {
-                _tickets[idx] = {..._tickets[idx], ...updated};
-                _filteredTickets = List.from(_tickets);
-              }
-            });
-          }
-        },
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Status icon ──────────────────────────────────────────
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
+    final ticketId = ticket['id']?.toString() ?? '';
+    return TicketListCard(
+      id: ticket['id']?.toString() ?? '',
+      subject: ticket['subject']?.toString() ?? '',
+      status: ticket['status']?.toString() ?? 'OPEN',
+      description: ticket['description']?.toString() ?? '',
+      type: ticket['type']?.toString() ?? '',
+      createdBy: ticket['contact']?.toString() ?? '',
+      createdAt: ticket['created_at_raw']?.toString(),
+      searchQuery: _searchController.text,
+      onTap: () async {
+        final updated = await Navigator.push<Map<String, dynamic>>(
+          context,
+          MaterialPageRoute(
+            builder:
+                (_) => EndUserTicketDetailsScreen(
+                  ticketId: ticketId,
+                  ticket: ticket,
                 ),
-                child: Icon(_statusIcon(status), color: statusColor, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── Title row ──────────────────────────────────────
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _HighlightText(
-                            text: ticketType,
-                            query: query,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: _ink,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        _StatusChip(status: status, color: statusColor),
-                      ],
-                    ),
-                    if (ticketId.isNotEmpty) ...[
-                      const SizedBox(height: 1),
-                      _HighlightText(
-                        text: 'Ticket #$ticketId',
-                        query: query,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: _inkTertiary,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 2),
-                    _HighlightText(
-                      text: createdAt,
-                      query: query,
-                      style: const TextStyle(fontSize: 11, color: _inkTertiary),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(height: 1, color: _border),
-                    const SizedBox(height: 10),
-                    // ── Meta ───────────────────────────────────────────
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Subject',
-                          style: TextStyle(fontSize: 11, color: _inkTertiary),
-                        ),
-                        const SizedBox(height: 2),
-                        _HighlightText(
-                          text: subject,
-                          query: query,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _ink,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _MetaField(
-                      label: 'Requester',
-                      value: contact.isNotEmpty ? contact : '—',
-                      query: query,
-                    ),
-                    const SizedBox(height: 8),
-                    // ── Footer ─────────────────────────────────────────
-                    // Row(
-                    //   mainAxisAlignment: MainAxisAlignment.end,
-                    //   children: const [
-                    //     Text(
-                    //       'View details',
-                    //       style: TextStyle(
-                    //         fontSize: 11,
-                    //         fontWeight: FontWeight.w700,
-                    //         color: _primary,
-                    //       ),
-                    //     ),
-                    //     SizedBox(width: 2),
-                    //     Icon(
-                    //       Icons.chevron_right_rounded,
-                    //       color: _primary,
-                    //       size: 14,
-                    //     ),
-                    //   ],
-                    // ),
-                  ],
-                ),
-              ),
-            ],
           ),
-        ),
-      ),
+        );
+        if (updated != null && mounted) {
+          setState(() {
+            final idx = _tickets.indexWhere(
+              (t) => t['id'].toString() == ticketId,
+            );
+            if (idx != -1) {
+              _tickets[idx] = {..._tickets[idx], ...updated};
+              _filteredTickets = _computeFiltered();
+            }
+          });
+        }
+      },
     );
   }
 
@@ -640,6 +461,8 @@ class _TicketScreenState extends State<TicketScreen> {
             child: Text(
               query.isNotEmpty
                   ? 'No results for "$query".'
+                  : _typeFilter.isNotEmpty || _requesterFilter.isNotEmpty
+                  ? 'No tickets match your filters.'
                   : _selectedFilter != 'All'
                   ? 'No $_selectedFilter tickets found.'
                   : 'No tickets yet. Tap + to create one.',
@@ -713,81 +536,28 @@ class _TicketScreenState extends State<TicketScreen> {
               ),
             ),
 
-            // ── Filter chips ───────────────────────────────────────────
+            // ── Filters ───────────────────────────────────────────────────
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: const EdgeInsets.only(top: 12),
               sliver: SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 34,
-                  child: EdgeFade(
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _filterOptions.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (context, i) {
-                        final option = _filterOptions[i];
-                        final isSelected = _selectedFilter == option;
-                        final dotColor =
-                            option == 'All'
-                                ? _primary
-                                : _filterDotColor(option);
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedFilter = option;
-                            });
-                            _handleSearch();
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color:
-                                  isSelected
-                                      ? dotColor.withOpacity(0.1)
-                                      : _surface,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: isSelected ? dotColor : _border,
-                                width: isSelected ? 1.5 : 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (option != 'All') ...[
-                                  Container(
-                                    width: 7,
-                                    height: 7,
-                                    decoration: BoxDecoration(
-                                      color: dotColor,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 5),
-                                ],
-                                Text(
-                                  option,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight:
-                                        isSelected
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                    color:
-                                        isSelected ? dotColor : _inkSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                child: TicketFilterBar(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  tickets: _tickets,
+                  status: _selectedFilter,
+                  type: _typeFilter,
+                  requester: _requesterFilter,
+                  onStatus: (v) {
+                    setState(() => _selectedFilter = v);
+                    _handleSearch();
+                  },
+                  onType: (v) {
+                    setState(() => _typeFilter = v);
+                    _handleSearch();
+                  },
+                  onRequester: (v) {
+                    setState(() => _requesterFilter = v);
+                    _handleSearch();
+                  },
                 ),
               ),
             ),
@@ -808,6 +578,25 @@ class _TicketScreenState extends State<TicketScreen> {
                       ),
                     ),
                     const Spacer(),
+                    if (_selectedFilter != 'All' ||
+                        _typeFilter.isNotEmpty ||
+                        _requesterFilter.isNotEmpty)
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectedFilter = 'All';
+                            _typeFilter = '';
+                            _requesterFilter = '';
+                          });
+                          _handleSearch();
+                        },
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 28),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Clear filters'),
+                      ),
                     if (!_isLoading)
                       Text(
                         '${_filteredTickets.length} result${_filteredTickets.length == 1 ? '' : 's'}',
@@ -857,7 +646,6 @@ class _TicketScreenState extends State<TicketScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showNewTicketModal,
-        backgroundColor: _primary,
         elevation: 6,
         tooltip: 'Create new ticket',
         child: const Icon(Icons.add, color: Colors.white),
@@ -872,1287 +660,21 @@ class _TicketScreenState extends State<TicketScreen> {
 // /v1/attachments/:id in parallel and uses the same card/timeline/attachment UI.
 // ─────────────────────────────────────────────────────────────────────────────
 
-class EndUserTicketDetailsScreen extends StatefulWidget {
-  final String ticketId;
-  final Map<String, dynamic> ticket;
-
+class EndUserTicketDetailsScreen extends StatelessWidget {
   const EndUserTicketDetailsScreen({
     super.key,
     required this.ticketId,
     required this.ticket,
   });
 
-  @override
-  State<EndUserTicketDetailsScreen> createState() =>
-      _EndUserTicketDetailsScreenState();
-}
-
-class _EndUserTicketDetailsScreenState
-    extends State<EndUserTicketDetailsScreen> {
-  Map<String, dynamic>? _fetchedTicket;
-  bool _isFetchingDetails = true;
-  String? _fetchError;
-  bool _timelineShowAll = false;
-  bool _timelineCollapsed = false;
-  bool _attachShowAll = false;
-  bool _attachCollapsed = false;
-
-  List<dynamic> _attachments = [];
-  String? _attachmentsError;
-  final Map<String, bool> _downloadingMap = {};
+  final String ticketId;
+  final Map<String, dynamic> ticket;
 
   @override
-  void initState() {
-    super.initState();
-    _loadTicketDetails();
-  }
-
-  Future<void> _loadTicketDetails() async {
-    if (!mounted) return;
-    setState(() {
-      _isFetchingDetails = true;
-      _fetchError = null;
-      _attachments = [];
-      _attachmentsError = null;
-    });
-
-    try {
-      final results = await Future.wait([
-        ApiService.getTicketById(widget.ticketId),
-        ApiService.getTicketAttachments(widget.ticketId),
-      ]);
-
-      if (!mounted) return;
-
-      // ── Ticket detail ─────────────────────────────────────────────────
-      Map<String, dynamic>? ticket;
-      String? ticketError;
-      final ticketRes = results[0];
-      if (ticketRes['status'] == 'success') {
-        final d = ticketRes['data'];
-        ticket = d is Map ? Map<String, dynamic>.from(d) : null;
-      } else {
-        ticketError =
-            ticketRes['message']?.toString() ??
-            'Failed to load ticket details.';
-      }
-
-      // ── Attachments ───────────────────────────────────────────────────
-      List<dynamic> attachments = [];
-      String? attErr;
-      final attRes = results[1];
-      if (attRes['status'] == 'success') {
-        attachments = _extractList(attRes['data']);
-        if (attachments.isEmpty) attachments = _extractList(attRes['raw']);
-      } else {
-        attErr = attRes['message']?.toString() ?? 'Failed to load attachments.';
-      }
-
-      setState(() {
-        _fetchedTicket = ticket;
-        _fetchError = ticketError;
-        _attachments = attachments;
-        _attachmentsError = attErr;
-        _isFetchingDetails = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _fetchError = 'Error loading ticket: $e';
-        _isFetchingDetails = false;
-      });
-    }
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  List<dynamic> _extractList(dynamic d) {
-    if (d is List) return d;
-    if (d is Map) {
-      for (final key in [
-        'data',
-        'attachments',
-        'items',
-        'records',
-        'results',
-        'list',
-      ]) {
-        final v = d[key];
-        if (v is List) return v;
-      }
-    }
-    return [];
-  }
-
-  String get _currentStatus {
-    final raw =
-        _fetchedTicket?['status']?.toString() ??
-        widget.ticket['full_data']?['status']?.toString() ??
-        widget.ticket['status']?.toString() ??
-        'OPEN';
-    return _normalizeStatus(raw);
-  }
-
-  String _normalizeStatus(String raw) {
-    switch (raw.toLowerCase().trim()) {
-      case 'open':
-      case 'opened':
-        return 'OPEN';
-      case 'in_progress':
-      case 'in progress':
-      case 'inprogress':
-        return 'IN PROGRESS';
-      case 'resolved':
-      case 'done':
-      case 'completed':
-        return 'RESOLVED';
-      case 'closed':
-      case 'close':
-        return 'CLOSED';
-      default:
-        return raw.toUpperCase();
-    }
-  }
-
-  Color _statusColor(String s) {
-    switch (s.toUpperCase()) {
-      case 'OPEN':
-        return _warning;
-      case 'IN PROGRESS':
-        return _inProgress;
-      case 'RESOLVED':
-        return _success;
-      case 'CLOSED':
-        return const Color(0xFFA8A8A8);
-      default:
-        return const Color(0xFF94A3B8);
-    }
-  }
-
-  IconData _statusIcon(String status) {
-    switch (status) {
-      case 'OPEN':
-        return Icons.error_outline;
-      case 'IN PROGRESS':
-        return Icons.sync;
-      case 'RESOLVED':
-        return Icons.check_circle_outline;
-      case 'CLOSED':
-        return Icons.lock_outline;
-      default:
-        return Icons.help_outline;
-    }
-  }
-
-  String _statusDescription(String status) {
-    switch (status) {
-      case 'OPEN':
-        return 'Your ticket is awaiting review by our support team.';
-      case 'IN PROGRESS':
-        return 'Our support team is currently working on your ticket.';
-      case 'RESOLVED':
-        return 'Your ticket has been resolved. Thank you for your patience.';
-      case 'CLOSED':
-        return 'This ticket has been closed.';
-      default:
-        return 'Status: $status';
-    }
-  }
-
-  IconData _activityIcon(String? action) {
-    final v = (action ?? '').toLowerCase();
-    if (v.contains('creat')) return Icons.add_circle_outline_rounded;
-    if (v.contains('updat') || v.contains('edit')) return Icons.edit_outlined;
-    if (v.contains('resolv')) return Icons.check_circle_outline_rounded;
-    if (v.contains('close') || v.contains('clos')) return Icons.cancel_outlined;
-    if (v.contains('comment') || v.contains('note')) {
-      return Icons.comment_outlined;
-    }
-    if (v.contains('assign')) return Icons.person_add_alt_outlined;
-    if (v.contains('status') || v.contains('chang')) {
-      return Icons.swap_horiz_rounded;
-    }
-    return Icons.history_toggle_off_outlined;
-  }
-
-  Color _activityColor(String? action) {
-    final v = (action ?? '').toLowerCase();
-    if (v.contains('creat')) return _success;
-    if (v.contains('resolv')) return _success;
-    if (v.contains('close')) return _warning;
-    if (v.contains('comment') || v.contains('note')) {
-      return const Color(0xFF3B82F6);
-    }
-    if (v.contains('assign')) return _primary;
-    if (v.contains('status') || v.contains('chang')) return _inProgress;
-    return const Color(0xFF94A3B8);
-  }
-
-  String _timeAgo(String? raw) {
-    if (raw == null || raw.isEmpty || raw == 'null') return '';
-    try {
-      final dt = DateTime.parse(raw).toUtc().toLocal();
-      final diff = DateTime.now().difference(dt);
-      if (diff.inSeconds < 60) return 'just now';
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      if (diff.inDays < 7) return '${diff.inDays}d ago';
-      return _formatDate(raw);
-    } catch (_) {
-      return '';
-    }
-  }
-
-  String _formatDate(String? dateStr) {
-    if (dateStr == null) return 'N/A';
-    try {
-      // Parse as UTC then add 8 hours for Manila Time (UTC+8)
-      final utcDate = DateTime.parse(dateStr).toUtc();
-      final manilaDate = utcDate.add(const Duration(hours: 8));
-
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-
-      int hour = manilaDate.hour;
-      int h = hour % 12;
-      if (h == 0) h = 12;
-      final m = manilaDate.minute.toString().padLeft(2, '0');
-      final period = hour >= 12 ? 'PM' : 'AM';
-
-      return '${months[manilaDate.month - 1]} ${manilaDate.day.toString().padLeft(2, '0')}, ${manilaDate.year}  $h:$m $period';
-    } catch (_) {
-      return dateStr;
-    }
-  }
-
-  String _str(dynamic v, {String fallback = '—'}) {
-    if (v == null || v.toString() == 'null' || v.toString().isEmpty) {
-      return fallback;
-    }
-    return v.toString();
-  }
-
-  String _resolveValue(List<String?> candidates, {String fallback = 'N/A'}) {
-    for (final v in candidates) {
-      if (v != null && v.isNotEmpty && v != 'null') return v;
-    }
-    return fallback;
-  }
-
-  String _prettifyValue(String v) {
-    switch (v.toLowerCase()) {
-      case 'in_progress':
-        return 'In Progress';
-      case 'open':
-        return 'Open';
-      case 'closed':
-        return 'Closed';
-      case 'resolved':
-        return 'Resolved';
-      default:
-        return v.isNotEmpty ? v[0].toUpperCase() + v.substring(1) : v;
-    }
-  }
-
-  Color _extColor(String ext) {
-    switch (ext) {
-      case 'pdf':
-        return _primary;
-      case 'png':
-      case 'jpg':
-      case 'jpeg':
-      case 'gif':
-      case 'webp':
-        return _success;
-      case 'doc':
-      case 'docx':
-        return _inProgress;
-      case 'xls':
-      case 'xlsx':
-        return _success;
-      case 'zip':
-      case 'rar':
-        return _warning;
-      default:
-        return const Color(0xFF3B82F6);
-    }
-  }
-
-  void _showSnack(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : Icons.check_circle_outline,
-              color: Colors.white,
-              size: 18,
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: isError ? _primary : _success,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  Future<void> _downloadAttachment(dynamic att) async {
-    final attachmentId =
-        att is Map
-            ? _str(
-              att['id'] ?? att['attachment_id'] ?? att['attachmentId'],
-              fallback: '—',
-            )
-            : '—';
-    if (attachmentId == '—' || attachmentId.isEmpty) {
-      _showSnack('Cannot download: attachment ID is missing.', isError: true);
-      return;
-    }
-    setState(() => _downloadingMap[attachmentId] = true);
-    try {
-      final result = await ApiService.downloadAttachment(attachmentId);
-      if (!mounted) return;
-      if (result['status'] != 'success') {
-        _showSnack(
-          result['message']?.toString() ?? 'Download failed.',
-          isError: true,
-        );
-        return;
-      }
-      final filename =
-          result['filename']?.toString().trim().isNotEmpty == true
-              ? result['filename'].toString().trim()
-              : _attFilename(att);
-      final base64Str = result['base64']?.toString() ?? '';
-      if (base64Str.isEmpty) {
-        _showSnack('Download failed: empty file data.', isError: true);
-        return;
-      }
-      Uint8List bytes;
-      try {
-        bytes = base64Decode(base64Str);
-      } catch (e) {
-        _showSnack('Download failed: invalid file data.', isError: true);
-        return;
-      }
-      final mimeType =
-          result['mimeType']?.toString() ?? 'application/octet-stream';
-      final savedPath = await saveBytesAsFile(
-        bytes: bytes,
-        filename: filename,
-        mimeType: mimeType,
-      );
-      if (!mounted) return;
-      _showSnack(
-        savedPath != null && savedPath.isNotEmpty
-            ? 'Saved to: $savedPath'
-            : 'Downloaded: $filename',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _showSnack('Download error: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => _downloadingMap.remove(attachmentId));
-    }
-  }
-
-  String _attFilename(dynamic att) {
-    if (att is Map) {
-      final f =
-          att['name'] ?? att['filename'] ?? att['file_name'] ?? att['fileName'];
-      if (f is String && f.trim().isNotEmpty) return f.trim();
-    }
-    return 'attachment';
-  }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
-
-  @override
-  Widget build(BuildContext context) {
-    final passedFull =
-        (widget.ticket['full_data'] as Map<String, dynamic>?) ?? widget.ticket;
-    final data = _fetchedTicket ?? passedFull;
-
-    final status = _currentStatus;
-    final statusColor = _statusColor(status);
-
-    final String ticketId = _str(data['id'] ?? widget.ticket['id']);
-    final String subject = _resolveValue([
-      data['subject']?.toString(),
-      passedFull['subject']?.toString(),
-      widget.ticket['subscription']?.toString(),
-    ], fallback: 'Ticket #$ticketId');
-
-    final String ticketType = _resolveValue([
-      data['ticket_type']?.toString(),
-      data['type']?.toString(),
-      widget.ticket['type']?.toString(),
-    ]);
-    final String contact = _resolveValue([
-      data['contact_name']?.toString(),
-      data['created_by']?.toString(),
-      widget.ticket['contact']?.toString(),
-    ]);
-    final String createdAt = _resolveValue([
-      data['created_at']?.toString(),
-      passedFull['created_at']?.toString(),
-      widget.ticket['created_at']?.toString(),
-    ]);
-    final String description = _resolveValue([
-      data['description']?.toString(),
-      passedFull['description']?.toString(),
-      widget.ticket['description']?.toString(),
-    ], fallback: 'No description provided.');
-
-    final dynamic rawTimeline = data['timeline'];
-    final List<dynamic> timeline = rawTimeline is List ? rawTimeline : [];
-    final shownTimeline = visibleNewestFirst(timeline, _timelineShowAll);
-
-    return Scaffold(
-      backgroundColor: _detailBg,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              subject,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-            Text(
-              'Ticket #$ticketId',
-              style: const TextStyle(fontSize: 11, color: Colors.white70),
-            ),
-          ],
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: const [],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _loadTicketDetails,
-        color: _primary,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          children: [
-            // ── Ticket Info Card ────────────────────────────────────────
-            _DetailCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Subject',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: _detailInkTertiary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                subject,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: _ink,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        _StatusBadge(label: status, color: statusColor),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const _HDivider(),
-                  // Type chip
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: _InfoChip(
-                      icon: Icons.label_outline_rounded,
-                      label: 'Type',
-                      value: ticketType,
-                      color: const Color(0xFF3B82F6),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const _HDivider(),
-                  // Description
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Description',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: _detailInkTertiary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Text(
-                            description,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: _detailInkSecondary,
-                              height: 1.55,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const _HDivider(),
-                  // KV rows
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                    child: Column(
-                      children: [
-                        _KVRow(label: 'Contact', value: contact),
-                        const SizedBox(height: 8),
-                        _KVRow(
-                          label: 'Created At',
-                          value: _formatDate(createdAt),
-                        ),
-                        const SizedBox(height: 8),
-                        _KVRow(
-                          label: 'Email',
-                          value: data['created_by_email']?.toString() ?? 'N/A',
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
-            // ── Attachments Card ────────────────────────────────────────
-            _DetailCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  InkWell(
-                    onTap:
-                        () => setState(
-                          () => _attachCollapsed = !_attachCollapsed,
-                        ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: _warning.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.attach_file_rounded,
-                              color: _warning,
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          const Text(
-                            'Attachments',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: _ink,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (_isFetchingDetails)
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: _primary,
-                              ),
-                            )
-                          else if (_attachments.isNotEmpty)
-                            _CountBadge(
-                              count: _attachments.length,
-                              color: _warning,
-                            ),
-                          CollapseArrow(collapsed: _attachCollapsed),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (!_attachCollapsed) ...[
-                    const _HDivider(),
-                    if (_isFetchingDetails)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: _primary,
-                          ),
-                        ),
-                      )
-                    else if (_attachmentsError != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: _danger,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _attachmentsError!,
-                                style: const TextStyle(
-                                  color: _inkSecondary,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                setState(() => _attachmentsError = null);
-                                _loadTicketDetails();
-                              },
-                              child: const Text(
-                                'Retry',
-                                style: TextStyle(color: _primary, fontSize: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else if (_attachments.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline_rounded,
-                              color: _inkTertiary,
-                              size: 16,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'No attachments',
-                              style: TextStyle(
-                                color: _inkTertiary,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                        itemCount: visibleCount(
-                          _attachments.length,
-                          _attachShowAll,
-                        ),
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (_, i) {
-                          final att = _attachments[i];
-                          if (att is! Map) return const SizedBox.shrink();
-                          final name = _str(
-                            att['name'] ??
-                                att['filename'] ??
-                                att['file_name'] ??
-                                att['original_name'],
-                            fallback: 'Unknown file',
-                          );
-                          final ext =
-                              name.contains('.')
-                                  ? name.split('.').last.toLowerCase()
-                                  : '';
-                          final size = _str(
-                            att['size'] ?? att['file_size'],
-                            fallback: '',
-                          );
-                          final attId =
-                              att['id']?.toString() ??
-                              att['attachment_id']?.toString() ??
-                              '';
-                          final isDownloading =
-                              attId.isNotEmpty &&
-                              _downloadingMap[attId] == true;
-
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: const Color(0xFFE2E8F0),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: _extColor(ext).withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      ext.isNotEmpty
-                                          ? ext.toUpperCase().substring(
-                                            0,
-                                            ext.length > 4 ? 4 : ext.length,
-                                          )
-                                          : 'FILE',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800,
-                                        color: _extColor(ext),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w600,
-                                          color: _ink,
-                                        ),
-                                      ),
-                                      if (size.isNotEmpty)
-                                        Text(
-                                          size,
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: _inkTertiary,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                isDownloading
-                                    ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: _inkTertiary,
-                                      ),
-                                    )
-                                    : IconButton(
-                                      icon: const Icon(
-                                        Icons.download_outlined,
-                                        color: _inkTertiary,
-                                        size: 20,
-                                      ),
-                                      onPressed: () => _downloadAttachment(att),
-                                    ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ViewAllButton(
-                      total: _attachments.length,
-                      showAll: _attachShowAll,
-                      noun: 'attachments',
-                      onTap:
-                          () =>
-                              setState(() => _attachShowAll = !_attachShowAll),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
-            // ── Activity Timeline Card ───────────────────────────────────
-            _DetailCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  InkWell(
-                    onTap:
-                        () => setState(
-                          () => _timelineCollapsed = !_timelineCollapsed,
-                        ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: _primary.withOpacity(0.10),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.timeline_rounded,
-                              color: _primary,
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          const Text(
-                            'Activity Timeline',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: _ink,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (_isFetchingDetails)
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: _primary,
-                              ),
-                            )
-                          else if (timeline.isNotEmpty)
-                            _CountBadge(
-                              count: timeline.length,
-                              color: _primary,
-                            ),
-                          CollapseArrow(collapsed: _timelineCollapsed),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (!_timelineCollapsed) ...[
-                    const _HDivider(),
-                    if (_isFetchingDetails)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: _primary,
-                              ),
-                              SizedBox(height: 10),
-                              Text(
-                                'Loading timeline…',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _inkTertiary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else if (_fetchError != null)
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 11,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE8F0F3),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _primary.withOpacity(0.35),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.warning_amber_rounded,
-                                color: _primary,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _fetchError!,
-                                  style: const TextStyle(
-                                    color: _primary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else if (timeline.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline_rounded,
-                              color: _inkTertiary,
-                              size: 16,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'No activity yet',
-                              style: TextStyle(
-                                color: _inkTertiary,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                        child: Column(
-                          children: List.generate(shownTimeline.length, (i) {
-                            final act = shownTimeline[i];
-                            if (act is! Map) return const SizedBox.shrink();
-                            final action = _str(
-                              act['action'],
-                              fallback: 'Activity',
-                            );
-                            final userName = _str(
-                              act['user_name'] ??
-                                  act['performed_by'] ??
-                                  act['created_by'],
-                              fallback: '',
-                            );
-                            final oldVal = act['old_value']?.toString();
-                            final newVal = act['new_value']?.toString();
-                            final timestamp = act['created_at']?.toString();
-                            String? changeDesc;
-                            if (oldVal != null &&
-                                newVal != null &&
-                                oldVal != 'null' &&
-                                newVal != 'null') {
-                              changeDesc =
-                                  '${_prettifyValue(oldVal)}  →  ${_prettifyValue(newVal)}';
-                            }
-                            final color = _activityColor(action);
-                            final icon = _activityIcon(action);
-                            final isLast = i == shownTimeline.length - 1;
-                            return _TimelineRow(
-                              icon: icon,
-                              color: color,
-                              isLast: isLast,
-                              action: action,
-                              changeDesc: changeDesc,
-                              performedBy:
-                                  (userName.isNotEmpty && userName != '—')
-                                      ? userName
-                                      : null,
-                              formattedDate:
-                                  timestamp != null
-                                      ? _formatDate(timestamp)
-                                      : null,
-                              timeAgo: _timeAgo(timestamp),
-                            );
-                          }),
-                        ),
-                      ),
-                    if (!_isFetchingDetails && _fetchError == null)
-                      ViewAllButton(
-                        total: timeline.length,
-                        showAll: _timelineShowAll,
-                        noun: 'activities',
-                        onTap:
-                            () => setState(
-                              () => _timelineShowAll = !_timelineShowAll,
-                            ),
-                      ),
-                  ],
-                ],
-              ),
-            ),
-
-            // ── Status info pill (read-only) ─────────────────────────────
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: statusColor.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      _statusIcon(status),
-                      color: statusColor,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Current Status',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: statusColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          _statusDescription(status),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: _inkSecondary,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _StatusBadge(label: status, color: statusColor),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Timeline Row (identical to CustomerViewScreen._TimelineRow)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _TimelineRow extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final bool isLast;
-  final String action;
-  final String? changeDesc;
-  final String? performedBy;
-  final String? formattedDate;
-  final String timeAgo;
-
-  const _TimelineRow({
-    required this.icon,
-    required this.color,
-    required this.isLast,
-    required this.action,
-    required this.timeAgo,
-    this.changeDesc,
-    this.performedBy,
-    this.formattedDate,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 32,
-            child: Column(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: color.withOpacity(0.35),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Icon(icon, color: color, size: 15),
-                ),
-                if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE2E8F0),
-                        borderRadius: BorderRadius.circular(1),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(top: 4, bottom: isLast ? 0 : 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          action,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: color,
-                          ),
-                        ),
-                      ),
-                      if (timeAgo.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          timeAgo,
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            color: Color(0xFF8A96A3),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (changeDesc != null && changeDesc!.isNotEmpty) ...[
-                    const SizedBox(height: 5),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withOpacity(0.07),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: color.withOpacity(0.2)),
-                      ),
-                      child: Text(
-                        changeDesc!,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: color,
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (performedBy != null && performedBy!.isNotEmpty) ...[
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.person_outline_rounded,
-                          size: 12,
-                          color: Color(0xFF8A96A3),
-                        ),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(
-                            performedBy!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF8A96A3),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (formattedDate != null && formattedDate!.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      formattedDate!,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        color: Color(0xFFB0BAC9),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => TicketDetailsView(
+    ticketId: ticketId,
+    subject: ticket['subject']?.toString(),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2227,111 +749,9 @@ class _SearchBar extends StatelessWidget {
 // Highlight Text (matches CustomerTicketScreen._HighlightText)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _HighlightText extends StatelessWidget {
-  final String text;
-  final String query;
-  final TextStyle style;
-  final int? maxLines;
-  final TextOverflow? overflow;
-
-  const _HighlightText({
-    required this.text,
-    required this.query,
-    required this.style,
-    this.maxLines,
-    this.overflow,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (query.isEmpty) {
-      return Text(text, style: style, maxLines: maxLines, overflow: overflow);
-    }
-    final lower = text.toLowerCase();
-    final spans = <TextSpan>[];
-    int start = 0;
-    while (true) {
-      final idx = lower.indexOf(query, start);
-      if (idx == -1) {
-        spans.add(TextSpan(text: text.substring(start)));
-        break;
-      }
-      if (idx > start) spans.add(TextSpan(text: text.substring(start, idx)));
-      spans.add(
-        TextSpan(
-          text: text.substring(idx, idx + query.length),
-          style: style.copyWith(
-            color: _primary,
-            backgroundColor: _primary.withOpacity(0.08),
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      );
-      start = idx + query.length;
-    }
-    return Text.rich(
-      TextSpan(style: style, children: spans),
-      maxLines: maxLines,
-      overflow: overflow ?? TextOverflow.clip,
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Small shared widgets
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _StatusChip extends StatelessWidget {
-  final String status;
-  final Color color;
-  const _StatusChip({required this.status, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: color.withOpacity(0.2)),
-    ),
-    child: Text(
-      status.toUpperCase(),
-      style: TextStyle(
-        color: color,
-        fontWeight: FontWeight.w800,
-        fontSize: 9,
-        letterSpacing: 0.5,
-      ),
-    ),
-  );
-}
-
-class _MetaField extends StatelessWidget {
-  final String label;
-  final String value;
-  final String query;
-  const _MetaField({required this.label, required this.value, this.query = ''});
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: const TextStyle(fontSize: 11, color: _inkTertiary)),
-      const SizedBox(height: 2),
-      _HighlightText(
-        text: value,
-        query: query,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: _ink,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    ],
-  );
-}
 
 class _SkeletonCard extends StatelessWidget {
   const _SkeletonCard();
@@ -2471,179 +891,4 @@ class _SkeletonCard extends StatelessWidget {
       ),
     );
   }
-}
-
-// ── Detail-screen shared widgets (mirrors CustomerViewScreen) ─────────────────
-
-class _DetailCard extends StatelessWidget {
-  final Widget child;
-  const _DetailCard({required this.child});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: const Color(0xFFE8ECF0)),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.04),
-          blurRadius: 10,
-          offset: const Offset(0, 3),
-        ),
-      ],
-    ),
-    child: child,
-  );
-}
-
-class _HDivider extends StatelessWidget {
-  const _HDivider();
-  @override
-  Widget build(BuildContext context) =>
-      Container(height: 1, color: const Color(0xFFF0F4F8));
-}
-
-class _StatusBadge extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _StatusBadge({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: color.withOpacity(0.4), width: 1.2),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 5),
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            color: color,
-            letterSpacing: 0.4,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _InfoChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-  const _InfoChip({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.07),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: color.withOpacity(0.2)),
-    ),
-    child: Row(
-      children: [
-        Icon(icon, color: color, size: 15),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: _ink,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _KVRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _KVRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(
-        width: 110,
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: _inkTertiary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(
-          value,
-          style: const TextStyle(
-            fontSize: 12,
-            color: _ink,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-class _CountBadge extends StatelessWidget {
-  final int count;
-  final Color color;
-  const _CountBadge({required this.count, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: Text(
-      '$count',
-      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
-    ),
-  );
 }
