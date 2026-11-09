@@ -1,17 +1,8 @@
 import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
-import 'package:flutter/services.dart';
+import 'package:starlink_app/features/auth/widgets/auth_shell.dart';
 import 'package:starlink_app/services/api_service.dart';
-
-// Brand tokens
-const _primary = Color(0xFF133341);
-const _primaryDark = Color(0xFF0C2029);
-const _ink = Color(0xFF111111);
-const _inkSecondary = Color(0xFF666666);
-const _inkTertiary = Color(0xFF888888);
-const _surface = Color(0xFFFFFFFF);
-const _border = Color(0xFFD7D7D7);
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -45,7 +36,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
       if (data['status'] == 'success' || data['success'] == true) {
         AppToast.success(context, 'Reset link sent. Check your email.');
-Navigator.of(context).pop();
+        Navigator.of(context).pop();
       } else {
         var error = data['message'] as String? ?? 'Failed to send reset link';
         final errorLower = error.toLowerCase();
@@ -67,315 +58,57 @@ Navigator.of(context).pop();
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final topPad = MediaQuery.of(context).padding.top;
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Scaffold(
-        backgroundColor: _surface,
-        body: Stack(
+    return AuthShell(
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-          children: [
-            // ── Gradient header (shorter than login) ──────────────────────
-            Container(
-              height: size.height * 0.28,
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [_primary, _primaryDark],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(36),
-                  bottomRight: Radius.circular(36),
-                ),
-              ),
-              child: Stack(
-                children: [
-                  // Decorative circles
-                  Positioned(
-                    top: -20,
-                    right: -20,
-                    child: Container(
-                      width: 130,
-                      height: 130,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.06),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 10,
-                    left: -30,
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.05),
-                      ),
-                    ),
-                  ),
-                  // Back button + icon
-                  Padding(
-                    padding: EdgeInsets.only(top: topPad),
-                    child: Column(
-                      children: [
-                        // Back button row
-                        Align(
-                          alignment: Alignment.topLeft,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 8, 0, 0),
-                            child: IconButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              icon: const Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        // Lock icon
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.lock_reset_rounded,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            const AuthHeading(
+              title: 'Reset your password',
+              subtitle: "Enter your email and we'll send you a reset link.",
             ),
-
-            // ── Form body ─────────────────────────────────────────────────
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(28, 32, 28, 32),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title
-                      const Text(
-                        'Forgot Password?',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: _ink,
-                          letterSpacing: -0.4,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        "Enter your email and we'll send you a link to reset your password.",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: _inkSecondary,
-                          height: 1.5,
-                        ),
-                      ),
-
-                      const SizedBox(height: 28),
-
-                      // Email label
-                      const Text(
-                        'Email Address',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: _ink,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        enabled: !_isLoading,
-                        style: const TextStyle(fontSize: 14, color: _ink),
-                        decoration: InputDecoration(
-                          hintText: 'you@example.com',
-                          hintStyle: const TextStyle(
-                            color: _inkTertiary,
-                            fontSize: 14,
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.mail_outline_rounded,
-                            color: _inkTertiary,
-                            size: 20,
-                          ),
-                          filled: true,
-                          fillColor: AppColors.paper,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 15,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: _border, width: 1.5),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: _border, width: 1.5),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: _primary,
-                              width: 1.8,
-                            ),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFE90408),
-                              width: 1.5,
-                            ),
-                          ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFE90408),
-                              width: 1.5,
-                            ),
-                          ),
-                          errorStyle: const TextStyle(
-                            color: Color(0xFFE90408),
-                            fontSize: 12,
-                          ),
-                        ),
-                        validator: (v) {
-                          if (v == null || v.isEmpty) {
-                            return 'Please enter your email';
-                          }
-                          if (!RegExp(
-                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                          ).hasMatch(v)) {
-                            return 'Please enter a valid email';
-                          }
-                          return null;
-                        },
-                      ),
-
-                      // Error banner
-
-                      const SizedBox(height: 32),
-
-                      // Submit button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 54,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _handleForgotPassword,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.brand,
-                            disabledBackgroundColor: AppColors.brand.withOpacity(0.5),
-                            elevation: 0,
-                            shadowColor: Colors.transparent,
-                            shape: const StadiumBorder(),
-                          ),
-                          child: const Text(
-                            'Send Reset Link',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Back to login
-                      Center(
-                        child: TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: TextButton.styleFrom(
-                            overlayColor: Colors.transparent,
-                          ),
-                          child: Text.rich(
-                            const TextSpan(
-                              text: 'Remember your password? ',
-                              style: TextStyle(
-                                color: _inkSecondary,
-                                fontSize: 13,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: 'Sign in',
-                                  style: TextStyle(
-                                    color: _primary,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+            const SizedBox(height: 26),
+            const AuthFieldLabel('Email'),
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              enabled: !_isLoading,
+              style: const TextStyle(fontSize: 15, color: AppColors.ink),
+              decoration: authInputDecoration(
+                hint: 'you@company.com.ph',
+                prefixIcon: Icons.mail_outline_rounded,
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) {
+                  return 'Please enter your email';
+                }
+                if (!RegExp(
+                  r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                ).hasMatch(v)) {
+                  return 'Please enter a valid email';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            AuthSubmitButton(
+              label: 'Send reset link',
+              loading: _isLoading,
+              onPressed: _handleForgotPassword,
+            ),
+            const SizedBox(height: 18),
+            Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(foregroundColor: AppColors.brand),
+                child: const Text(
+                  '← Back to sign in',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
           ],
-            ),
-
-            // ── Full-screen loading overlay ────────────────────────────────
-            if (_isLoading) const _LoadingOverlay(),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Full-screen loading overlay ───────────────────────────────────────────────
-
-class _LoadingOverlay extends StatelessWidget {
-  const _LoadingOverlay();
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withOpacity(0.45),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: const SizedBox(
-              height: 40,
-              width: 40,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                valueColor: AlwaysStoppedAnimation<Color>(_primary),
-              ),
-            ),
-          ),
         ),
       ),
     );

@@ -258,11 +258,13 @@ class _ProfileScreenState extends State<ProfileScreen>
       await _prefs.remove('email');
       await _prefs.remove('userProfile');
       if (!mounted) return;
+      final toast = AppToast.of(context);
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (_) => false,
       );
+      toast.showNeutral('Signed out');
     } catch (e) {
       if (mounted) _showSnack('Error logging out: $e', isError: true);
     }

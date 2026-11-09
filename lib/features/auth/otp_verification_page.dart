@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/features/admin/admin_home_screen.dart';
 import 'package:starlink_app/features/auth/two_factor/authenticator_widgets.dart';
+import 'package:starlink_app/services/biometric_service.dart';
 import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/services/push_service.dart';
@@ -154,6 +155,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
         return;
       }
 
+      await BiometricService.handleSignIn(widget.email);
       await ApiService.setAccessToken(accessToken.toString());
       if (refreshToken != null) {
         await ApiService.setRefreshToken(refreshToken.toString());

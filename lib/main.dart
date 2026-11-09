@@ -14,7 +14,10 @@ import 'package:starlink_app/features/auth/reset_password.dart';
 import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
 import 'package:starlink_app/features/admin/admin_home_screen.dart';
 import 'package:starlink_app/features/end_user/home/home_screen.dart';
+import 'package:starlink_app/features/splash/splash_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/services/biometric_service.dart';
+import 'package:starlink_app/shared/widgets/background_sign_out.dart';
 import 'package:starlink_app/services/post_update_reset.dart';
 import 'package:starlink_app/services/push_service.dart';
 import 'package:starlink_app/providers/notification_provider.dart';
@@ -67,6 +70,13 @@ void main() async {
   if (!kIsWeb) {
     PushService.navigatorKey = navigatorKey;
     await PushService.instance.initialize();
+  }
+
+  // Left for too long before being closed: back to the biometric panel.
+  if (!kIsWeb &&
+      await BiometricService.consumeBackgroundExpired() &&
+      await BiometricService.isEnrolled()) {
+    await ApiService.logout();
   }
 
   final initialHome = await _resolveInitialHomeForLaunch();
@@ -340,6 +350,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _signOutToBiometricPanel() async {
+    await ApiService.logout();
+    navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -348,7 +366,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       // Matches the Starlink web portal design system.
       theme: AppTheme.light,
-      home: widget.initialHome,
+      home: SplashScreen(next: widget.initialHome),
+      builder:
+          (context, child) => BackgroundSignOut(
+            onExpired: _signOutToBiometricPanel,
+            child: child ?? const SizedBox.shrink(),
+          ),
     );
   }
 }

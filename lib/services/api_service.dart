@@ -1,3 +1,4 @@
+import 'package:starlink_app/services/biometric_service.dart';
 import 'package:starlink_app/shared/widgets/app_dialog.dart';
 import 'dart:convert';
 import 'dart:io' show HttpClient;
@@ -13,6 +14,9 @@ import 'package:starlink_app/services/push_service.dart';
 import 'package:starlink_app/shared/widgets/whats_new_dialog.dart';
 
 class ApiService {
+  /// Same storage key as the web portal's "Remember my email or me ".
+  static const rememberedEmailKey = 'rememberedEmail';
+
   static String get baseUrl =>
       '${dotenv.env['API_BASE_URL'] /* ?? 'https://startlink-sandbox-api.ardentnetworks.com.ph/api' */}';
   static bool _isRefreshingToken = false;
@@ -426,6 +430,7 @@ class ApiService {
   static Future<void> setRefreshToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('refreshToken', token);
+    await BiometricService.syncRefreshToken(token);
   }
 
   static Future<void> clearTokens() async {
@@ -696,6 +701,75 @@ class ApiService {
   /// Turns 2FA off (needs a current code). Refused for roles where it's required.
   static Future<Map<String, dynamic>> disableTwoFactor(String code) =>
       _authorizedWrite('POST', '/v1/auth/2fa/disable', body: {'code': code});
+
+  /// Checks the signed-in user's password through the normal login route,
+  /// since the backend has no verify-password endpoint. Returns `email` when
+  /// it's right. A login that issues new tokens replaces the current ones.
+  /// With 2FA on, the login route answers with its code step instead, which
+  /// still means the password was right.
+  static Future<Map<String, dynamic>> confirmCurrentPassword(
+    String password,
+  ) async {
+    final profile = await getCurrentUserProfile();
+    final data = profile['data'];
+    final email = data is Map ? data['email']?.toString() ?? '' : '';
+    if (email.isEmpty) {
+      return {
+        'status': 'error',
+        'message': 'Could not confirm your password. Please try again.',
+      };
+    }
+
+    final res = await login(email, password);
+    final access = res['accessToken']?.toString();
+    if (access != null && access.isNotEmpty) {
+      await setAccessToken(access);
+      final refresh = res['refreshToken']?.toString();
+      if (refresh != null && refresh.isNotEmpty) await setRefreshToken(refresh);
+      return {'status': 'success', 'email': email};
+    }
+    if (res.containsKey('userId') && res['flag'] == false) {
+      return {'status': 'success', 'email': email};
+    }
+
+    final msg = res['message']?.toString() ?? '';
+    final unreachable =
+        msg.contains('SocketException') ||
+        msg.contains('Failed host lookup') ||
+        msg.contains('TimeoutException') ||
+        msg.contains('HandshakeException');
+    return {
+      'status': 'error',
+      'message':
+          unreachable
+              ? 'Cannot reach the server. Check your connection and try again.'
+              : msg.contains('Too many')
+              ? 'Too many attempts. Please try again later.'
+              : 'The password you entered is incorrect.',
+    };
+  }
+
+  /// Restores the session from the token biometric login saved. `expired` in
+  /// the result means it's no longer usable and the enrollment was removed.
+  static Future<Map<String, dynamic>> restoreBiometricSession() async {
+    final saved = await BiometricService.savedRefreshToken();
+    if (saved == null) {
+      await BiometricService.clearEnrollment();
+      return {'status': 'error', 'expired': true};
+    }
+    await setRefreshToken(saved);
+    final result = await refreshToken();
+    if (result['status'] == 'success') return result;
+
+    // Don't leave a usable token behind for the next launch to resume from.
+    await clearTokens();
+    final msg = result['message']?.toString() ?? '';
+    final expired =
+        msg.contains('Session expired') ||
+        msg.contains('No refresh token');
+    if (expired) await BiometricService.clearEnrollment();
+    return {'status': 'error', 'expired': expired};
+  }
 
   static Future<Map<String, dynamic>> forgotPassword(String email) async {
     try {
@@ -2623,7 +2697,10 @@ class ApiService {
       WhatsNew.reset();
       final accessToken = await getAccessToken();
       // The backend revokes the session named by the refreshToken cookie.
-      final refresh = await getRefreshToken();
+      // With biometric login on, that session is what it signs back in to, so
+      // it isn't named here.
+      final refresh =
+          await BiometricService.isEnrolled() ? null : await getRefreshToken();
       if (accessToken != null && accessToken.isNotEmpty) {
         try {
           await _client
@@ -2643,15 +2720,32 @@ class ApiService {
     } finally {
       await clearTokens();
       final prefs = await SharedPreferences.getInstance();
+      // "Remember my email" is meant to outlive the session.
+      final rememberedEmail = prefs.getString(rememberedEmailKey);
       await prefs.clear();
+      if (rememberedEmail != null) {
+        await prefs.setString(rememberedEmailKey, rememberedEmail);
+      }
     }
     return {'status': 'success', 'message': 'Logged out successfully.'};
   }
 
+  /// A new password means biometric login has to be set up again.
   static Future<Map<String, dynamic>> changePassword({
     required String oldPassword,
     required String newPassword,
   }) async {
+    final result = await _changePassword(oldPassword, newPassword);
+    if (result['status'] == 'success') {
+      await BiometricService.clearEnrollment();
+    }
+    return result;
+  }
+
+  static Future<Map<String, dynamic>> _changePassword(
+    String oldPassword,
+    String newPassword,
+  ) async {
     try {
       final accessToken = await getValidAccessToken();
       if (accessToken == null || accessToken.isEmpty) {
@@ -2661,13 +2755,15 @@ class ApiService {
         };
       }
 
-      Future<http.Response> doRequest(String token) => _client
+      Future<http.Response> doRequest(String token) async => _client
           .put(
             Uri.parse('$baseUrl/v1/auth/change-password'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
               'Authorization': 'Bearer $token',
+              // Names this session, so it can stay signed in.
+              'Cookie': 'refreshToken=${await getRefreshToken() ?? ''}',
             },
             body: json.encode({
               'old_password': oldPassword,

@@ -5,6 +5,7 @@ import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/auth/two_factor/two_factor_settings_card.dart';
+import 'package:starlink_app/features/security/biometric_settings_card.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
@@ -516,6 +517,11 @@ Navigator.of(context).pushAndRemoveUntil(
                                 _buildSectionCard(
                                   title: 'Two-Factor Authentication',
                                   child: const TwoFactorSettingsCard(),
+                                ),
+                                const SizedBox(height: 20),
+                                _buildSectionCard(
+                                  title: 'Biometrics',
+                                  child: const BiometricSettingsCard(),
                                 ),
                                 const SizedBox(height: 20),
 

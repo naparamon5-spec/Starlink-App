@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/shared/widgets/account_detail_parts.dart';
-import 'package:starlink_app/shared/widgets/app_version_label.dart';
 import 'package:starlink_app/shared/widgets/ui_kit.dart';
 import 'package:starlink_app/shared/widgets/unsaved_changes_guard.dart';
 
@@ -325,8 +324,6 @@ class _AdminEditProfilePageState extends State<AdminEditProfilePage> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          const AppVersionLabel(),
         ],
       ),
     );

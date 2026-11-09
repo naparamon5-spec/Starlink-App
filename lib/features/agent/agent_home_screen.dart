@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:starlink_app/shared/widgets/logout_confirm_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_version_label.dart';
 import 'package:starlink_app/features/admin/profile/admin_edit_profile_page.dart';
 import 'package:starlink_app/features/agent/profile/agent_manage_users_page.dart';
-import 'package:starlink_app/features/agent/profile/agent_user_guide_page.dart';
+import 'package:starlink_app/features/security/security_page.dart';
+import 'package:starlink_app/features/user_guide/user_guide_page.dart';
 import 'package:starlink_app/features/agent/sections/agent/agent_agents_page.dart';
 import 'package:starlink_app/features/agent/sections/billing/agent_billing_page.dart';
 import 'package:starlink_app/features/agent/sections/enduser/agent_end_users_page.dart';
@@ -2963,9 +2966,15 @@ class _AgentSettingsPage extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _SettingsTile(
-            icon: Icons.lock_outline,
-            label: 'Change Password',
-            subtitle: 'Update your account password',
+            icon: Icons.security_outlined,
+            label: 'Security',
+            subtitle: 'Change password, two-factor and biometrics',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SecurityPage()),
+              );
+            },
           ),
           const SizedBox(height: 8),
           _SettingsTile(
@@ -2993,11 +3002,11 @@ class _AgentSettingsPage extends StatelessWidget {
           _SettingsTile(
             icon: Icons.menu_book_outlined,
             label: 'User Guide',
-            subtitle: 'Tips and best practices',
+            subtitle: 'Videos and a step-by-step guide.',
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => AgentUserGuidePage()),
+                MaterialPageRoute(builder: (context) => const UserGuidePage()),
               );
             },
           ),
@@ -3013,10 +3022,12 @@ class _AgentSettingsPage extends StatelessWidget {
               if (!await confirmLogout(context)) return;
               await ApiService.logout();
               if (context.mounted) {
+                final toast = AppToast.of(context);
                 Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
                   (route) => false,
                 );
+                toast.showNeutral('Signed out');
               }
             },
             child: Container(
@@ -3045,6 +3056,8 @@ class _AgentSettingsPage extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          const AppVersionLabel(),
         ],
       ),
     );

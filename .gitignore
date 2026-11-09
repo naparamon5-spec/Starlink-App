@@ -51,6 +51,7 @@ ios/Runner/GoogleService-Info.plist
 # Backend hand-off guides (shared directly with the backend developer)
 /docs/BACKEND_PUSH_NOTIFICATIONS.md
 /docs/BACKEND_TWO_FACTOR_AUTH.md
+/docs/BACKEND_BIOMETRICS.md
 
 
 #Environment variable

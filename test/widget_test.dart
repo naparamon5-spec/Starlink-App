@@ -6,6 +6,7 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:starlink_app/main.dart';
@@ -15,7 +16,14 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const MyApp(initialHome: Scaffold(body: Text('App loaded'))));
 
-    // Verify that the app loaded.
+    // The splash shows first.
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(find.text('App loaded'), findsNothing);
+
+    // Verify that the app loaded once the splash finishes.
+    await tester.pump(const Duration(milliseconds: 2500));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byType(SvgPicture), findsNothing);
     expect(find.text('App loaded'), findsOneWidget);
   });
 }

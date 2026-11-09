@@ -10,7 +10,9 @@ import 'package:starlink_app/shared/widgets/whats_new_dialog.dart';
 import 'package:starlink_app/shared/widgets/notifications.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:starlink_app/shared/widgets/modern_nav.dart';
+import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:starlink_app/shared/widgets/logout_confirm_dialog.dart';
+import 'package:starlink_app/shared/widgets/app_version_label.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/admin/sections/ticket/admin_tickets_page.dart';
 import 'package:starlink_app/features/admin/sections/agent/admin_agents_page.dart';
@@ -20,9 +22,8 @@ import 'package:starlink_app/features/admin/sections/subscription/admin_subscrip
 import 'package:starlink_app/features/admin/sections/enduser/admin_end_users_page.dart';
 import 'package:starlink_app/features/admin/profile/admin_edit_profile_page.dart';
 import 'package:starlink_app/features/admin/profile/admin_manage_users_page.dart';
-// User Guide is disabled for now (see the Settings section).
-// import 'package:starlink_app/features/admin/profile/admin_user_guide_page.dart';
-import 'package:starlink_app/features/auth/change_password.dart';
+import 'package:starlink_app/features/security/security_page.dart';
+import 'package:starlink_app/features/user_guide/user_guide_page.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -786,15 +787,13 @@ class _SettingsSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _SettingsCard(
-            icon: Icons.lock_outline_rounded,
-            iconColor: const Color.fromARGB(255, 187, 90, 94),
-            title: 'Change Password',
-            subtitle: 'Update your account login credentials.',
+            icon: Icons.security_outlined,
+            iconColor: _primary,
+            title: 'Security',
+            subtitle: 'Change password, two-factor and biometrics.',
             onTap:
                 () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const AdminChangePasswordPage(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const SecurityPage()),
                 ),
           ),
           const SizedBox(height: 20),
@@ -855,12 +854,11 @@ class _SettingsSection extends StatelessWidget {
             icon: Icons.menu_book_outlined,
             iconColor: _success,
             title: 'User Guide',
-            subtitle: 'Coming soon.',
-            // Disabled for now; re-enable by restoring this onTap:
-            // () => Navigator.of(context).push(
-            //   MaterialPageRoute(builder: (_) => const AdminUserGuidePage()),
-            // ),
-            onTap: null,
+            subtitle: 'Videos and a step-by-step guide.',
+            onTap:
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const UserGuidePage()),
+                ),
           ),
           const SizedBox(height: 28),
           SizedBox(
@@ -870,10 +868,12 @@ class _SettingsSection extends StatelessWidget {
                 if (!await confirmLogout(context)) return;
                 await ApiService.logout();
                 if (context.mounted) {
+                  final toast = AppToast.of(context);
                   Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
                     (route) => false,
                   );
+                  toast.showNeutral('Signed out');
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -890,6 +890,8 @@ class _SettingsSection extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          const AppVersionLabel(),
         ],
       ),
     );

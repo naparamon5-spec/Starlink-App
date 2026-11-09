@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 import 'package:starlink_app/services/api_service.dart';
 import 'package:starlink_app/features/auth/two_factor/two_factor_settings_card.dart';
+import 'package:starlink_app/features/security/biometric_settings_card.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const _primary = Color(0xFF133341);
@@ -371,6 +372,9 @@ Navigator.of(context).pushAndRemoveUntil(
                             const SizedBox(height: 28),
                             _sectionTitle('TWO-FACTOR AUTHENTICATION'),
                             _card(child: const TwoFactorSettingsCard()),
+                            const SizedBox(height: 22),
+                            _sectionTitle('BIOMETRICS'),
+                            _card(child: const BiometricSettingsCard()),
                             const SizedBox(height: 22),
                             _sectionTitle('CHANGE PASSWORD'),
                             _card(

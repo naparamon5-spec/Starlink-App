@@ -341,11 +341,13 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       await prefs.remove('email');
       await prefs.remove('name');
       if (!mounted) return;
+      final toast = AppToast.of(context);
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const LoginScreen()),
         (_) => false,
       );
+      toast.showNeutral('Signed out');
     } catch (e) {
       if (!mounted) return;
       AppToast.error(context, 'Error logging out: ${e.toString()}');

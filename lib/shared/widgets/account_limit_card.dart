@@ -57,12 +57,14 @@ class AccountLimitCardState extends State<AccountLimitCard> {
   bool get _full => _limit != null && _used >= _limit!;
 
   Future<void> _edit() async {
-    final ctrl = TextEditingController(text: '${_limit ?? 3}');
     final result = await showDialog<_LimitChoice>(
       context: context,
-      builder: (ctx) => _LimitDialog(controller: ctrl, isDefault: _isDefault),
+      builder:
+          (ctx) => _LimitDialog(
+            initialLimit: _limit ?? 3,
+            isDefault: _isDefault,
+          ),
     );
-    ctrl.dispose();
     if (result == null || !mounted) return;
     final res = await ApiService.setAccountLimit(widget.code, result.value);
     if (!mounted) return;
@@ -137,8 +139,8 @@ class _LimitChoice {
 }
 
 class _LimitDialog extends StatefulWidget {
-  const _LimitDialog({required this.controller, required this.isDefault});
-  final TextEditingController controller;
+  const _LimitDialog({required this.initialLimit, required this.isDefault});
+  final int initialLimit;
   final bool isDefault;
 
   @override
@@ -146,8 +148,20 @@ class _LimitDialog extends StatefulWidget {
 }
 
 class _LimitDialogState extends State<_LimitDialog> {
+  // Owned here so it outlives the dialog's closing animation, which keeps
+  // rebuilding the TextField after showDialog has returned.
+  late final TextEditingController _controller = TextEditingController(
+    text: '${widget.initialLimit}',
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   String? get _problem {
-    final n = int.tryParse(widget.controller.text.trim());
+    final n = int.tryParse(_controller.text.trim());
     return n != null && n >= 1 && n <= 100
         ? null
         : 'Enter a whole number from 1 to 100';
@@ -163,7 +177,7 @@ class _LimitDialogState extends State<_LimitDialog> {
           "Active accounts and invitations not yet accepted count; "
           "deactivated ones don't. The default is 3.",
       content: TextField(
-        controller: widget.controller,
+        controller: _controller,
         keyboardType: TextInputType.number,
         autofocus: true,
         onChanged: (_) => setState(() {}),
@@ -178,7 +192,7 @@ class _LimitDialogState extends State<_LimitDialog> {
               ? null
               : () => Navigator.pop(
                 context,
-                _LimitChoice(int.parse(widget.controller.text.trim())),
+                _LimitChoice(int.parse(_controller.text.trim())),
               ),
       cancelLabel: 'Cancel',
       onCancel: () => Navigator.pop(context),

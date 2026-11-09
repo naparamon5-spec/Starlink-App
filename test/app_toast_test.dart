@@ -24,37 +24,63 @@ void main() {
     await t.pump();
   }
 
-  testWidgets('success says Success, then leaves by itself', (t) async {
+  Finder close() => find.byIcon(Icons.close_rounded);
+
+  testWidgets('success shows its message, then leaves by itself', (t) async {
     await open(t);
     AppToast.success(ctx, 'Saved');
     await settle(t);
-    expect(find.text('Success'), findsOneWidget);
     expect(find.text('Saved'), findsOneWidget);
-    expect(find.text('Done'), findsOneWidget);
-    await t.pump(const Duration(seconds: 3));
+    await t.pump(const Duration(seconds: 5));
     await settle(t);
     expect(find.text('Saved'), findsNothing);
   });
 
-  testWidgets('success closes on a tap', (t) async {
+  testWidgets('the X closes it', (t) async {
     await open(t);
-    AppToast.success(ctx, 'Saved');
+    AppToast.neutral(ctx, 'Signed out');
     await settle(t);
-    await t.tap(find.text('Saved'));
+    await t.tap(close());
     await settle(t);
-    expect(find.text('Saved'), findsNothing);
+    expect(find.text('Signed out'), findsNothing);
   });
 
-  testWidgets('failed says Failed and waits for OK', (t) async {
+  testWidgets('an error stays longer than a success', (t) async {
     await open(t);
     AppToast.error(ctx, 'No connection');
     await settle(t);
-    expect(find.text('Failed'), findsOneWidget);
-    await t.pump(const Duration(seconds: 30));
+    await t.pump(const Duration(seconds: 6));
     expect(find.text('No connection'), findsOneWidget);
-    await t.tap(find.text('OK'));
+    await t.pump(const Duration(seconds: 2));
     await settle(t);
     expect(find.text('No connection'), findsNothing);
+  });
+
+  testWidgets('it does not block the page behind it', (t) async {
+    var tapped = false;
+    await t.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            ctx = context;
+            return Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => tapped = true,
+                  child: const Text('Behind'),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    AppToast.success(ctx, 'Saved');
+    await settle(t);
+    await t.tap(find.text('Behind'));
+    expect(tapped, isTrue);
+    await t.pump(const Duration(seconds: 5));
+    await settle(t);
   });
 
   testWidgets('a new message replaces the current one', (t) async {
@@ -77,7 +103,7 @@ void main() {
     await t.pumpAndSettle();
     AppToast.error(ctx, 'Over the sheet');
     await settle(t);
-    await t.tap(find.text('OK'));
+    await t.tap(close());
     await settle(t);
     expect(find.text('Over the sheet'), findsNothing);
     expect(find.text('Sheet'), findsOneWidget);
@@ -102,7 +128,7 @@ void main() {
       onAction: () => undone = true,
     );
     await settle(t);
-    await t.tap(find.text('Undo'));
+    await t.tap(find.text('UNDO'));
     await settle(t);
     expect(undone, isTrue);
     expect(find.text('Removed'), findsNothing);

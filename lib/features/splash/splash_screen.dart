@@ -1,16 +1,23 @@
-// filepath: lib/pages/splash_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:starlink_app/features/auth/login_screen.dart';
 
 // Brand tokens (matching login_screen.dart)
 const _primary = Color(0xFF133341);
 const _primaryDark = Color(0xFF0C2029);
 
+/// Branded launch screen. Shows the logo briefly, then cross-fades to [next]
+/// in place.
+///
+/// This swaps content rather than navigating so the app's first route stays
+/// put: a password-reset deep link can arrive during the splash and push on
+/// top of it, and a route replacement here would discard that screen.
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  const SplashScreen({super.key, required this.next});
+
+  /// The screen resolved for this launch (login or the role's home).
+  final Widget next;
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -21,13 +28,12 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
   late Animation<double> _scaleAnim;
+  Timer? _timer;
+  bool _finished = false;
 
   @override
   void initState() {
     super.initState();
-
-    // Force light icons on status bar
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
 
     _animController = AnimationController(
       vsync: this,
@@ -49,33 +55,38 @@ class _SplashScreenState extends State<SplashScreen>
     // Start fade-in immediately
     _animController.forward();
 
-    // Navigate after 2.5 seconds
-    Timer(const Duration(milliseconds: 2500), () {
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 500),
-          pageBuilder: (_, __, ___) => const LoginScreen(),
-          transitionsBuilder: (_, animation, __, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-        ),
-      );
+    // Move on after 2.5 seconds
+    _timer = Timer(const Duration(milliseconds: 2500), () {
+      if (mounted) setState(() => _finished = true);
     });
   }
 
   @override
   void dispose() {
+    _timer?.cancel();
     _animController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      child:
+          _finished
+              ? KeyedSubtree(
+                key: const ValueKey('splash-next'),
+                child: widget.next,
+              )
+              : _buildSplash(context),
+    );
+  }
+
+  Widget _buildSplash(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
+      key: const ValueKey('splash'),
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         body: Container(
@@ -134,39 +145,9 @@ class _SplashScreenState extends State<SplashScreen>
                   opacity: _fadeAnim,
                   child: ScaleTransition(
                     scale: _scaleAnim,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Logo card — same frosted style as login header
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 32,
-                            vertical: 24,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/images/logo.svg',
-                            height: 56,
-                            colorFilter: const ColorFilter.mode(
-                              Colors.white,
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Welcome',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.80),
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                      ],
+                    child: SvgPicture.asset(
+                      'assets/images/logo_full_on_dark.svg',
+                      width: size.width * 0.72,
                     ),
                   ),
                 ),

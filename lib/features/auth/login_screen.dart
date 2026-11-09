@@ -1,10 +1,6 @@
 import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
@@ -16,18 +12,11 @@ import 'package:starlink_app/services/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/features/auth/otp_verification_page.dart';
 import 'package:starlink_app/features/auth/two_factor/authenticator_widgets.dart';
+import 'package:starlink_app/features/auth/widgets/auth_shell.dart';
+import 'package:starlink_app/features/auth/widgets/biometric_sign_in_panel.dart';
+import 'package:starlink_app/services/biometric_service.dart';
 
-// Brand tokens (matching admin_home_screen.dart)
-const _primary = Color(0xFF133341);
-const _primaryDark = Color(0xFF0C2029);
-const _ink = Color(0xFF111111);
-const _inkSecondary = Color(0xFF666666);
-const _inkTertiary = Color(0xFF888888);
-const _surface = Color(0xFFFFFFFF);
-const _surfaceSubtle = Color(0xFFF8F8F8);
-const _border = Color(0xFFD7D7D7);
-
-// Legal links opened from the login consent row.
+// Legal links shown below the login form.
 // TODO(Ardent): confirm these public URLs point to the live pages before release.
 const _userAgreementUrl =
     'https://starlink.ardentnetworks.com.ph/terms-of-service';
@@ -42,31 +31,22 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
-    with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen> {
   bool _isPasswordVisible = false;
-  bool _isAgreedToTerms = false;
+  bool _rememberEmail = false;
   bool _showValidation = false;
   bool _isLoading = false;
   String? _errorMessage;
-  String? _emailError;
-  String? _passwordError;
-  String _appVersion = '';
+
+  bool _bioChecked = false;
+  bool _bioBusy = false;
+  bool _showPasswordForm = false;
+  String? _bioEmail;
+  BiometricMethod _method = BiometricMethod.pin;
 
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-
-  AnimationController? _errorAnimController;
-  Animation<double>? _errorFadeAnim;
-  Animation<Offset>? _errorSlideAnim;
-
-  late final TapGestureRecognizer _userAgreementTap =
-      TapGestureRecognizer()..onTap = () => _openUrl(_userAgreementUrl);
-  late final TapGestureRecognizer _privacyPolicyTap =
-      TapGestureRecognizer()..onTap = () => _openUrl(_privacyPolicyUrl);
-  late final TapGestureRecognizer _contactSupportTap =
-      TapGestureRecognizer()..onTap = () => _openUrl(_supportUrl);
 
   Future<void> _openUrl(String url) async {
     final uri = Uri.parse(url);
@@ -79,34 +59,39 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
-    _errorAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _errorFadeAnim = CurvedAnimation(
-      parent: _errorAnimController!,
-      curve: Curves.easeOut,
-    );
-    _errorSlideAnim = Tween<Offset>(
-      begin: const Offset(0, -0.3),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _errorAnimController!, curve: Curves.easeOut),
-    );
-    _loadAppVersion();
+    _restoreRememberedEmail();
+    _loadBiometric();
   }
 
-  /// Reads the real version embedded in this build at runtime, so the label
-  /// always reflects the actually installed app rather than a hardcoded value.
-  Future<void> _loadAppVersion() async {
-    try {
-      final info = await PackageInfo.fromPlatform();
-      if (!mounted) return;
-      setState(() {
-        _appVersion = 'Version ${info.version}';
-      });
-    } catch (_) {
-      // Leave the version label empty if platform metadata is unavailable.
+  Future<void> _loadBiometric() async {
+    final email = await BiometricService.savedEmail();
+    final method = await BiometricService.bestMethod();
+    // No Face ID, fingerprint or PIN left on this phone: password it is.
+    final available = await BiometricService.isAvailable();
+    if (!mounted) return;
+    setState(() {
+      _bioEmail = available ? email : null;
+      _method = method;
+      _bioChecked = true;
+    });
+  }
+
+  Future<void> _restoreRememberedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(ApiService.rememberedEmailKey);
+    if (!mounted || saved == null || saved.isEmpty) return;
+    setState(() {
+      _emailController.text = saved;
+      _rememberEmail = true;
+    });
+  }
+
+  Future<void> _persistRememberedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberEmail) {
+      await prefs.setString(ApiService.rememberedEmailKey, _emailController.text.trim());
+    } else {
+      await prefs.remove(ApiService.rememberedEmailKey);
     }
   }
 
@@ -114,10 +99,6 @@ class _LoginScreenState extends State<LoginScreen>
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _errorAnimController?.dispose();
-    _userAgreementTap.dispose();
-    _privacyPolicyTap.dispose();
-    _contactSupportTap.dispose();
     super.dispose();
   }
 
@@ -127,13 +108,6 @@ class _LoginScreenState extends State<LoginScreen>
   void _setError(String message) {
     if (!mounted) return;
     setState(() => _errorMessage = message);
-    _errorAnimController?.forward(from: 0);
-  }
-
-  void _clearError() {
-    if (!mounted) return;
-    setState(() => _errorMessage = null);
-    _errorAnimController?.reverse();
   }
 
   Widget _getScreenForRole(String role, {int userId = 0}) {
@@ -148,13 +122,95 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  /// Loads the signed-in user and opens their home. False if it couldn't.
+  Future<bool> _openHomeFromProfile() async {
+    final profileResponse = await ApiService.getCurrentUserProfile();
+    if (profileResponse['status'] != 'success' ||
+        profileResponse['data'] == null) {
+      return false;
+    }
+    final userData = profileResponse['data'];
+    final userIdStr = userData['id']?.toString() ?? 'undefined';
+    final detailed = await ApiService.getUserById(userIdStr);
+    final prefs = await SharedPreferences.getInstance();
+    if (detailed['status'] == 'success' && detailed['data'] != null) {
+      await prefs.setString('userProfile', json.encode(detailed['data']));
+    }
+
+    final userRole =
+        (userData['role'] ?? userData['type'] ?? 'customer')
+            .toString()
+            .toLowerCase();
+    final userId =
+        (userData['id'] is int)
+            ? userData['id'] as int
+            : int.tryParse(userData['id']?.toString() ?? '') ?? 0;
+    await prefs.setInt('user_id', userId);
+
+    if (!mounted) return true;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _getScreenForRole(userRole, userId: userId),
+      ),
+    );
+    return true;
+  }
+
+  /// Device check first, then the saved session. Same order as ANI HRIS.
+  Future<void> _signInWithBiometrics() async {
+    if (_bioBusy) return;
+    setState(() => _bioBusy = true);
+    final result = await BiometricService.authenticate(
+      'Sign in to Starlink',
+      biometricOnly: _method.isBiometric,
+    );
+    if (!mounted) return;
+    if (!result.success) {
+      setState(() => _bioBusy = false);
+      AppToast.error(
+        context,
+        result.message ?? 'Authentication was not recognized. Please try again.',
+      );
+      return;
+    }
+
+    final restored = await ApiService.restoreBiometricSession();
+    if (!mounted) return;
+    if (restored['status'] != 'success') {
+      final expired = restored['expired'] == true;
+      setState(() {
+        _bioBusy = false;
+        if (expired) {
+          _emailController.text = _bioEmail ?? _emailController.text;
+          _bioEmail = null;
+        }
+      });
+      AppToast.error(
+        context,
+        expired
+            ? 'Your biometric sign-in has expired. Please sign in with your password.'
+            : 'Cannot reach the server. Check your connection and try again.',
+      );
+      return;
+    }
+
+    PushService.instance.registerWithBackend();
+    final opened = await _openHomeFromProfile();
+    if (!mounted) return;
+    setState(() => _bioBusy = false);
+    if (!opened) {
+      AppToast.error(context, 'Failed to load user profile. Please try again.');
+    }
+  }
+
   Future<void> _handleLogin() async {
     setState(() {
       _showValidation = true;
       _errorMessage = null;
     });
 
-    if (!_formKey.currentState!.validate() || !_isAgreedToTerms) return;
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
@@ -164,6 +220,7 @@ class _LoginScreenState extends State<LoginScreen>
       );
 
       if (response.containsKey('userId') && response['flag'] == false) {
+        await _persistRememberedEmail();
         // Two-factor step (authenticator app). `setupRequired` means the
         // account has no authenticator linked yet, so show the QR first.
         final setup =
@@ -182,6 +239,8 @@ class _LoginScreenState extends State<LoginScreen>
           ),
         );
       } else if (response.containsKey('accessToken')) {
+        await _persistRememberedEmail();
+        await BiometricService.handleSignIn(_emailController.text);
         final accessToken = response['accessToken'];
         final refreshToken = response['refreshToken'];
 
@@ -194,38 +253,8 @@ class _LoginScreenState extends State<LoginScreen>
         // Register this device for push notifications (best-effort).
         PushService.instance.registerWithBackend();
 
-        final profileResponse = await ApiService.getCurrentUserProfile();
-
-        if (profileResponse['status'] == 'success' &&
-            profileResponse['data'] != null) {
-          final userData = profileResponse['data'];
-          final userIdStr = userData['id']?.toString() ?? 'undefined';
-          final detailed = await ApiService.getUserById(userIdStr);
-
-          if (detailed['status'] == 'success' && detailed['data'] != null) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('userProfile', json.encode(detailed['data']));
-          }
-
-          final userRole =
-              (userData['role'] ?? userData['type'] ?? 'customer')
-                  .toString()
-                  .toLowerCase();
-          final userId =
-              (userData['id'] is int)
-                  ? userData['id'] as int
-                  : int.tryParse(userData['id']?.toString() ?? '') ?? 0;
-
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setInt('user_id', userId);
-
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => _getScreenForRole(userRole, userId: userId),
-            ),
-          );
+        if (await _openHomeFromProfile()) {
+          // Navigated.
         } else if (response.containsKey('user')) {
           final userData = response['user'];
           final userRole =
@@ -272,564 +301,230 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final topPad = MediaQuery.of(context).padding.top;
-
-    // ── Reduced from 0.38 → 0.26 so the header is shorter
-    //    and the form card sits higher on screen.
-    const headerFraction = 0.30;
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        backgroundColor: _surface,
-        body: Stack(
+    if (!_bioChecked) return const AuthShell(child: SizedBox(height: 320));
+    final bioEmail = _bioEmail;
+    if (bioEmail != null && !_showPasswordForm) {
+      return AuthShell(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Fixed gradient header ──────────────────────────────────────
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: _TopHeader(
-                height: size.height * headerFraction,
-                topPad: topPad,
-              ),
+            const AuthHeading(
+              title: 'Sign in',
+              subtitle: 'Welcome back to the Ardent Starlink Portal.',
             ),
-
-            // ── Scrollable form ────────────────────────────────────────────
-            Positioned.fill(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.only(top: size.height * headerFraction),
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                child: Container(
-                  color: _surface,
-                  padding: const EdgeInsets.fromLTRB(28, 28, 28, 40),
-                  child: Form(
-                    key: _formKey,
-                    autovalidateMode:
-                        _showValidation
-                            ? AutovalidateMode.always
-                            : AutovalidateMode.disabled,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 26),
+            BiometricSignInPanel(
+              email: bioEmail,
+              method: _method,
+              busy: _bioBusy,
+              onSignIn: _signInWithBiometrics,
+              onUsePassword:
+                  () => setState(() {
+                    _emailController.text = bioEmail;
+                    _showPasswordForm = true;
+                  }),
+            ),
+            const SizedBox(height: 10),
+            _legalLinks(),
+          ],
+        ),
+      );
+    }
+    return AuthShell(
+      child: Form(
+        key: _formKey,
+        autovalidateMode:
+            _showValidation
+                ? AutovalidateMode.always
+                : AutovalidateMode.disabled,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const AuthHeading(
+              title: 'Sign in',
+              subtitle: 'Welcome back to the Ardent Starlink Portal.',
+            ),
+            const SizedBox(height: 26),
+            const AuthFieldLabel('Email'),
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              enabled: !_isLoading,
+              style: const TextStyle(fontSize: 15, color: AppColors.ink),
+              decoration: authInputDecoration(
+                hint: 'you@company.com.ph',
+                prefixIcon: Icons.mail_outline_rounded,
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) {
+                  return 'Please enter your email address';
+                }
+                if (!_isEmailValid(v)) {
+                  return 'Please enter a valid email address';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            const AuthFieldLabel('Password'),
+            TextFormField(
+              controller: _passwordController,
+              obscureText: !_isPasswordVisible,
+              enabled: !_isLoading,
+              style: const TextStyle(fontSize: 15, color: AppColors.ink),
+              decoration: authInputDecoration(
+                hint: '••••••••',
+                prefixIcon: Icons.lock_outline_rounded,
+                suffixIcon: IconButton(
+                  tooltip:
+                      _isPasswordVisible ? 'Hide password' : 'Show password',
+                  icon: Icon(
+                    _isPasswordVisible
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    color: AppColors.inkFaint,
+                    size: 20,
+                  ),
+                  onPressed:
+                      () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible,
+                      ),
+                ),
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) {
+                  return 'Please enter your password';
+                }
+                if (v.length < 6) {
+                  return 'Password must be at least 6 characters';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap:
+                        () => setState(() => _rememberEmail = !_rememberEmail),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Title
-                        const Text(
-                          'Sign in to your account',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: _ink,
-                            letterSpacing: -0.4,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Enter your credentials to continue.',
-                          style: TextStyle(fontSize: 13, color: _inkSecondary),
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // Email
-                        _fieldLabel('Email Address'),
-                        const SizedBox(height: 7),
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          style: const TextStyle(fontSize: 14, color: _ink),
-                          decoration: _inputDecoration(
-                            hint: 'Enter your email',
-                            prefixIcon: Icons.mail_outline_rounded,
-                            errorText: _emailError,
-                          ),
-                          validator: (v) {
-                            if (v == null || v.isEmpty) {
-                              return 'Please enter your email address';
-                            }
-                            if (!_isEmailValid(v)) {
-                              return 'Please enter a valid email address';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: 18),
-
-                        // Password
-                        _fieldLabel('Password'),
-                        const SizedBox(height: 7),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: !_isPasswordVisible,
-                          style: const TextStyle(fontSize: 14, color: _ink),
-                          decoration: _inputDecoration(
-                            hint: 'Enter your password',
-                            prefixIcon: Icons.lock_outline_rounded,
-                            errorText: _passwordError,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _isPasswordVisible
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                                color: _inkTertiary,
-                                size: 20,
-                              ),
-                              onPressed:
-                                  () => setState(
-                                    () =>
-                                        _isPasswordVisible =
-                                            !_isPasswordVisible,
-                                  ),
-                            ),
-                          ),
-                          validator: (v) {
-                            if (v == null || v.isEmpty) {
-                              return 'Please enter your password';
-                            }
-                            if (v.length < 6) {
-                              return 'Password must be at least 6 characters';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        // Error banner
-                        if (_errorMessage != null)
-                          _errorFadeAnim != null && _errorSlideAnim != null
-                              ? SlideTransition(
-                                position: _errorSlideAnim!,
-                                child: FadeTransition(
-                                  opacity: _errorFadeAnim!,
-                                  child: _buildErrorBanner(),
-                                ),
-                              )
-                              : _buildErrorBanner(),
-
-                        // Forgot password
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed:
-                                () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const ForgotPasswordPage(),
-                                  ),
-                                ),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 0,
-                                vertical: 8,
-                              ),
-                              overlayColor: Colors.transparent,
-                            ),
-                            child: const Text(
-                              'Forgot password?',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: _primary,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 4),
-
-                        // Terms checkbox
-                        Center(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: Checkbox(
-                                  value: _isAgreedToTerms,
-                                  onChanged:
-                                      (v) => setState(
-                                        () => _isAgreedToTerms = v ?? false,
-                                      ),
-                                  activeColor: _primary,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  side: const BorderSide(
-                                    color: _inkTertiary,
-                                    width: 1.5,
-                                  ),
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                              ),
-                              const SizedBox(width: 9),
-                              Flexible(
-                                child: Text.rich(
-                                  TextSpan(
-                                    text: 'I agree to the ',
-                                    style: const TextStyle(
-                                      color: _inkSecondary,
-                                      fontSize: 13,
-                                    ),
-                                    children: [
-                                      TextSpan(
-                                        text: 'Terms of Service',
-                                        style: const TextStyle(
-                                          color: _primary,
-                                          fontWeight: FontWeight.w600,
-                                          decoration: TextDecoration.underline,
-                                          decorationColor: _primary,
-                                        ),
-                                        recognizer: _userAgreementTap,
-                                      ),
-                                      const TextSpan(text: ' and '),
-                                      TextSpan(
-                                        text: 'Privacy Policy',
-                                        style: const TextStyle(
-                                          color: _primary,
-                                          fontWeight: FontWeight.w600,
-                                          decoration: TextDecoration.underline,
-                                          decorationColor: _primary,
-                                        ),
-                                        recognizer: _privacyPolicyTap,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        if (_showValidation && !_isAgreedToTerms)
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(
-                                    Icons.info_outline,
-                                    color: Color(0xFFE90408),
-                                    size: 12,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'You must agree to continue',
-                                    style: TextStyle(
-                                      color: Color(0xFFE90408),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                        const SizedBox(height: 28),
-
-                        // Sign In button
                         SizedBox(
-                          width: double.infinity,
-                          height: 54,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleLogin,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.brand,
-                              disabledBackgroundColor: AppColors.brand
-                                  .withOpacity(0.5),
-                              elevation: 0,
-                              shadowColor: Colors.transparent,
-                              shape: const StadiumBorder(),
+                          width: 20,
+                          height: 20,
+                          child: Checkbox(
+                            value: _rememberEmail,
+                            onChanged:
+                                (v) =>
+                                    setState(() => _rememberEmail = v ?? false),
+                            activeColor: AppColors.brand,
+                            side: const BorderSide(
+                              color: AppColors.lineStrong,
+                              width: 1.5,
                             ),
-                            child: const Text(
-                              'Sign In',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                letterSpacing: 0.3,
-                              ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Flexible(
+                          child: Text(
+                            'Remember me',
+                            style: TextStyle(
+                              color: AppColors.inkSoft,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
-
-                        // Contact support
-                        const SizedBox(height: 28),
-                        Center(
-                          child: Text.rich(
-                            TextSpan(
-                              text: 'Need help? ',
-                              style: const TextStyle(
-                                color: _inkSecondary,
-                                fontSize: 13,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: 'Contact Support',
-                                  style: const TextStyle(
-                                    color: _primary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.underline,
-                                    decorationColor: _primary,
-                                  ),
-                                  recognizer: _contactSupportTap,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        // App version
-                        if (_appVersion.isNotEmpty) ...[
-                          const SizedBox(height: 40),
-                          Center(
-                            child: Text(
-                              _appVersion,
-                              style: const TextStyle(
-                                color: _inkTertiary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
                 ),
-              ),
+                TextButton(
+                  onPressed:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ForgotPasswordPage(),
+                        ),
+                      ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.brand,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  child: const Text(
+                    'Forgot password?',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
             ),
-
-            // ── Full-screen loading overlay ────────────────────────────────
-            if (_isLoading) const _LoadingOverlay(),
+            if (_errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    color: AppColors.dangerInk,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 10),
+            AuthSubmitButton(
+              label: 'Sign in',
+              loading: _isLoading,
+              onPressed: _handleLogin,
+            ),
+            if (bioEmail != null)
+              Center(
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _showPasswordForm = false),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.brand),
+                  icon: const Icon(Icons.fingerprint_rounded, size: 16),
+                  label: const Text(
+                    'Use biometrics instead',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 22),
+            _legalLinks(),
           ],
         ),
       ),
     );
   }
 
-  Widget _fieldLabel(String label) => Text(
-    label,
-    style: const TextStyle(
-      fontSize: 13,
-      fontWeight: FontWeight.w600,
-      color: _ink,
-      letterSpacing: 0.1,
+  Widget _legalLinks() => Center(
+    child: Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 16,
+      children: [
+        _legalLink('Terms of Service', _userAgreementUrl),
+        _legalLink('Privacy Policy', _privacyPolicyUrl),
+        _legalLink('Contact Support', _supportUrl),
+      ],
     ),
   );
 
-  Widget _buildErrorBanner() {
-    return Container(
-      margin: const EdgeInsets.only(top: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: _primary.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _primary.withOpacity(0.25), width: 1),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: _primary.withOpacity(0.10),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.error_outline_rounded,
-              color: _primary,
-              size: 17,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _errorMessage!,
-              style: const TextStyle(
-                color: Color(0xFFE90408),
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: _clearError,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Icon(
-                Icons.close_rounded,
-                color: _primary.withOpacity(0.6),
-                size: 18,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration({
-    required String hint,
-    required IconData prefixIcon,
-    String? errorText,
-    Widget? suffixIcon,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: _inkTertiary, fontSize: 14),
-      prefixIcon: Icon(prefixIcon, color: _inkTertiary, size: 20),
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: AppColors.paper,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _border, width: 1.5),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _border, width: 1.5),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.brand, width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE90408), width: 1.5),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE90408), width: 1.5),
-      ),
-      errorStyle: const TextStyle(color: Color(0xFFE90408), fontSize: 12),
-      errorMaxLines: 2,
-      errorText: errorText,
-    );
-  }
-}
-
-// ── Full-screen loading overlay ───────────────────────────────────────────────
-
-class _LoadingOverlay extends StatelessWidget {
-  const _LoadingOverlay();
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withOpacity(0.45),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: const SizedBox(
-              height: 40,
-              width: 40,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                valueColor: AlwaysStoppedAnimation<Color>(_primary),
-              ),
-            ),
-          ),
+  Widget _legalLink(String label, String url) => InkWell(
+    onTap: () => _openUrl(url),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppColors.inkMuted,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
         ),
       ),
-    );
-  }
-}
-
-// ── Top gradient header ───────────────────────────────────────────────────────
-
-class _TopHeader extends StatelessWidget {
-  final double height;
-  final double topPad;
-  const _TopHeader({required this.height, required this.topPad});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF133341), Color(0xFF0C2029)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Decorative circles
-          Positioned(
-            top: -20,
-            right: -20,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.06),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 10,
-            left: -30,
-            child: Container(
-              width: 90,
-              height: 90,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
-              ),
-            ),
-          ),
-          // Logo + tagline — tighter vertical padding
-          Padding(
-            padding: EdgeInsets.only(top: topPad),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Ardent logo: red circle, black slant, white
-                  // "ARDENT NETWORKS, INC." text for the navy header.
-                  SvgPicture.asset(
-                    'assets/images/logo_full_on_dark.svg',
-                    height: 64,
-                    fit: BoxFit.contain,
-                  ),
-                  const SizedBox(height: 10), // reduced from 18
-                  Text(
-                    'Welcome Back!',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.75),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
 }

@@ -3,17 +3,17 @@ import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:starlink_app/features/auth/two_factor/authenticator_widgets.dart';
+import 'package:starlink_app/features/security/security_icon_tile.dart';
 import 'package:starlink_app/services/api_service.dart';
 
 const _primary = Color(0xFF133341);
 const _ink = Color(0xFF111111);
 const _inkSecondary = Color(0xFF666666);
 const _success = Color(0xFF10B981);
-const _danger = Color(0xFFE90408);
 
-/// "Two-factor authentication" card for Security Settings: shows whether an
-/// authenticator app is linked and lets the user link one, re-link a new
-/// phone, or turn 2FA off (when their role doesn't require it).
+/// "Two-factor authentication" card for Security Settings: a switch that links
+/// an authenticator app or turns 2FA off (when their role doesn't require it),
+/// plus re-linking a new phone.
 class TwoFactorSettingsCard extends StatefulWidget {
   const TwoFactorSettingsCard({super.key});
 
@@ -61,29 +61,10 @@ class _TwoFactorSettingsCardState extends State<TwoFactorSettingsCard> {
   }
 
   Future<void> _disable() async {
-    final controller = TextEditingController();
     final code = await showDialog<String>(
       context: context,
-      builder:
-          (ctx) => AppDialog(
-            icon: Icons.shield_outlined,
-            tone: AppDialogTone.danger,
-            title: 'Turn off two-factor?',
-            message:
-                'Enter the current 6-digit code from your authenticator app '
-                'to confirm.',
-            content: TotpCodeField(
-              controller: controller,
-              autofocus: true,
-              onCompleted: (v) => Navigator.pop(ctx, v),
-            ),
-            confirmLabel: 'Turn off',
-            onConfirm: () => Navigator.pop(ctx, controller.text.trim()),
-            cancelLabel: 'Cancel',
-            onCancel: () => Navigator.pop(ctx),
-          ),
+      builder: (_) => const _TurnOffDialog(),
     );
-    controller.dispose();
     if (code == null || code.length != kTotpLength || !mounted) return;
 
     final res = await ApiService.disableTwoFactor(code);
@@ -124,25 +105,13 @@ class _TwoFactorSettingsCardState extends State<TwoFactorSettingsCard> {
       );
     }
 
-    final statusColor = _enabled ? _success : _inkSecondary;
+    final locked = _enabled && _required;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: _primary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.verified_user_outlined,
-                color: _primary,
-                size: 18,
-              ),
-            ),
+            const SecurityIconTile(Icons.verified_user_outlined),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -156,16 +125,30 @@ class _TwoFactorSettingsCardState extends State<TwoFactorSettingsCard> {
                       color: _ink,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     _enabled ? 'On' : 'Off',
                     style: TextStyle(
                       fontSize: 12,
-                      color: statusColor,
+                      color: _enabled ? _success : _inkSecondary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
+            ),
+            Switch(
+              value: _enabled,
+              onChanged:
+                  locked
+                      ? null
+                      : (on) {
+                        if (on) {
+                          _openSetup();
+                        } else {
+                          _disable();
+                        }
+                      },
             ),
           ],
         ),
@@ -190,49 +173,58 @@ class _TwoFactorSettingsCardState extends State<TwoFactorSettingsCard> {
               style: TextStyle(fontSize: 12, color: _inkSecondary),
             ),
           ),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                onPressed: _openSetup,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 13,
-                    horizontal: 12,
-                  ),
-                  shape: const StadiumBorder(),
-                ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(_enabled ? 'Link new phone' : 'Set up'),
-                ),
-              ),
+        if (_enabled)
+          TextButton(
+            onPressed: _openSetup,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.brand,
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            if (_enabled && !_required) ...[
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _disable,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _danger,
-                    side: const BorderSide(color: _danger),
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 13,
-                      horizontal: 12,
-                    ),
-                    shape: const StadiumBorder(),
-                  ),
-                  child: const Text('Turn off'),
-                ),
-              ),
-            ],
-          ],
-        ),
+            child: const Text('Link a new phone'),
+          ),
       ],
+    );
+  }
+}
+
+/// Asks for a current code. Owns its controller so it outlives the dialog's
+/// closing animation.
+class _TurnOffDialog extends StatefulWidget {
+  const _TurnOffDialog();
+
+  @override
+  State<_TurnOffDialog> createState() => _TurnOffDialogState();
+}
+
+class _TurnOffDialogState extends State<_TurnOffDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppDialog(
+      icon: Icons.shield_outlined,
+      tone: AppDialogTone.danger,
+      title: 'Turn off two-factor?',
+      message:
+          'Enter the current 6-digit code from your authenticator app '
+          'to confirm.',
+      content: TotpCodeField(
+        controller: _controller,
+        autofocus: true,
+        onCompleted: (v) => Navigator.pop(context, v),
+      ),
+      confirmLabel: 'Turn off',
+      onConfirm: () => Navigator.pop(context, _controller.text.trim()),
+      cancelLabel: 'Cancel',
+      onCancel: () => Navigator.pop(context),
     );
   }
 }
