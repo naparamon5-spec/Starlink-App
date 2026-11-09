@@ -391,12 +391,16 @@ class FadingHScroll extends StatelessWidget {
   final EdgeInsets padding;
 
   @override
-  Widget build(BuildContext context) => EdgeFade(
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: padding,
-      physics: const BouncingScrollPhysics(),
-      child: child,
+  Widget build(BuildContext context) => Align(
+    // When everything fits, on a wide screen, it starts at the left.
+    alignment: Alignment.centerLeft,
+    child: EdgeFade(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: padding,
+        physics: const BouncingScrollPhysics(),
+        child: child,
+      ),
     ),
   );
 }
@@ -566,6 +570,54 @@ class TogglePill extends StatelessWidget {
     option: PillOption(true, label),
     selected: selected,
     onTap: () => onChanged(!selected),
+  );
+}
+
+/// A small on/off switch with its label beside it; the label is tappable too.
+class LabeledSwitch extends StatelessWidget {
+  const LabeledSwitch({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => MergeSemantics(
+    child: InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 42,
+            height: 26,
+            child: FittedBox(
+              child: Switch(
+                value: value,
+                onChanged: onChanged,
+                activeTrackColor: AppColors.brand,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            maxLines: 1,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.navy,
+            ),
+          ),
+        ],
+      ),
+    ),
   );
 }
 

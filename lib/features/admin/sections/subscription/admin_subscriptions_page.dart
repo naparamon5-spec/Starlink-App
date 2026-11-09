@@ -40,6 +40,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
   int _totalPages = 1;
   int _currentPage = 1;
   int _pageSize = 10;
+  bool _nearLimit = false;
 
   // Only the latest request may update the list.
   int _requestSeq = 0;
@@ -48,7 +49,10 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
   void initState() {
     super.initState();
     widget.exportController?.loader =
-        () => fetchAllSubscriptions(_searchController.text.trim());
+        () => fetchAllSubscriptions(
+          _searchController.text.trim(),
+          nearLimit: _nearLimit,
+        );
     _loadFirstPage();
     _scrollController.addListener(_onScroll);
   }
@@ -124,6 +128,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
         page: 1,
         limit: _pageSize,
         search: _searchController.text.trim(),
+        nearLimit: _nearLimit,
       );
       if (!mounted || seq != _requestSeq) return;
 
@@ -167,6 +172,7 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
         page: nextPage,
         limit: _pageSize,
         search: _searchController.text.trim(),
+        nearLimit: _nearLimit,
       );
       if (!mounted || seq != _requestSeq) return;
 
@@ -280,18 +286,66 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
             ),
           ),
 
-          // List header
+          // 90%+ switch and page size
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
             child: Row(
               children: [
-                const Text(
-                  'Subscriptions',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: _ink,
-                    letterSpacing: -0.2,
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: LabeledSwitch(
+                        label: '90%+ data usage',
+                        value: _nearLimit,
+                        onChanged: (v) {
+                          setState(() => _nearLimit = v);
+                          _loadFirstPage();
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 132,
+                  child: AppSelect<int>(
+                    dense: true,
+                    sheetTitle: 'Per page',
+                    value: _pageSize,
+                    options: const [
+                      SelectOption(5, '5 per page'),
+                      SelectOption(10, '10 per page'),
+                      SelectOption(20, '20 per page'),
+                      SelectOption(50, '50 per page'),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _pageSize = v);
+                      _loadFirstPage();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // List header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 16, 8),
+            child: Row(
+              children: [
+                const Flexible(
+                  child: Text(
+                    'Subscriptions',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: _ink,
+                      letterSpacing: -0.2,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -313,36 +367,6 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                       fontWeight: FontWeight.w700,
                       color: _primary,
                     ),
-                  ),
-                ),
-                const Spacer(),
-                // GestureDetector(
-                //   onTap: _loadFirstPage,
-                //   child: const Padding(
-                //     padding: EdgeInsets.symmetric(horizontal: 8),
-                //     child: Icon(
-                //       Icons.refresh_rounded,
-                //       size: 18,
-                //       color: _inkTertiary,
-                //     ),
-                //   ),
-                // ),
-                SizedBox(
-                  width: 132,
-                  child: AppSelect<int>(
-                    dense: true,
-                    sheetTitle: 'Per page',
-                    value: _pageSize,
-                    options: const [
-                      SelectOption(5, '5 per page'),
-                      SelectOption(10, '10 per page'),
-                      SelectOption(20, '20 per page'),
-                      SelectOption(50, '50 per page'),
-                    ],
-                    onChanged: (v) {
-                      setState(() => _pageSize = v);
-                      _loadFirstPage();
-                    },
                   ),
                 ),
               ],

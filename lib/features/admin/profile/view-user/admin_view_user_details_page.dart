@@ -36,6 +36,9 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage> {
   bool _toggling = false;
   bool _sendingReset = false;
 
+  /// Null until known, or when this user's status can't be seen.
+  bool? _twoFactorOn;
+
   bool get _isSelf => _myId.isNotEmpty && _myId == widget.userId;
   bool get _isActive => accountText(_user['inactive']) == 'N';
   bool get _canManage =>
@@ -90,6 +93,18 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage> {
         _loadError = accountText(res['message']);
       }
     });
+    _loadTwoFactor();
+  }
+
+  Future<void> _loadTwoFactor() async {
+    final res =
+        _isSelf
+            ? await ApiService.getTwoFactorStatus()
+            : await ApiService.getUserTwoFactorStatus(widget.userId);
+    if (!mounted) return;
+    final data = res['data'];
+    final enabled = data is Map ? data['enabled'] : null;
+    setState(() => _twoFactorOn = enabled is bool ? enabled : null);
   }
 
   void _applyUser(Map<String, dynamic> user) {
@@ -491,6 +506,31 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage> {
                     ),
                 child: const Text('Change password'),
               ),
+            ),
+          ],
+          if (_twoFactorOn != null) ...[
+            const Divider(height: 28),
+            Row(
+              children: [
+                const Flexible(
+                  child: Text(
+                    'Two-step verification',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                DotBadge(
+                  _twoFactorOn! ? 'ON' : 'OFF',
+                  color:
+                      _twoFactorOn!
+                          ? AppColors.successInk
+                          : AppColors.inkMuted,
+                ),
+              ],
             ),
           ],
         ],

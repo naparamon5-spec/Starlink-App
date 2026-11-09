@@ -69,11 +69,55 @@ Color _statusColor(String status) => switch (status) {
 
 String _statusLabel(String status) => status.replaceAll('_', ' ').toUpperCase();
 
-bool _isImage(Map<String, dynamic> att) {
-  final type = _text(att['file_type']).toLowerCase();
-  if (type.isNotEmpty) return type.contains('image');
+/// Whether an attachment belongs under Images. The file name counts too:
+/// images uploaded from the app used to be stored as application/octet-stream.
+bool isImageAttachment(Map<String, dynamic> att) {
+  if (_text(att['file_type']).toLowerCase().contains('image')) return true;
   final name = _attachmentName(att).toLowerCase();
   return _imageExtensions.contains(name.split('.').last);
+}
+
+Uint8List _decodeBase64Data(String raw) {
+  var normalized = raw.trim();
+
+  final dataUriIndex = normalized.indexOf(',');
+  if (normalized.toLowerCase().contains('base64,') && dataUriIndex != -1) {
+    normalized = normalized.substring(dataUriIndex + 1);
+  }
+
+  normalized = normalized.replaceAll(RegExp(r'\s+'), '');
+  normalized = normalized.replaceAll('-', '+').replaceAll('_', '/');
+
+  final remainder = normalized.length % 4;
+  if (remainder != 0) {
+    normalized = normalized.padRight(normalized.length + (4 - remainder), '=');
+  }
+
+  return base64Decode(normalized);
+}
+
+/// An image attachment's bytes, downloaded once per [cache]. A failed load
+/// isn't kept, so opening the image again retries it.
+Future<Uint8List?> _imageBytes(
+  Map<String, dynamic> att,
+  Map<String, Future<Uint8List?>> cache,
+) {
+  final id = _text(att['id'] ?? att['attachment_id']);
+  if (id.isEmpty) return Future.value(null);
+  return cache.putIfAbsent(id, () async {
+    Uint8List? bytes;
+    try {
+      final result = await ApiService.downloadAttachment(id);
+      final data = _text(result['base64']);
+      if (result['status'] == 'success' && data.isNotEmpty) {
+        bytes = _decodeBase64Data(data);
+      }
+    } catch (_) {
+      // Shown as a preview that isn't available.
+    }
+    if (bytes == null) cache.remove(id);
+    return bytes;
+  });
 }
 
 String _attachmentName(Map<String, dynamic> att) {
@@ -360,7 +404,8 @@ class _TicketDetailsViewState extends State<TicketDetailsView> {
       }
       final bytes = _decodeBase64Data(base64Str);
       final rawName =
-          _text(result['filename']).isNotEmpty
+          _text(result['filename']).isNotEmpty &&
+                  _text(result['filename']) != 'attachment'
               ? _text(result['filename'])
               : _attachmentName(att);
       final mimeType = _resolveMimeType(
@@ -393,28 +438,6 @@ class _TicketDetailsViewState extends State<TicketDetailsView> {
     } finally {
       _downloading.value = null;
     }
-  }
-
-  Uint8List _decodeBase64Data(String raw) {
-    var normalized = raw.trim();
-
-    final dataUriIndex = normalized.indexOf(',');
-    if (normalized.toLowerCase().contains('base64,') && dataUriIndex != -1) {
-      normalized = normalized.substring(dataUriIndex + 1);
-    }
-
-    normalized = normalized.replaceAll(RegExp(r'\s+'), '');
-    normalized = normalized.replaceAll('-', '+').replaceAll('_', '/');
-
-    final remainder = normalized.length % 4;
-    if (remainder != 0) {
-      normalized = normalized.padRight(
-        normalized.length + (4 - remainder),
-        '=',
-      );
-    }
-
-    return base64Decode(normalized);
   }
 
   String _ensureFilenameHasExtension(
@@ -1150,12 +1173,14 @@ class _DetailsPanelState extends State<_DetailsPanel> {
     final all = widget.attachments.value;
     _tab =
         widget.initialTab ??
-        (all.any(_isImage)
+        (all.any(isImageAttachment)
             ? 'images'
             : all.isNotEmpty
             ? 'files'
             : 'timeline');
   }
+
+  final _imageCache = <String, Future<Uint8List?>>{};
 
   void _select(String tab) {
     setState(() => _tab = tab);
@@ -1191,8 +1216,8 @@ class _DetailsPanelState extends State<_DetailsPanel> {
           ValueListenableBuilder<List<Map<String, dynamic>>>(
             valueListenable: widget.attachments,
             builder: (context, all, _) {
-              final images = all.where(_isImage).toList();
-              final files = all.where((a) => !_isImage(a)).toList();
+              final images = all.where(isImageAttachment).toList();
+              final files = all.where((a) => !isImageAttachment(a)).toList();
               return Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                 child: Column(
@@ -1210,7 +1235,12 @@ class _DetailsPanelState extends State<_DetailsPanel> {
                     ),
                     const SizedBox(height: 14),
                     if (_tab == 'images')
-                      _ImagesTab(images: images, onDownload: widget.onDownload)
+                      _ImagesTab(
+                        images: images,
+                        cache: _imageCache,
+                        downloading: widget.downloading,
+                        onDownload: widget.onDownload,
+                      )
                     else if (_tab == 'files')
                       _FilesTab(
                         files: files,
@@ -1496,55 +1526,340 @@ class _EmptyTab extends StatelessWidget {
 }
 
 class _ImagesTab extends StatelessWidget {
-  const _ImagesTab({required this.images, required this.onDownload});
+  const _ImagesTab({
+    required this.images,
+    required this.cache,
+    required this.downloading,
+    required this.onDownload,
+  });
   final List<Map<String, dynamic>> images;
+  final Map<String, Future<Uint8List?>> cache;
+  final ValueNotifier<String?> downloading;
   final Future<void> Function(Map<String, dynamic>) onDownload;
+
+  void _open(BuildContext context, int index) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder:
+            (_) => _ImageViewer(
+              images: images,
+              initialIndex: index,
+              cache: cache,
+              downloading: downloading,
+              onDownload: onDownload,
+            ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     if (images.isEmpty) return const _EmptyTab('No images');
-    return GridView.count(
-      crossAxisCount: 3,
+    return GridView.extent(
+      maxCrossAxisExtent: 150,
+      padding: EdgeInsets.zero, // Otherwise it adds the notch height on top.
       crossAxisSpacing: 8,
       mainAxisSpacing: 8,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       children: [
-        for (final img in images)
-          InkWell(
-            onTap: () => onDownload(img),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            child: Ink(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(color: AppColors.line),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.image_outlined,
-                    size: 26,
-                    color: AppColors.navy,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _attachmentName(img),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.inkMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        for (var i = 0; i < images.length; i++)
+          _ImageThumb(
+            key: ValueKey(_text(images[i]['id'])),
+            image: images[i],
+            cache: cache,
+            onTap: () => _open(context, i),
           ),
       ],
     );
   }
+}
+
+class _ImageThumb extends StatefulWidget {
+  const _ImageThumb({
+    super.key,
+    required this.image,
+    required this.cache,
+    required this.onTap,
+  });
+  final Map<String, dynamic> image;
+  final Map<String, Future<Uint8List?>> cache;
+  final VoidCallback onTap;
+
+  @override
+  State<_ImageThumb> createState() => _ImageThumbState();
+}
+
+class _ImageThumbState extends State<_ImageThumb> {
+  late final Future<Uint8List?> _bytes = _imageBytes(
+    widget.image,
+    widget.cache,
+  );
+
+  Widget _placeholder() => Container(
+    color: AppColors.paperSubtle,
+    padding: const EdgeInsets.all(8),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.image_outlined, size: 26, color: AppColors.navy),
+        const SizedBox(height: 6),
+        Text(
+          _attachmentName(widget.image),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 10.5, color: AppColors.inkMuted),
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    image: true,
+    button: true,
+    label: _attachmentName(widget.image),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FutureBuilder<Uint8List?>(
+            future: _bytes,
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const ColoredBox(
+                  color: AppColors.paperSubtle,
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                );
+              }
+              final bytes = snap.data;
+              if (bytes == null) return _placeholder();
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                cacheWidth: 400,
+                errorBuilder: (_, __, ___) => _placeholder(),
+              );
+            },
+          ),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(onTap: widget.onTap),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Full-screen images: swipe between them, pinch or double-tap to zoom.
+class _ImageViewer extends StatefulWidget {
+  const _ImageViewer({
+    required this.images,
+    required this.initialIndex,
+    required this.cache,
+    required this.downloading,
+    required this.onDownload,
+  });
+  final List<Map<String, dynamic>> images;
+  final int initialIndex;
+  final Map<String, Future<Uint8List?>> cache;
+  final ValueNotifier<String?> downloading;
+  final Future<void> Function(Map<String, dynamic>) onDownload;
+
+  @override
+  State<_ImageViewer> createState() => _ImageViewerState();
+}
+
+class _ImageViewerState extends State<_ImageViewer> {
+  late final _pages = PageController(initialPage: widget.initialIndex);
+  late int _index = widget.initialIndex;
+  bool _zoomed = false;
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = widget.images[_index];
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          tooltip: 'Close',
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close_rounded, color: Colors.white),
+        ),
+        title: Text(
+          widget.images.length > 1
+              ? '${_index + 1} of ${widget.images.length}'
+              : _attachmentName(current),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white, fontSize: 15),
+        ),
+        actions: [
+          ValueListenableBuilder<String?>(
+            valueListenable: widget.downloading,
+            builder:
+                (context, busy, _) =>
+                    busy != null && busy == _text(current['id'])
+                        ? const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                        )
+                        : IconButton(
+                          tooltip: 'Download',
+                          onPressed: () => widget.onDownload(current),
+                          icon: const Icon(
+                            Icons.file_download_outlined,
+                            color: Colors.white,
+                          ),
+                        ),
+          ),
+        ],
+      ),
+      body: PageView.builder(
+        controller: _pages,
+        // A zoomed image needs its drags for panning.
+        physics: _zoomed ? const NeverScrollableScrollPhysics() : null,
+        itemCount: widget.images.length,
+        onPageChanged:
+            (i) => setState(() {
+              _index = i;
+              _zoomed = false;
+            }),
+        itemBuilder:
+            (_, i) => _ZoomableImage(
+              image: widget.images[i],
+              cache: widget.cache,
+              onZoomChanged: (z) {
+                if (mounted && z != _zoomed) setState(() => _zoomed = z);
+              },
+            ),
+      ),
+    );
+  }
+}
+
+class _ZoomableImage extends StatefulWidget {
+  const _ZoomableImage({
+    required this.image,
+    required this.cache,
+    required this.onZoomChanged,
+  });
+  final Map<String, dynamic> image;
+  final Map<String, Future<Uint8List?>> cache;
+  final ValueChanged<bool> onZoomChanged;
+
+  @override
+  State<_ZoomableImage> createState() => _ZoomableImageState();
+}
+
+class _ZoomableImageState extends State<_ZoomableImage> {
+  final _zoom = TransformationController();
+  late final Future<Uint8List?> _bytes = _imageBytes(
+    widget.image,
+    widget.cache,
+  );
+
+  @override
+  void dispose() {
+    _zoom.dispose();
+    super.dispose();
+  }
+
+  bool get _isZoomed => _zoom.value.getMaxScaleOnAxis() > 1.01;
+
+  void _toggleZoom(TapDownDetails details) {
+    if (_isZoomed) {
+      _zoom.value = Matrix4.identity();
+    } else {
+      final p = details.localPosition;
+      _zoom.value =
+          Matrix4.identity()
+            ..translateByDouble(-p.dx, -p.dy, 0, 1)
+            ..scaleByDouble(2, 2, 1, 1);
+    }
+    widget.onZoomChanged(_isZoomed);
+  }
+
+  Widget _unavailable() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.broken_image_outlined,
+            size: 40,
+            color: Colors.white70,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            "Can't preview ${_attachmentName(widget.image)}",
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
+    future: _bytes,
+    builder: (context, snap) {
+      if (snap.connectionState != ConnectionState.done) {
+        return const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        );
+      }
+      final bytes = snap.data;
+      if (bytes == null) return _unavailable();
+      TapDownDetails? lastTap;
+      return GestureDetector(
+        onDoubleTapDown: (d) => lastTap = d,
+        onDoubleTap: () {
+          if (lastTap != null) _toggleZoom(lastTap!);
+        },
+        child: InteractiveViewer(
+          transformationController: _zoom,
+          minScale: 1,
+          maxScale: 5,
+          onInteractionEnd: (_) => widget.onZoomChanged(_isZoomed),
+          child: Center(
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => _unavailable(),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _FilesTab extends StatelessWidget {

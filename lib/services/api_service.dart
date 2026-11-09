@@ -3,6 +3,7 @@ import 'package:starlink_app/shared/widgets/app_dialog.dart';
 import 'dart:convert';
 import 'dart:io' show HttpClient;
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:http/io_client.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -688,6 +689,11 @@ class ApiService {
   /// `{enabled, required}` for the signed-in user.
   static Future<Map<String, dynamic>> getTwoFactorStatus() =>
       _authorizedGet('/v1/auth/2fa/status');
+
+  /// Backend: GET /v1/auth/user/mfa-status/:id (staff) — `{enabled,
+  /// enabled_at, required}` for an account the caller may manage.
+  static Future<Map<String, dynamic>> getUserTwoFactorStatus(String userId) =>
+      _authorizedGet('/v1/auth/user/mfa-status/$userId');
 
   /// Starts linking an authenticator app. `data` holds `otpauthUrl`, `secret`,
   /// `issuer` and `account`. 2FA isn't on until [confirmTwoFactorSetup].
@@ -2162,6 +2168,25 @@ class ApiService {
     }
   }
 
+  /// The type to upload an image as, or null for other files. Without it the
+  /// backend records images as application/octet-stream. Documents are left
+  /// out on purpose: ticket_attachments.file_type is only 45 characters, too
+  /// short for the Word types.
+  static MediaType? attachmentImageType(String fileName) {
+    const subtypes = {
+      'jpg': 'jpeg',
+      'jpeg': 'jpeg',
+      'png': 'png',
+      'gif': 'gif',
+      'webp': 'webp',
+      'bmp': 'bmp',
+      'heic': 'heic',
+      'heif': 'heif',
+    };
+    final subtype = subtypes[fileName.split('.').last.toLowerCase()];
+    return subtype == null ? null : MediaType('image', subtype);
+  }
+
   static Future<Map<String, dynamic>> uploadAttachments({
     required String ticketId,
     required List<Map<String, dynamic>> files,
@@ -2197,6 +2222,7 @@ class ApiService {
             'attachments',
             filePath,
             filename: fileName,
+            contentType: attachmentImageType(fileName),
           ),
         );
       }
@@ -2254,6 +2280,7 @@ class ApiService {
     int page = 1,
     int limit = 10,
     String search = '',
+    bool nearLimit = false,
   }) async {
     final result = await _authorizedGetJson(
       '/v1/subscriptions/paginated',
@@ -2261,6 +2288,7 @@ class ApiService {
         'page': page.toString(),
         'limit': limit.toString(),
         if (search.isNotEmpty) 'search': search,
+        if (nearLimit) 'near_limit': '1',
       },
     );
     if (result['status'] != 'success') return Map<String, dynamic>.from(result);

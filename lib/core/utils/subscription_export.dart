@@ -66,13 +66,17 @@ List<List<Object?>> subscriptionExportRows(
 
 /// Every subscription matching [search] that this user may see (the API
 /// scopes the list by role).
-Future<List<Map<String, dynamic>>> fetchAllSubscriptions(String search) =>
+Future<List<Map<String, dynamic>>> fetchAllSubscriptions(
+  String search, {
+  bool nearLimit = false,
+}) =>
     fetchAllRows(
       fetchPage:
           (page, limit) => ApiService.getSubscriptionsPaginated(
             page: page,
             limit: limit,
             search: search,
+            nearLimit: nearLimit,
           ),
       keyOf: subscriptionExportKey,
     );

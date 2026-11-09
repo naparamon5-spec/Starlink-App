@@ -262,9 +262,21 @@ class _UserGuidePageState extends State<UserGuidePage> {
       appBar: AppBar(title: const Text('User Guide')),
       body: Column(
         children: [
-          AspectRatio(
-            aspectRatio: _video?.value.aspectRatio ?? 16 / 9,
-            child: ColoredBox(color: AppColors.navyDark, child: _buildPlayer()),
+          // Capped so the list still shows on a phone held sideways.
+          ColoredBox(
+            color: AppColors.navyDark,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+              ),
+              child: Center(
+                heightFactor: 1,
+                child: AspectRatio(
+                  aspectRatio: _video?.value.aspectRatio ?? 16 / 9,
+                  child: _buildPlayer(),
+                ),
+              ),
+            ),
           ),
           Expanded(
             child: ListView.builder(

@@ -245,7 +245,7 @@ void main() {
       await show(t, const BiometricSettingsCard());
       await confirm(t, 'wrong');
       expect(await t.runAsync(BiometricService.isEnrolled), isFalse);
-      await t.tap(find.byType(IconButton).last);
+      await t.tap(find.text('OK'));
       await settle(t);
 
       await confirm(t, 'good');

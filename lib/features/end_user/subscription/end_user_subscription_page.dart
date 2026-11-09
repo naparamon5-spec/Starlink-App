@@ -58,6 +58,7 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
   int _totalPages = 1;
   int _currentPage = 1;
   int _pageSize = 10;
+  bool _nearLimit = false;
 
   // Only the latest request may update the list.
   int _requestSeq = 0;
@@ -75,7 +76,10 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
     super.initState();
     _scrollController.addListener(_onScroll);
     widget.exportController?.loader =
-        () => fetchAllSubscriptions(_searchController.text.trim());
+        () => fetchAllSubscriptions(
+          _searchController.text.trim(),
+          nearLimit: _nearLimit,
+        );
     _searchController.addListener(() {
       // Also fires when the cursor moves; only a changed search reloads.
       final q = _searchController.text.trim();
@@ -277,6 +281,7 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
         page: page,
         limit: _pageSize,
         search: _searchController.text.trim(),
+        nearLimit: _nearLimit,
       );
 
       if (response['status'] != 'success') return null;
@@ -317,32 +322,29 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
               ),
             ),
 
-            // ── Section header ───────────────────────────────────────
+            // ── 90%+ switch and page size
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               sliver: SliverToBoxAdapter(
                 child: Row(
                   children: [
-                    const Text(
-                      'MY SUBSCRIPTIONS',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _inkTertiary,
-                        letterSpacing: 1.1,
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: LabeledSwitch(
+                            label: '90%+ data usage',
+                            value: _nearLimit,
+                            onChanged: (v) {
+                              setState(() => _nearLimit = v);
+                              _loadFirstPage();
+                            },
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    if (!_loading)
-                      Text(
-                        '${_totalItems > 0 ? _totalItems : _allSubscriptions.length} result${(_totalItems == 1 || _allSubscriptions.length == 1) ? '' : 's'}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: _inkTertiary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    const Spacer(),
                     SizedBox(
                       width: 132,
                       child: AppSelect<int>(
@@ -361,6 +363,40 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                         },
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Section header ───────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    const Flexible(
+                      child: Text(
+                        'MY SUBSCRIPTIONS',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _inkTertiary,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (!_loading)
+                      Text(
+                        '${_totalItems > 0 ? _totalItems : _allSubscriptions.length} result${(_totalItems == 1 || _allSubscriptions.length == 1) ? '' : 's'}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: _inkTertiary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                   ],
                 ),
               ),

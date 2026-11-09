@@ -14,6 +14,9 @@ String _jwt() {
       '${b({'id': 1, 'role': 'admin', 'exp': 4102444800})}.sig';
 }
 
+const _onePixelPng =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
 void main() {
   late HttpServer server;
   var status = 'open';
@@ -57,6 +60,21 @@ void main() {
         };
       } else if (path == '/v1/activities/7') {
         data = comments;
+      } else if (path == '/v1/attachments/7') {
+        data = const [
+          {
+            'id': 21,
+            'original_name': 'photo.png',
+            'file_type': 'application/octet-stream',
+          },
+          {
+            'id': 22,
+            'original_name': 'report.pdf',
+            'file_type': 'application/pdf',
+          },
+        ];
+      } else if (path == '/v1/attachments/download/21') {
+        data = _onePixelPng; // The backend sends the bare base64 string.
       }
       req.response.headers.contentType = ContentType.json;
       req.response.write(json.encode({'status': 'success', 'data': data}));
@@ -148,6 +166,36 @@ void main() {
     await t.tap(find.byType(BackButton));
     await settle(t);
     expect(popped.single, {'id': '7', 'status': 'IN PROGRESS'});
+    await t.pump(const Duration(seconds: 20)); // Idle HTTP connection.
+  });
+
+  testWidgets('images show as pictures and open full screen', (t) async {
+    await open(t);
+    await t.tap(find.text('Details'));
+    await settle(t);
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.text('report.pdf'), findsNothing); // It's on the Files tab.
+
+    await t.tap(find.descendant(
+      of: find.byType(GridView),
+      matching: find.byType(InkWell),
+    ));
+    await settle(t);
+    expect(find.byType(InteractiveViewer), findsOneWidget);
+    expect(find.text('photo.png'), findsOneWidget);
+    expect(find.byTooltip('Download'), findsOneWidget);
+
+    await t.tap(find.byTooltip('Close'));
+    await settle(t);
+    expect(find.byType(InteractiveViewer), findsNothing);
+
+    // The two kinds never mix.
+    await t.tap(find.textContaining('Files'));
+    await settle(t);
+    expect(find.text('report.pdf'), findsOneWidget);
+    expect(find.text('photo.png'), findsNothing);
+    expect(find.byType(Image), findsNothing);
     await t.pump(const Duration(seconds: 20)); // Idle HTTP connection.
   });
 

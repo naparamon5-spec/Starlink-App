@@ -32,6 +32,8 @@ void main() {
         if (path == '/v1/users/10') position = json.decode(body)['position'];
       } else if (path.contains('/auth/me')) {
         data = {'id': 1, 'role': myRole};
+      } else if (path == '/v1/auth/user/mfa-status/10') {
+        data = {'enabled': true, 'enabled_at': null, 'required': false};
       } else if (path == '/v1/users/10') {
         data = {
           'id': 10,
@@ -103,6 +105,10 @@ void main() {
     expect(find.text('Mark Canal'), findsOneWidget);
     expect(find.text('ARDENT NETWORKS INC'), findsOneWidget);
     expect(find.text('Deactivate'), findsOneWidget);
+    await t.ensureVisible(find.text('Two-step verification'));
+    await t.pump();
+    expect(find.text('Two-step verification'), findsOneWidget);
+    expect(find.text('ON'), findsOneWidget);
     expect(find.text('Send reset link'), findsOneWidget);
     expect(find.text('Set password'), findsOneWidget);
     await finish(t);
