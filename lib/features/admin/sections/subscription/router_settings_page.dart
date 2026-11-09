@@ -436,7 +436,7 @@ class _RouterSettingsPageState extends State<RouterSettingsPage> {
                             color: Colors.white,
                           ),
                         )
-                        : const Icon(Icons.power_settings_new_rounded),
+                        : const Icon(Icons.refresh_rounded),
               ),
           ],
         ),

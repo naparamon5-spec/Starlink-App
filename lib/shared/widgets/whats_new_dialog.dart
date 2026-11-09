@@ -147,7 +147,7 @@ class _WhatsNewDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('All announcements'),
+          child: const Text('View notifications'),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context, false),

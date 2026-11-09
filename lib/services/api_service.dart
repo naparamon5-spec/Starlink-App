@@ -2021,7 +2021,49 @@ class ApiService {
     );
   }
 
-  // ─── Announcements (notification feed) ─────────────────────────────────────
+  // ─── Notifications (the signed-in user's own) ──────────────────────────────
+
+  /// Backend: GET /v1/notifications?before=&limit= — newest first; pass the
+  /// last id as `before` for more (limit max 50). Fields: id, type, title,
+  /// body, link, data, read_at, created_at.
+  static Future<Map<String, dynamic>> getNotifications({
+    int? before,
+    int limit = 20,
+  }) async {
+    final res = await _authorizedGet(
+      '/v1/notifications',
+      queryParameters: {
+        'limit': '$limit',
+        if (before != null) 'before': '$before',
+      },
+    );
+    if (res['status'] != 'success') return res;
+    final data = res['data'];
+    return {
+      'status': 'success',
+      'data':
+          data is List
+              ? data
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+              : <Map<String, dynamic>>[],
+    };
+  }
+
+  /// Backend: GET /v1/notifications/unread-count — `data: { count }`.
+  static Future<Map<String, dynamic>> getNotificationUnreadCount() =>
+      _authorizedGet('/v1/notifications/unread-count');
+
+  /// Backend: PUT /v1/notifications/:id/read (204).
+  static Future<Map<String, dynamic>> markNotificationRead(int id) =>
+      _authorizedWrite('PUT', '/v1/notifications/$id/read');
+
+  /// Backend: PUT /v1/notifications/read-all (204).
+  static Future<Map<String, dynamic>> markAllNotificationsRead() =>
+      _authorizedWrite('PUT', '/v1/notifications/read-all');
+
+  // ─── Announcements (What's New dialog) ─────────────────────────────────────
 
   /// Backend: GET /v1/announcements/feed — live announcements for my role,
   /// each with `read`. Fields: id, title, body, category, audience, pinned,

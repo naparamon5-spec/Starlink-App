@@ -1,5 +1,6 @@
 import 'package:starlink_app/shared/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:starlink_app/core/theme/app_theme.dart';
 import 'package:starlink_app/core/utils/billing_export.dart';
 import 'package:starlink_app/services/api_service.dart';
@@ -433,6 +434,15 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              // Digits with up to two decimals; any other edit is rejected.
+              inputFormatters: [
+                TextInputFormatter.withFunction(
+                  (oldValue, newValue) =>
+                      RegExp(r'^\d*\.?\d{0,2}$').hasMatch(newValue.text)
+                          ? newValue
+                          : oldValue,
+                ),
+              ],
               decoration: InputDecoration(
                 hintText: '0.00',
               ),

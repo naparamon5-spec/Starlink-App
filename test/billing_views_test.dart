@@ -280,6 +280,35 @@ void main() {
     await finish(t);
   });
 
+  testWidgets('the payment amount only takes numbers', (t) async {
+    await t.pumpWidget(
+      const MaterialApp(
+        home: BillingDetailsView(
+          customerCode: 'A-1',
+          cpoNumber: 'PO-1',
+          sidrNumber: 'S-1',
+        ),
+      ),
+    );
+    await settle(t);
+    await t.tap(find.text('Make Payment'));
+    await settle(t);
+    final field = find.byType(TextField).last;
+    String value() => t.widget<TextField>(field).controller!.text;
+
+    await t.enterText(field, 'abc');
+    expect(value(), '');
+    await t.enterText(field, '12.50');
+    expect(value(), '12.50');
+    await t.enterText(field, '12.50x');
+    expect(value(), '12.50');
+    await t.enterText(field, '12.505');
+    expect(value(), '12.50');
+    await t.enterText(field, '-1');
+    expect(value(), '12.50');
+    await finish(t);
+  });
+
   testWidgets('customers cannot record payments', (t) async {
     role = 'customer';
     await t.pumpWidget(

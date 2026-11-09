@@ -290,15 +290,35 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _name.isEmpty ? '—' : _name,
-                      style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                        height: 1.2,
-                        letterSpacing: -0.3,
-                        color: AppColors.navy,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _name.isEmpty ? '—' : _name,
+                            style: const TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                              height: 1.2,
+                              letterSpacing: -0.3,
+                              color: AppColors.navy,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Rename',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 30,
+                            height: 30,
+                          ),
+                          onPressed: _rename,
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: AppColors.inkFaint,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -311,53 +331,37 @@ class _AdminEndUserDetailsPageState extends State<AdminEndUserDetailsPage> {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Rename',
-                visualDensity: VisualDensity.compact,
-                onPressed: _rename,
-                icon: const Icon(
-                  Icons.edit_outlined,
-                  size: 18,
-                  color: AppColors.inkFaint,
-                ),
+              const SizedBox(width: 8),
+              DotBadge(
+                _active ? 'ACTIVE' : 'INACTIVE',
+                color: _active ? AppColors.successInk : AppColors.inkMuted,
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              runSpacing: 6,
-              children: [
-                DotBadge(
-                  _active ? 'ACTIVE' : 'INACTIVE',
-                  color: _active ? AppColors.successInk : AppColors.inkMuted,
-                ),
-                if (_active)
-                  TextButton(
-                    onPressed: _toggling ? null : _toggleStatus,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.ink,
-                      minimumSize: compact,
-                      padding: padding,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child:
+                _active
+                    ? TextButton(
+                      onPressed: _toggling ? null : _toggleStatus,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.ink,
+                        minimumSize: compact,
+                        padding: padding,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Deactivate'),
+                    )
+                    : OutlinedButton(
+                      onPressed: _toggling ? null : _toggleStatus,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: compact,
+                        padding: padding,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Activate'),
                     ),
-                    child: const Text('Deactivate'),
-                  )
-                else
-                  OutlinedButton(
-                    onPressed: _toggling ? null : _toggleStatus,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: compact,
-                      padding: padding,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text('Activate'),
-                  ),
-              ],
-            ),
           ),
         ],
       ),

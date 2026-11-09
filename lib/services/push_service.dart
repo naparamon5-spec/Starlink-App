@@ -67,6 +67,9 @@ class PushService {
   /// Set from main() so notification taps can open the app's navigator.
   static GlobalKey<NavigatorState>? navigatorKey;
 
+  /// Ticks when a push arrives while the app is open, so the bell can refresh.
+  static final foregroundMessages = ValueNotifier<int>(0);
+
   /// Whether a user is signed in; foreground pushes are hidden while signed out.
   static bool signedIn = false;
 
@@ -163,6 +166,7 @@ class PushService {
 
   static Future<void> _onForegroundMessage(RemoteMessage message) async {
     if (!signedIn) return;
+    foregroundMessages.value++;
     await showLocalNotification(message);
   }
 

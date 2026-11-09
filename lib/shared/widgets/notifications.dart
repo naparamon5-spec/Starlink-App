@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:starlink_app/features/ticket/ticket_details_view.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/services/push_service.dart';
 
-// Notifications are the backend's announcements feed
-// (GET /v1/announcements/feed, POST /v1/announcements/read).
+// The signed-in user's own notifications: ticket events, usage alerts and
+// announcements (GET /v1/notifications and friends).
+
+const _pageSize = 20;
 
 const _primary = Color(0xFF133341);
 const _ink = Color(0xFF0F172A);
@@ -12,30 +16,68 @@ const _surfaceSubtle = Color(0xFFF8F8F8);
 
 int? _idOf(Map<String, dynamic> a) => int.tryParse('${a['id']}');
 
-bool _isUnread(Map<String, dynamic> a) => a['read'] != true;
+bool _isUnread(Map<String, dynamic> a) => a['read_at'] == null;
 
-({IconData icon, Color color, String label}) _categoryStyle(String? c) {
-  switch ((c ?? '').toLowerCase()) {
-    case 'feature':
+/// The ticket a notification is about, if any.
+String? _ticketIdOf(Map<String, dynamic> a) {
+  final data = a['data'];
+  final id = data is Map ? data['ticket_id'] : null;
+  return id?.toString();
+}
+
+({IconData icon, Color color, String label}) _typeStyle(String? type) {
+  const blue = Color(0xFF3B82F6);
+  const green = Color(0xFF10B981);
+  const amber = Color(0xFFF59E0B);
+  switch (type) {
+    case 'ticket_created':
       return (
-        icon: Icons.auto_awesome_rounded,
-        color: const Color(0xFF3B82F6),
-        label: 'New feature',
+        icon: Icons.confirmation_number_rounded,
+        color: blue,
+        label: 'New ticket',
       );
-    case 'improvement':
+    case 'ticket_reply':
       return (
-        icon: Icons.trending_up_rounded,
-        color: const Color(0xFF10B981),
-        label: 'Improvement',
+        icon: Icons.chat_bubble_rounded,
+        color: blue,
+        label: 'Ticket reply',
       );
-    case 'maintenance':
+    case 'ticket_accepted':
       return (
-        icon: Icons.build_rounded,
-        color: const Color(0xFFF59E0B),
-        label: 'Maintenance',
+        icon: Icons.check_circle_rounded,
+        color: green,
+        label: 'Ticket accepted',
+      );
+    case 'ticket_resolved':
+      return (
+        icon: Icons.task_alt_rounded,
+        color: green,
+        label: 'Ticket resolved',
+      );
+    case 'ticket_closed':
+      return (
+        icon: Icons.lock_rounded,
+        color: _inkSecondary,
+        label: 'Ticket closed',
+      );
+    case 'usage_alert':
+      return (
+        icon: Icons.data_usage_rounded,
+        color: amber,
+        label: 'Usage alert',
+      );
+    case 'announcement':
+      return (
+        icon: Icons.campaign_rounded,
+        color: _primary,
+        label: 'Announcement',
       );
     default:
-      return (icon: Icons.campaign_rounded, color: _primary, label: 'Notice');
+      return (
+        icon: Icons.notifications_rounded,
+        color: _primary,
+        label: 'Notice',
+      );
   }
 }
 
@@ -81,14 +123,22 @@ class _NotificationBellState extends State<NotificationBell> {
   @override
   void initState() {
     super.initState();
+    PushService.foregroundMessages.addListener(_loadCount);
     _loadCount();
   }
 
+  @override
+  void dispose() {
+    PushService.foregroundMessages.removeListener(_loadCount);
+    super.dispose();
+  }
+
   Future<void> _loadCount() async {
-    final res = await ApiService.getAnnouncementFeed();
+    final res = await ApiService.getNotificationUnreadCount();
     if (!mounted || res['status'] != 'success') return;
-    final items = (res['data'] as List).cast<Map<String, dynamic>>();
-    setState(() => _unread = items.where(_isUnread).length);
+    final data = res['data'];
+    final count = data is Map ? int.tryParse('${data['count']}') : null;
+    if (count != null) setState(() => _unread = count);
   }
 
   Future<void> _open() async {
@@ -145,7 +195,7 @@ class _NotificationBellState extends State<NotificationBell> {
   }
 }
 
-/// Lists announcements for the signed-in user's role.
+/// Lists the signed-in user's notifications, newest first.
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
 
@@ -156,6 +206,9 @@ class NotificationsPage extends StatefulWidget {
 class _NotificationsPageState extends State<NotificationsPage> {
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _unread = 0;
   String? _error;
   final Set<int> _expanded = {};
 
@@ -170,51 +223,84 @@ class _NotificationsPageState extends State<NotificationsPage> {
       _loading = _items.isEmpty;
       _error = null;
     });
-    final res = await ApiService.getAnnouncementFeed();
+    final results = await Future.wait([
+      ApiService.getNotifications(limit: _pageSize),
+      ApiService.getNotificationUnreadCount(),
+    ]);
     if (!mounted) return;
+    final res = results[0];
+    final count = results[1]['data'];
     setState(() {
       _loading = false;
       if (res['status'] == 'success') {
         _items = (res['data'] as List).cast<Map<String, dynamic>>();
-        // Pinned first, then newest.
-        _items.sort((a, b) {
-          final p =
-              (b['pinned'] == true ? 1 : 0) - (a['pinned'] == true ? 1 : 0);
-          if (p != 0) return p;
-          return '${b['created_at'] ?? ''}'.compareTo(
-            '${a['created_at'] ?? ''}',
-          );
-        });
+        _hasMore = _items.length == _pageSize;
+        _unread =
+            (count is Map ? int.tryParse('${count['count']}') : null) ??
+            _items.where(_isUnread).length;
       } else {
         _error = res['message']?.toString() ?? 'Could not load notifications.';
       }
     });
   }
 
-  Future<void> _markRead(List<int> ids) async {
-    if (ids.isEmpty) return;
+  Future<void> _loadMore() async {
+    if (_loadingMore || _items.isEmpty) return;
+    setState(() => _loadingMore = true);
+    final res = await ApiService.getNotifications(
+      before: _idOf(_items.last),
+      limit: _pageSize,
+    );
+    if (!mounted) return;
     setState(() {
-      for (final a in _items) {
-        if (ids.contains(_idOf(a))) a['read'] = true;
+      _loadingMore = false;
+      if (res['status'] == 'success') {
+        final more = (res['data'] as List).cast<Map<String, dynamic>>();
+        _items.addAll(more);
+        _hasMore = more.length == _pageSize;
       }
     });
-    await ApiService.markAnnouncementsRead(ids);
   }
 
-  void _toggle(Map<String, dynamic> a) {
+  void _markRead(Map<String, dynamic> a) {
+    final id = _idOf(a);
+    if (id == null || !_isUnread(a)) return;
+    setState(() {
+      a['read_at'] = DateTime.now().toIso8601String();
+      if (_unread > 0) _unread--;
+    });
+    ApiService.markNotificationRead(id);
+  }
+
+  void _markAllRead() {
+    final now = DateTime.now().toIso8601String();
+    setState(() {
+      for (final a in _items.where(_isUnread)) {
+        a['read_at'] = now;
+      }
+      _unread = 0;
+    });
+    ApiService.markAllNotificationsRead();
+  }
+
+  void _open(Map<String, dynamic> a) {
+    _markRead(a);
+    final ticketId = _ticketIdOf(a);
+    if (ticketId != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => TicketDetailsView(ticketId: ticketId)),
+      );
+      return;
+    }
     final id = _idOf(a);
     if (id == null) return;
     setState(() {
       if (!_expanded.remove(id)) _expanded.add(id);
     });
-    if (_isUnread(a)) _markRead([id]);
   }
 
   @override
   Widget build(BuildContext context) {
-    final unreadIds =
-        _items.where(_isUnread).map(_idOf).whereType<int>().toList();
-
     return Scaffold(
       backgroundColor: _surfaceSubtle,
       appBar: AppBar(
@@ -236,10 +322,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
           ),
         ),
         actions: [
-          if (unreadIds.isNotEmpty)
+          if (_unread > 0)
             IconButton(
               tooltip: 'Mark all as read',
-              onPressed: () => _markRead(unreadIds),
+              onPressed: _markAllRead,
               icon: const Icon(Icons.done_all_rounded),
             ),
         ],
@@ -247,7 +333,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
       body: RefreshIndicator(
         color: _primary,
         onRefresh: _load,
-        child: _buildBody(unreadIds.length),
+        child: _buildBody(_unread),
       ),
     );
   }
@@ -268,7 +354,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
       return _message(
         Icons.notifications_off_outlined,
         "You're all caught up",
-        'New announcements and updates will show up here.',
+        'Ticket updates, usage alerts and announcements will show up here.',
       );
     }
     return ListView(
@@ -301,6 +387,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
           ),
         ),
         for (final a in _items) _tile(a),
+        if (_hasMore)
+          Center(
+            child:
+                _loadingMore
+                    ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(color: _primary),
+                    )
+                    : TextButton(
+                      onPressed: _loadMore,
+                      child: const Text('Load more'),
+                    ),
+          ),
       ],
     );
   }
@@ -354,9 +453,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Widget _tile(Map<String, dynamic> a) {
-    final style = _categoryStyle(a['category']?.toString());
+    final style = _typeStyle(a['type']?.toString());
     final unread = _isUnread(a);
-    final pinned = a['pinned'] == true;
     final expanded = _expanded.contains(_idOf(a));
     final title = (a['title'] ?? '').toString();
     final body = (a['body'] ?? '').toString();
@@ -368,7 +466,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () => _toggle(a),
+          onTap: () => _open(a),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -415,14 +513,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
                               letterSpacing: 0.6,
                             ),
                           ),
-                          if (pinned) ...[
-                            const SizedBox(width: 6),
-                            const Icon(
-                              Icons.push_pin_rounded,
-                              size: 12,
-                              color: _inkTertiary,
-                            ),
-                          ],
                           const Spacer(),
                           Text(
                             _timeAgo(a['created_at']?.toString()),

@@ -277,21 +277,24 @@ class _ReportsPageState extends State<ReportsPage> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _ViewSwitch(
-                          graph: _graph,
-                          onChanged: (g) => setState(() => _graph = g),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _RangePills(
-                        selected: _threshold,
-                        onSelected:
-                            (t) => setState(() {
-                              _threshold = t;
-                              _shown = _pageSize;
-                            }),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _RangePills(
+                              selected: _threshold,
+                              onSelected:
+                                  (t) => setState(() {
+                                    _threshold = t;
+                                    _shown = _pageSize;
+                                  }),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _ViewSwitch(
+                            graph: _graph,
+                            onChanged: (g) => setState(() => _graph = g),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 14),
                       if (_graph)

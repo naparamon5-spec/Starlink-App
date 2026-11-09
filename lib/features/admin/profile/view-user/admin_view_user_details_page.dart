@@ -334,21 +334,18 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage> {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
+              DotBadge(
+                _isActive ? 'ACTIVE' : 'INACTIVE',
+                color: _isActive ? AppColors.successInk : AppColors.inkMuted,
+              ),
             ],
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              runSpacing: 6,
-              children: [
-                DotBadge(
-                  _isActive ? 'ACTIVE' : 'INACTIVE',
-                  color: _isActive ? AppColors.successInk : AppColors.inkMuted,
-                ),
-                if (_canManage)
+          if (_canManage) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child:
                   _isActive
                       ? TextButton(
                         onPressed: _toggling ? null : _toggleStatus,
@@ -369,9 +366,8 @@ class _AdminUserDetailPageState extends State<AdminUserDetailPage> {
                         ),
                         child: const Text('Activate'),
                       ),
-              ],
             ),
-          ),
+          ],
         ],
       ),
     );
