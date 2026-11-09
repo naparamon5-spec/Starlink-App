@@ -53,18 +53,19 @@ Future<File> _resolveFile(String filename) async {
 //
 // Android 9 and below : needs WRITE_EXTERNAL_STORAGE permission.
 // Android 10+         : no permission needed for public Downloads folder.
-// Android 13+         : WRITE_EXTERNAL_STORAGE is permanently denied but
+// Android 13+         : storage permission reports permanently denied but
 //                       writing to /storage/emulated/0/Download still works.
+//
+// There is deliberately no fallback to app-private storage: nobody could get
+// at a file saved there. If Downloads can't be written, saving fails and the
+// caller says so.
 Future<File> _resolveAndroid(String filename) async {
-  // Request legacy write permission for Android <= 9.
-  // On Android 10+ this is a no-op.
-  final status = await Permission.storage.request();
-  if (status.isPermanentlyDenied) {
-    debugPrint(
-      '[FileDownloader] Storage permission permanently denied, '
-      'falling back to internal storage.',
-    );
-    return _resolveAndroidInternal(filename);
+  // Only matters on Android 9 and below. Newer versions report it as denied
+  // while still allowing the write, so the result can't decide anything.
+  try {
+    await Permission.storage.request();
+  } catch (_) {
+    // A failed prompt shouldn't stop the save; the write below decides.
   }
 
   // Standard public Downloads path — always present on real devices.
@@ -93,24 +94,15 @@ Future<File> _resolveAndroid(String filename) async {
     }
   } catch (_) {}
 
-  return _resolveAndroidInternal(filename);
-}
-
-/// Internal fallback when public storage is unavailable.
-Future<File> _resolveAndroidInternal(String filename) async {
-  final appFiles = await getApplicationSupportDirectory();
-  final dir = Directory('${appFiles.path}/Downloads');
-  if (!dir.existsSync()) dir.createSync(recursive: true);
-  return _uniqueFile(dir.path, filename);
+  throw const FileSystemException('Downloads folder not available');
 }
 
 // ── iOS ───────────────────────────────────────────────────────────────────────
 //
 // iOS has no shared public Downloads folder.
-// Documents directory is visible in Files app under "On My iPhone → <AppName>"
-// when your Info.plist contains:
-//   UIFileSharingEnabled  = YES
-//   LSSupportsOpeningDocumentsInPlace = YES
+// The Documents directory shows in the Files app under
+// "On My iPhone → Ardent Dashboard"; ios/Runner/Info.plist enables that with
+// UIFileSharingEnabled and LSSupportsOpeningDocumentsInPlace.
 Future<File> _resolveIos(String filename) async {
   final docs = await getApplicationDocumentsDirectory();
   return _uniqueFile(docs.path, filename);

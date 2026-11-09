@@ -23,20 +23,7 @@ Future<void> exportSheets(
 ) async {
   final toast = AppToast.of(context);
   try {
-    final excel = Excel.createExcel();
-    final defaultSheet = excel.getDefaultSheet();
-    for (final s in sheets) {
-      final sheet = excel[s.name];
-      sheet.appendRow([for (final h in s.headers) TextCellValue(h)]);
-      for (final r in s.rows) {
-        sheet.appendRow([for (final v in r) _cell(v)]);
-      }
-    }
-    if (defaultSheet != null && !sheets.any((s) => s.name == defaultSheet)) {
-      excel.delete(defaultSheet);
-    }
-    final bytes = excel.encode();
-    if (bytes == null) throw Exception('Could not build the file');
+    final bytes = buildWorkbook(sheets);
     final path = await saveBytesAsFile(
       bytes: Uint8List.fromList(bytes),
       filename: filename,
@@ -46,7 +33,7 @@ Future<void> exportSheets(
     // The web build downloads and returns no path; on a phone no path means
     // the file couldn't be written.
     toast.showResult(path != null
-              ? 'Saved $filename to $path'
+              ? 'Saved ${path.split('/').last} to ${savedLocationLabel(path)}'
               : kIsWeb
               ? 'Export downloaded'
               : "Couldn't save $filename. Check storage access and try again.", ok: path != null || kIsWeb);
@@ -55,11 +42,47 @@ Future<void> exportSheets(
   }
 }
 
+/// The .xlsx bytes for [sheets].
+List<int> buildWorkbook(List<ExportSheet> sheets) {
+  final excel = Excel.createExcel();
+  final defaultSheet = excel.getDefaultSheet();
+  final names = <String>[];
+  for (final s in sheets) {
+    final name = _sheetName(s.name);
+    names.add(name);
+    final sheet = excel[name];
+    sheet.appendRow([for (final h in s.headers) _cell(h)]);
+    for (final r in s.rows) {
+      sheet.appendRow([for (final v in r) _cell(v)]);
+    }
+  }
+  if (defaultSheet != null && !names.contains(defaultSheet)) {
+    excel.delete(defaultSheet);
+  }
+  final bytes = excel.encode();
+  if (bytes == null) throw Exception('Could not build the file');
+  return bytes;
+}
+
+// Excel refuses to open a file that breaks these limits.
+const _maxSheetName = 31;
+const _maxCellText = 32767;
+final _sheetNameIllegal = RegExp(r'[\[\]:*?/\\]');
+final _xmlIllegal = RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]');
+
+String _sheetName(String raw) {
+  final name = raw.replaceAll(_sheetNameIllegal, ' ').trim();
+  if (name.isEmpty) return 'Sheet';
+  return name.length > _maxSheetName ? name.substring(0, _maxSheetName) : name;
+}
+
 CellValue? _cell(Object? v) {
   if (v == null) return null;
   if (v is int) return IntCellValue(v);
-  if (v is double) return DoubleCellValue(v);
-  if (v is num) return DoubleCellValue(v.toDouble());
+  if (v is num) return v.isFinite ? DoubleCellValue(v.toDouble()) : null;
   if (v is bool) return BoolCellValue(v);
-  return TextCellValue(v.toString());
+  final text = v.toString().replaceAll(_xmlIllegal, '');
+  return TextCellValue(
+    text.length > _maxCellText ? text.substring(0, _maxCellText) : text,
+  );
 }

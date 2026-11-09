@@ -336,37 +336,9 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
               ),
             ),
 
-            // ── Per page
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              sliver: SliverToBoxAdapter(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: SizedBox(
-                    width: 132,
-                    child: AppSelect<int>(
-                      dense: true,
-                      sheetTitle: 'Per page',
-                      value: _pageSize,
-                      options: const [
-                        SelectOption(5, '5 per page'),
-                        SelectOption(10, '10 per page'),
-                        SelectOption(20, '20 per page'),
-                        SelectOption(50, '50 per page'),
-                      ],
-                      onChanged: (v) {
-                        setState(() => _pageSize = v);
-                        _loadFirstPage();
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
             // ── Section header ───────────────────────────────────────
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
               sliver: SliverToBoxAdapter(
                 child: Row(
                   children: [
@@ -379,13 +351,32 @@ class _CustomerSubscriptionPageState extends State<CustomerSubscriptionPage> {
                         letterSpacing: 1.1,
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     Text(
                       '${_totalItems > 0 ? _totalItems : _allSubscriptions.length} results',
                       style: const TextStyle(
                         fontSize: 10,
                         color: _inkTertiary,
                         fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      width: 132,
+                      child: AppSelect<int>(
+                        dense: true,
+                        sheetTitle: 'Per page',
+                        value: _pageSize,
+                        options: const [
+                          SelectOption(5, '5 per page'),
+                          SelectOption(10, '10 per page'),
+                          SelectOption(20, '20 per page'),
+                          SelectOption(50, '50 per page'),
+                        ],
+                        onChanged: (v) {
+                          setState(() => _pageSize = v);
+                          _loadFirstPage();
+                        },
                       ),
                     ),
                   ],

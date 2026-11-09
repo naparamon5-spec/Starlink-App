@@ -74,8 +74,13 @@ Future<List<Map<String, dynamic>>> fetchAllSubscriptions(String search) =>
             limit: limit,
             search: search,
           ),
-      keyOf: (row) => '${row['serviceLineNumber']}',
+      keyOf: subscriptionExportKey,
     );
+
+/// Identifies one exported row. The API returns a row per terminal, so a
+/// service line with several kits appears several times and each one counts.
+String subscriptionExportKey(Map<dynamic, dynamic> row) =>
+    '${row['serviceLineNumber']}|${row['kit_number']}';
 
 class ExportSubscriptionsButton extends StatelessWidget {
   const ExportSubscriptionsButton({super.key, required this.controller});

@@ -52,7 +52,10 @@ Future<void> runListExport(
   final toast = AppToast.of(context);
   try {
     final load = controller.loader;
-    if (load == null) return;
+    if (load == null) {
+      toast.showInfo('This list is still loading. Try again in a moment.');
+      return;
+    }
     final rows = await load();
     if (!context.mounted) return;
     if (rows.isEmpty) {

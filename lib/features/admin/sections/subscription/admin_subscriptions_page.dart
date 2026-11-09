@@ -280,32 +280,6 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
             ),
           ),
 
-          // Per page
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                width: 132,
-                child: AppSelect<int>(
-                  dense: true,
-                  sheetTitle: 'Per page',
-                  value: _pageSize,
-                  options: const [
-                    SelectOption(5, '5 per page'),
-                    SelectOption(10, '10 per page'),
-                    SelectOption(20, '20 per page'),
-                    SelectOption(50, '50 per page'),
-                  ],
-                  onChanged: (v) {
-                    setState(() => _pageSize = v);
-                    _loadFirstPage();
-                  },
-                ),
-              ),
-            ),
-          ),
-
           // List header
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 16, 8),
@@ -353,6 +327,24 @@ class _AdminSubscriptionsPageState extends State<AdminSubscriptionsPage> {
                 //     ),
                 //   ),
                 // ),
+                SizedBox(
+                  width: 132,
+                  child: AppSelect<int>(
+                    dense: true,
+                    sheetTitle: 'Per page',
+                    value: _pageSize,
+                    options: const [
+                      SelectOption(5, '5 per page'),
+                      SelectOption(10, '10 per page'),
+                      SelectOption(20, '20 per page'),
+                      SelectOption(50, '50 per page'),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _pageSize = v);
+                      _loadFirstPage();
+                    },
+                  ),
+                ),
               ],
             ),
           ),

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -378,9 +379,13 @@ class _TicketDetailsViewState extends State<TicketDetailsView> {
         mimeType: mimeType,
       );
       if (!mounted) return;
+      if (path == null && !kIsWeb) {
+        _snack("Couldn't save $filename.", isError: true);
+        return;
+      }
       _snack(
         path != null && path.isNotEmpty
-            ? 'Saved to $path'
+            ? 'Saved ${path.split('/').last} to ${savedLocationLabel(path)}'
             : 'Downloaded $filename',
       );
     } catch (_) {
