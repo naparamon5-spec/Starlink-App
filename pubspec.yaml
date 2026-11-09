@@ -60,7 +60,7 @@ dependencies:
   flutter_local_notifications: ^17.2.4
   # QR code for linking Google / Microsoft Authenticator (2FA).
   qr_flutter: ^4.1.0
-  video_player: ^2.14.1
+  video_player: ^2.11.1
   chewie: ^1.13.1
   local_auth: ^2.3.0
 
