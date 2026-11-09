@@ -348,32 +348,21 @@ class _ViewSwitch extends StatelessWidget {
 
   Widget _button(String label, IconData icon, bool value) {
     final on = graph == value;
-    return Material(
-      color: on ? AppColors.navy : Colors.transparent,
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      child: InkWell(
-        onTap: () => onChanged(value),
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: on ? AppColors.navy : Colors.transparent,
         borderRadius: BorderRadius.circular(AppRadius.sm),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: on ? Colors.white : AppColors.inkMuted,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: on ? Colors.white : AppColors.inkMuted,
-                ),
-              ),
-            ],
+        child: InkWell(
+          onTap: () => onChanged(value),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: Padding(
+            padding: const EdgeInsets.all(7),
+            child: Icon(
+              icon,
+              size: 18,
+              color: on ? Colors.white : AppColors.inkMuted,
+            ),
           ),
         ),
       ),

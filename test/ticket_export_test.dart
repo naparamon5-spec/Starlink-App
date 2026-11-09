@@ -53,6 +53,7 @@ void main() {
       final c = ListExportController()..loader = () async => [];
       await _pumpButton(t, c);
       await t.tap(find.byType(IconButton));
+      await t.pump(); // The overlay's first frame, then the export runs.
       await t.pump();
       expect(find.text('No tickets match your filters'), findsOneWidget);
     });
@@ -64,6 +65,7 @@ void main() {
                 () async => throw Exception('Tickets are still loading.');
       await _pumpButton(t, c);
       await t.tap(find.byType(IconButton));
+      await t.pump(); // The overlay's first frame, then the export runs.
       await t.pump();
       expect(find.text('Tickets are still loading.'), findsOneWidget);
     });

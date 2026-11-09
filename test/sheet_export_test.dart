@@ -1,7 +1,9 @@
 import 'dart:io';
-import 'dart:typed_data';
+
+import 'dart:async';
 
 import 'package:excel/excel.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:starlink_app/core/utils/file_download/file_downloader.dart';
@@ -89,6 +91,76 @@ void main() {
     );
 
     expect(all.map((r) => r['kit_number']), ['KIT-A', 'KIT-B', 'KIT-C']);
+  });
+
+  testWidgets('the overlay blocks taps until the export finishes', (t) async {
+    var taps = 0;
+    final done = Completer<void>();
+    late BuildContext context;
+    await t.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (c) {
+            context = c;
+            return Scaffold(
+              body: TextButton(
+                onPressed: () => taps++,
+                child: const Text('Behind'),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    final export = withExportOverlay(context, () async {
+      // A nested export must not stack a second overlay.
+      await withExportOverlay(context, () => done.future);
+    });
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('Exporting…'), findsOneWidget);
+
+    await t.tap(find.text('Behind'), warnIfMissed: false);
+    await t.tapAt(const Offset(5, 5));
+    await t.pump();
+    expect(taps, 0);
+    expect(find.text('Exporting…'), findsOneWidget);
+
+    done.complete();
+    await t.pump();
+    await export;
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('Exporting…'), findsNothing);
+
+    await t.tap(find.text('Behind'));
+    expect(taps, 1);
+  });
+
+  testWidgets('the overlay clears when an export fails', (t) async {
+    late BuildContext context;
+    await t.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (c) {
+            context = c;
+            return const Scaffold();
+          },
+        ),
+      ),
+    );
+
+    Object? error;
+    final export = withExportOverlay(
+      context,
+      () async => throw Exception('no'),
+    ).catchError((Object e) => error = e);
+    await t.pump();
+    await export;
+    await t.pump(const Duration(milliseconds: 300));
+
+    expect(error, isNotNull);
+    expect(find.text('Exporting…'), findsNothing);
   });
 
   group('saving', () {

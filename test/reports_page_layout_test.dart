@@ -51,8 +51,10 @@ void main() {
     }
 
     final usage = t.getCenter(find.text('USAGE'));
-    final list = t.getCenter(find.text('List'));
-    final graph = t.getRect(find.text('Graph'));
+    expect(find.text('List'), findsNothing);
+    expect(find.text('Graph'), findsNothing);
+    final list = t.getCenter(find.byTooltip('List'));
+    final graph = t.getRect(find.byTooltip('Graph'));
     expect((usage.dy - list.dy).abs(), lessThan(1));
     expect(usage.dx, lessThan(list.dx));
     expect(list.dx, lessThan(graph.center.dx));

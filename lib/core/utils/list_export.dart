@@ -56,16 +56,18 @@ Future<void> runListExport(
       toast.showInfo('This list is still loading. Try again in a moment.');
       return;
     }
-    final rows = await load();
-    if (!context.mounted) return;
-    if (rows.isEmpty) {
-      toast.showInfo(emptyMessage);
-      return;
-    }
-    final stamp = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    await exportSheets(context, '$filePrefix-$stamp.xlsx', [
-      ExportSheet(sheetName, headers, rowsOf(rows)),
-    ]);
+    await withExportOverlay(context, () async {
+      final rows = await load();
+      if (!context.mounted) return;
+      if (rows.isEmpty) {
+        toast.showInfo(emptyMessage);
+        return;
+      }
+      final stamp = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      await exportSheets(context, '$filePrefix-$stamp.xlsx', [
+        ExportSheet(sheetName, headers, rowsOf(rows)),
+      ]);
+    });
   } catch (e) {
     toast.showError(e.toString().replaceAll('Exception: ', ''));
   }
