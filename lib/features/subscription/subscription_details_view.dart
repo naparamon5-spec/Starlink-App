@@ -346,6 +346,7 @@ class _SubscriptionDetailsViewState extends State<SubscriptionDetailsView> {
       context,
       serviceLineNumber: widget.serviceLineNumber,
       cycle: _billingData,
+      limitGb: _limitGb,
       nickname: s(sub['nickname']),
       account: s(sub['company_name']) ?? s(sub['end_user_name']),
       plan: s(sub['subscriptionPlan']),
@@ -472,7 +473,7 @@ class _SubscriptionDetailsViewState extends State<SubscriptionDetailsView> {
             _buildHero(),
           const SizedBox(height: 22),
           const SectionHeading('Usage'),
-          _buildUsage(topUps),
+          _buildUsage(),
           const SizedBox(height: 22),
           SectionHeading('Service plans', trailing: _CountPill(plans.length)),
           _buildPlans(plans),
@@ -626,14 +627,18 @@ class _SubscriptionDetailsViewState extends State<SubscriptionDetailsView> {
 
   // ── Usage ────────────────────────────────────────────────────────────────
 
-  Widget _buildUsage(List<Map<String, dynamic>> topUps) {
+  /// Plan data plus top-ups. Usage is priority data against this, the same
+  /// as the backend's usage report and alerts; the cycle's own
+  /// usageLimitGB/consumedAmountGB are Starlink overage fields, usually 0.
+  double get _limitGb => _listOf('serviceTopUp').fold<double>(
+    _parseGb(_subscriptionData?['dataplan']),
+    (sum, t) => sum + _parseGb(t['TotalDataAmount'] ?? t['dataAmount']),
+  );
+
+  Widget _buildUsage() {
     final bc = _subscriptionData?['billingCycle'];
     final used = _parseGb(bc is Map ? bc['totalPriorityGB'] : null);
-    final topUpGb = topUps.fold<double>(
-      0,
-      (sum, t) => sum + _parseGb(t['TotalDataAmount'] ?? t['dataAmount']),
-    );
-    final limit = _parseGb(_subscriptionData?['dataplan']) + topUpGb;
+    final limit = _limitGb;
     final pct = limit > 0 ? (used / limit * 100) : 0.0;
     final barColor =
         pct >= 90
@@ -716,10 +721,10 @@ class _SubscriptionDetailsViewState extends State<SubscriptionDetailsView> {
             _statRow(
               _StatTile(
                 'Consumed',
-                _gb(cycle['consumedAmountGB']),
+                _gb(cycle['totalPriorityGB']),
                 AppColors.brand,
               ),
-              _StatTile('Limit', _gb(cycle['usageLimitGB']), AppColors.navy),
+              _StatTile('Limit', _gb(limit), AppColors.navy),
             ),
             const SizedBox(height: 8),
             _statRow(
@@ -831,13 +836,13 @@ class _SubscriptionDetailsViewState extends State<SubscriptionDetailsView> {
     return Column(
       children: [
         _statRow(
-          _Field('Limit', _gb(p['usageLimitGB'])),
-          _Field('Consumed', _gb(p['consumedAmountGB'])),
+          _Field('Overage limit', _gb(p['usageLimitGB'])),
+          _Field('Overage used', _gb(p['consumedAmountGB'])),
         ),
         const SizedBox(height: 12),
         _statRow(
           _Field(
-            'Price / GB',
+            'Overage price / GB',
             price == null ? '—' : '₱${NumberFormat('#,##0.00').format(price)}',
           ),
           _Field('Active from', _date(p['subscriptionActiveFrom'])),

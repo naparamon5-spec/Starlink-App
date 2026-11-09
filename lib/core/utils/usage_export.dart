@@ -10,10 +10,12 @@ import 'package:starlink_app/core/utils/sheet_export.dart';
 /// [cycle] is the billing-cycle payload (GET /subscriptions/billing-cycle or
 /// the subscription's billingCycle): dailyUsage.graphs[].data has one
 /// dataset per day holding [priority, optInPriority, standard, nonBillable].
+/// [limitGb] is the line's plan data plus top-ups.
 Future<void> exportUsage(
   BuildContext context, {
   required String serviceLineNumber,
   required Map<String, dynamic>? cycle,
+  required double limitGb,
   String? nickname,
   String? account,
   String? plan,
@@ -69,8 +71,8 @@ Future<void> exportUsage(
         ['Plan', plan ?? ''],
         ['Billing cycle start', from],
         ['Billing cycle end', to],
-        ['Consumed (GB)', n(cycle['consumedAmountGB'])],
-        ['Usage limit (GB)', n(cycle['usageLimitGB'])],
+        ['Consumed (GB)', n(cycle['totalPriorityGB'])],
+        ['Usage limit (GB)', r2(limitGb)],
         ['Priority (GB)', n(cycle['totalPriorityGB'])],
         ['Opt-in priority (GB)', n(cycle['totalOptInPriorityGB'])],
         ['Standard (GB)', n(cycle['totalStandardGB'])],
