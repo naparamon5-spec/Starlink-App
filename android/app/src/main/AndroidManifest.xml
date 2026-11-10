@@ -50,6 +50,11 @@
                     android:scheme="https"
                     android:host="starlink.ardentnetworks.com.ph"
                     android:pathPrefix="/reset-password" />
+                <!-- Sandbox: the sandbox API emails links on its own host. -->
+                <data
+                    android:scheme="https"
+                    android:host="startlink-sandbox-api.ardentnetworks.com.ph"
+                    android:pathPrefix="/reset-password" />
             </intent-filter>
 
             <!-- 🔗 Custom-scheme fallback: starlink://reset-password?token=xxx -->

@@ -378,7 +378,8 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
                           onPressed: _isLoading ? null : _verifyOtp,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.brand,
-                            disabledBackgroundColor: AppColors.brand.withOpacity(0.5),
+                            disabledBackgroundColor: AppColors.brand
+                                .withOpacity(0.5),
                             elevation: 0,
                             shadowColor: Colors.transparent,
                             shape: const StadiumBorder(),
@@ -396,7 +397,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
                                     ),
                                   )
                                   : Text(
-                                    _isSetup ? 'Link and Sign In' : 'Verify Code',
+                                    _isSetup
+                                        ? 'Link and Sign In'
+                                        : 'Verify Code',
                                     style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
@@ -504,32 +507,36 @@ class _OtpHeader extends StatelessWidget {
           Padding(
             padding: EdgeInsets.only(top: topPad),
             child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(20),
+              // Shrinks to fit the short header on a phone held sideways.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Icon(
+                        Icons.verified_user_outlined,
+                        size: 48,
+                        color: Colors.white,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.verified_user_outlined,
-                      size: 48,
-                      color: Colors.white,
+                    const SizedBox(height: 18),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.75),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.75),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

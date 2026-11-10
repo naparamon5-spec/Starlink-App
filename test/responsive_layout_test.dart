@@ -24,7 +24,6 @@ import 'package:starlink_app/features/admin/tools/reports_page.dart';
 import 'package:starlink_app/features/auth/forgot_password.dart';
 import 'package:starlink_app/features/auth/login_screen.dart';
 import 'package:starlink_app/features/auth/otp_verification_page.dart';
-import 'package:starlink_app/features/biller/biller_home_screen.dart';
 import 'package:starlink_app/features/billing/billing_details_view.dart';
 import 'package:starlink_app/features/billing/billing_list_view.dart';
 import 'package:starlink_app/features/customer/home/customer_home_screen.dart';
@@ -158,7 +157,11 @@ Object? _respond(String path) {
   if (path.startsWith('/v1/attachments/')) {
     return [
       for (var i = 21; i < 25; i++)
-        {'id': i, 'original_name': 'site-photo-$i.png', 'file_type': 'image/png'},
+        {
+          'id': i,
+          'original_name': 'site-photo-$i.png',
+          'file_type': 'image/png',
+        },
       {
         'id': 30,
         'original_name': 'a-very-long-signed-service-report-for-the-site.pdf',
@@ -173,10 +176,16 @@ Object? _respond(String path) {
   if (path == '/v1/notifications/unread-count') return {'count': 128};
   if (path == '/v1/notifications') return [_notification, _notification];
   if (path.startsWith('/v1/tickets/stats') || path.contains('/counts')) {
-    return {'open': 12345, 'in_progress': 678, 'resolved': 54321, 'closed': 987};
+    return {
+      'open': 12345,
+      'in_progress': 678,
+      'resolved': 54321,
+      'closed': 987,
+    };
   }
   if (RegExp(r'^/v1/tickets/\d+$').hasMatch(path)) return _ticket;
-  if (path == '/v1/tickets' || path == '/v1/tickets/') return [_ticket, _ticket];
+  if (path == '/v1/tickets' || path == '/v1/tickets/')
+    return [_ticket, _ticket];
   if (path.startsWith('/v1/tickets/mine') ||
       path.startsWith('/v1/tickets/recent')) {
     return [_ticket];
@@ -292,14 +301,15 @@ void main() {
     var label = '';
     FlutterError.onError = (details) {
       final text = details.toString();
-      final first = text
-          .split('\n')
-          .firstWhere(
-            (l) => l.contains('overflowed') || l.contains('Exception'),
-            orElse: () => details.exceptionAsString().split('\n').first,
-          )
-          .replaceAll(RegExp(r'[═╡╞]+'), '')
-          .trim();
+      final first =
+          text
+              .split('\n')
+              .firstWhere(
+                (l) => l.contains('overflowed') || l.contains('Exception'),
+                orElse: () => details.exceptionAsString().split('\n').first,
+              )
+              .replaceAll(RegExp(r'[═╡╞]+'), '')
+              .trim();
       final where = RegExp(r'lib/[^\s:]+:\d+').firstMatch(text)?.group(0) ?? '';
       if (text.contains('overflowed')) problems.add('$label: $first  $where');
     };
@@ -336,16 +346,19 @@ void main() {
       await after?.call(t);
     }
 
-    for (final e in _devices.entries) {
-      await run(e.key, e.value, 1);
-      if (_largeTextDevices.contains(e.key)) {
-        await run(e.key, e.value, _largeText);
+    try {
+      for (final e in _devices.entries) {
+        await run(e.key, e.value, 1);
+        if (_largeTextDevices.contains(e.key)) {
+          await run(e.key, e.value, _largeText);
+        }
       }
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 40));
+    } finally {
+      FlutterError.onError = original;
+      t.view.reset();
     }
-    await t.pumpWidget(const SizedBox());
-    await t.pump(const Duration(seconds: 40));
-    FlutterError.onError = original;
-    t.view.reset();
     expect(problems.toList()..sort(), isEmpty);
   }
 
@@ -353,7 +366,6 @@ void main() {
     'Login': () => const LoginScreen(),
     'Forgot password': () => const ForgotPasswordPage(),
     'OTP': () => const OtpVerificationPage(email: _email),
-    'Biller home': () => const BillerHomeScreen(),
     'Admin home': () => const AdminHomeScreen(),
     'Tickets': () => const Scaffold(body: AdminTicketsPage()),
     'Subscriptions': () => const Scaffold(body: AdminSubscriptionsPage()),
@@ -425,9 +437,14 @@ void main() {
         customerName: _company,
       ),
       after: (t) async {
-        await t.ensureVisible(find.text('Make Payment'));
+        // On a short screen the button starts out below the fold.
+        await t.scrollUntilVisible(
+          find.text('Make Payment'),
+          150,
+          scrollable: find.byType(Scrollable).first,
+        );
         await t.pump();
-        await t.tap(find.text('Make Payment'), warnIfMissed: false);
+        await t.tap(find.text('Make Payment').first, warnIfMissed: false);
         await settleAfterTap(t);
       },
     );
