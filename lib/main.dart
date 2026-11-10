@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:app_links/app_links.dart';
+import 'package:starlink_app/services/fresh_install_reset.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:starlink_app/shared/widgets/force_update_dialog.dart';
@@ -48,6 +49,9 @@ bool _isResetPasswordLink(Uri uri) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Before anything reads secure storage: wipe what a previous install left
+  // in the iOS Keychain.
+  await FreshInstallReset.run();
   await dotenv.load(fileName: ".env");
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
