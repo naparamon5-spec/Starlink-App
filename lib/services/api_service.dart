@@ -26,7 +26,8 @@ class ApiService {
     if (kIsWeb) return http.Client();
     final httpClient =
         HttpClient()
-          ..connectionTimeout = const Duration(seconds: 15);
+          ..connectionTimeout = const Duration(seconds: 15)
+          ..badCertificateCallback = (cert, host, port) => true; // dev only
     return IOClient(httpClient);
   }
 

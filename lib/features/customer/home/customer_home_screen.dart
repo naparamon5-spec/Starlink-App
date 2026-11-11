@@ -103,7 +103,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   http.Client get _httpClient {
     final httpClient =
         HttpClient()
-          ..connectionTimeout = const Duration(seconds: 15);
+          ..connectionTimeout = const Duration(seconds: 15)
+          ..badCertificateCallback = (cert, host, port) => true;
     return IOClient(httpClient);
   }
 
