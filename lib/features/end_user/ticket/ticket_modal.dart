@@ -86,8 +86,7 @@ class _EndUserTicketModalState extends State<EndUserTicketModal>
   http.Client get _client {
     final httpClient =
         HttpClient()
-          ..connectionTimeout = const Duration(seconds: 20)
-          ..badCertificateCallback = (cert, host, port) => true;
+          ..connectionTimeout = const Duration(seconds: 20);
     return IOClient(httpClient);
   }
 

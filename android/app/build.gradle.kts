@@ -16,6 +16,19 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// A Play Store bundle signed with the debug key can't update the store app and
+// breaks reset links, so `flutter build appbundle` stops instead of falling back.
+val buildingPlayBundle = gradle.startParameter.taskNames.any {
+    it.contains("bundleRelease", ignoreCase = true)
+}
+if (buildingPlayBundle && !keystorePropertiesFile.exists()) {
+    throw GradleException(
+        "android/key.properties is missing, so this release bundle would be signed " +
+            "with the debug key. Copy android/key.properties.example to " +
+            "android/key.properties and fill it in (see DEPLOY_CHECKLIST step 2)."
+    )
+}
+
 android {
     namespace = "com.ardentnetworks.starlink"
     compileSdk = flutter.compileSdkVersion
