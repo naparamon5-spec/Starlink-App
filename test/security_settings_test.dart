@@ -223,6 +223,25 @@ void main() {
       await t.pump(const Duration(seconds: 6));
       await finish(t);
     });
+
+    testWidgets('linking a new phone asks for the current code first', (
+      t,
+    ) async {
+      status = {'enabled': true, 'required': true};
+      await show(t, const TwoFactorSettingsCard());
+      await t.tap(find.text('Link a new phone'));
+      await t.pumpAndSettle();
+      expect(find.text('Link a new phone?'), findsOneWidget);
+      // Backing out starts no setup.
+      await t.tap(find.text('Cancel'));
+      for (var i = 0; i < 10; i++) {
+        await t.pump(const Duration(milliseconds: 30));
+      }
+      await t.pumpAndSettle();
+      expect(writes, isEmpty);
+      expect(find.text('Authenticator app'), findsWidgets);
+      await finish(t);
+    });
   });
 
   testWidgets('the Security page builds without framework errors', (t) async {
@@ -427,11 +446,11 @@ void main() {
       await finish(t);
     });
 
-    testWidgets('leaves everyone else alone', (t) async {
+    testWidgets('signs out without biometric login too', (t) async {
       var expired = false;
       await pumpGuard(t, () => expired = true);
       await leaveAndReturn(t);
-      expect(expired, isFalse);
+      expect(expired, isTrue);
       await finish(t);
     });
   });

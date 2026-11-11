@@ -76,10 +76,8 @@ void main() async {
     await PushService.instance.initialize();
   }
 
-  // Left for too long before being closed: back to the biometric panel.
-  if (!kIsWeb &&
-      await BiometricService.consumeBackgroundExpired() &&
-      await BiometricService.isEnrolled()) {
+  // Left for too long before being closed: sign in again.
+  if (!kIsWeb && await BiometricService.consumeBackgroundExpired()) {
     await ApiService.logout();
   }
 

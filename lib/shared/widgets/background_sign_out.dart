@@ -58,7 +58,6 @@ class _BackgroundSignOutState extends State<BackgroundSignOut>
   }
 
   Future<void> _expire() async {
-    if (!await BiometricService.isEnrolled()) return;
     final token = await ApiService.getAccessToken();
     if (token == null || token.isEmpty) return;
     await widget.onExpired();

@@ -53,9 +53,31 @@ class _TwoFactorSettingsCardState extends State<TwoFactorSettingsCard> {
   }
 
   Future<void> _openSetup() async {
+    // Replacing a linked app needs a code from it (the backend refuses
+    // otherwise), so a stolen session can't move it to another phone.
+    String? currentCode;
+    if (_enabled) {
+      currentCode = await showDialog<String>(
+        context: context,
+        builder:
+            (_) => const _CurrentCodeDialog(
+              title: 'Link a new phone?',
+              message:
+                  'Enter the current 6-digit code from the authenticator app '
+                  "you're replacing. Lost that phone? Ask an admin to reset "
+                  'two-step sign-in.',
+              confirmLabel: 'Continue',
+            ),
+      );
+      if (currentCode == null || currentCode.length != kTotpLength || !mounted) {
+        return;
+      }
+    }
     final linked = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => const AuthenticatorSetupPage()),
+      MaterialPageRoute(
+        builder: (_) => AuthenticatorSetupPage(currentCode: currentCode),
+      ),
     );
     if (linked == true) _load();
   }
@@ -63,7 +85,15 @@ class _TwoFactorSettingsCardState extends State<TwoFactorSettingsCard> {
   Future<void> _disable() async {
     final code = await showDialog<String>(
       context: context,
-      builder: (_) => const _TurnOffDialog(),
+      builder:
+          (_) => const _CurrentCodeDialog(
+            title: 'Turn off two-factor?',
+            message:
+                'Enter the current 6-digit code from your authenticator app '
+                'to confirm.',
+            confirmLabel: 'Turn off',
+            danger: true,
+          ),
     );
     if (code == null || code.length != kTotpLength || !mounted) return;
 
@@ -191,14 +221,24 @@ class _TwoFactorSettingsCardState extends State<TwoFactorSettingsCard> {
 
 /// Asks for a current code. Owns its controller so it outlives the dialog's
 /// closing animation.
-class _TurnOffDialog extends StatefulWidget {
-  const _TurnOffDialog();
+class _CurrentCodeDialog extends StatefulWidget {
+  const _CurrentCodeDialog({
+    required this.title,
+    required this.message,
+    required this.confirmLabel,
+    this.danger = false,
+  });
+
+  final String title;
+  final String message;
+  final String confirmLabel;
+  final bool danger;
 
   @override
-  State<_TurnOffDialog> createState() => _TurnOffDialogState();
+  State<_CurrentCodeDialog> createState() => _CurrentCodeDialogState();
 }
 
-class _TurnOffDialogState extends State<_TurnOffDialog> {
+class _CurrentCodeDialogState extends State<_CurrentCodeDialog> {
   final _controller = TextEditingController();
 
   @override
@@ -211,17 +251,15 @@ class _TurnOffDialogState extends State<_TurnOffDialog> {
   Widget build(BuildContext context) {
     return AppDialog(
       icon: Icons.shield_outlined,
-      tone: AppDialogTone.danger,
-      title: 'Turn off two-factor?',
-      message:
-          'Enter the current 6-digit code from your authenticator app '
-          'to confirm.',
+      tone: widget.danger ? AppDialogTone.danger : AppDialogTone.primary,
+      title: widget.title,
+      message: widget.message,
       content: TotpCodeField(
         controller: _controller,
         autofocus: true,
         onCompleted: (v) => Navigator.pop(context, v),
       ),
-      confirmLabel: 'Turn off',
+      confirmLabel: widget.confirmLabel,
       onConfirm: () => Navigator.pop(context, _controller.text.trim()),
       cancelLabel: 'Cancel',
       onCancel: () => Navigator.pop(context),
@@ -232,7 +270,10 @@ class _TurnOffDialogState extends State<_TurnOffDialog> {
 /// Links (or re-links) an authenticator app for the signed-in user.
 /// Pops `true` once the backend confirms the code.
 class AuthenticatorSetupPage extends StatefulWidget {
-  const AuthenticatorSetupPage({super.key});
+  const AuthenticatorSetupPage({super.key, this.currentCode});
+
+  /// A code from the app being replaced; required when one is already linked.
+  final String? currentCode;
 
   @override
   State<AuthenticatorSetupPage> createState() => _AuthenticatorSetupPageState();
@@ -286,7 +327,10 @@ class _AuthenticatorSetupPageState extends State<AuthenticatorSetupPage> {
     setState(() {
       _verifying = true;
     });
-    final res = await ApiService.confirmTwoFactorSetup(code);
+    final res = await ApiService.confirmTwoFactorSetup(
+      code,
+      currentCode: widget.currentCode,
+    );
     if (!mounted) return;
     setState(() => _verifying = false);
     if (res['status'] == 'success') {

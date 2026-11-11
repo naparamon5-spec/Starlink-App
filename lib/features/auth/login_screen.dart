@@ -282,7 +282,8 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         final msg = response['message']?.toString() ?? '';
         final unreachable =
-            msg.contains('SocketException') ||
+            msg.contains('Cannot reach the server') ||
+        msg.contains('SocketException') ||
             msg.contains('Failed host lookup') ||
             msg.contains('TimeoutException') ||
             msg.contains('HandshakeException');

@@ -63,8 +63,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   http.Client get _httpClient {
     final httpClient =
         HttpClient()
-          ..connectionTimeout = const Duration(seconds: 15)
-          ..badCertificateCallback = (cert, host, port) => true;
+          ..connectionTimeout = const Duration(seconds: 15);
     return IOClient(httpClient);
   }
 

@@ -16,6 +16,20 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// A release signed with the debug key can't update the Play Store app and
+// fails App Links verification, so don't build one by accident. For a quick
+// local test build only, set STARLINK_ALLOW_DEBUG_RELEASE=1.
+val allowDebugRelease = System.getenv("STARLINK_ALLOW_DEBUG_RELEASE") == "1"
+val buildingRelease =
+    gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+if (buildingRelease && !keystorePropertiesFile.exists() && !allowDebugRelease) {
+    throw GradleException(
+        "android/key.properties is missing, so this release would be signed with the " +
+            "debug key. Add the release keystore (see android/key.properties.example), " +
+            "or set STARLINK_ALLOW_DEBUG_RELEASE=1 for a local test build only."
+    )
+}
+
 android {
     namespace = "com.ardentnetworks.starlink"
     compileSdk = flutter.compileSdkVersion
@@ -56,9 +70,8 @@ android {
 
     buildTypes {
         release {
-            // Use the real release keystore when android/key.properties is present
-            // (required for signed distribution / App Links verification). Falls back
-            // to debug signing for local `flutter run --release` when no keystore is set.
+            // The real release keystore from android/key.properties. Debug signing
+            // only when STARLINK_ALLOW_DEBUG_RELEASE=1 (checked above).
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {

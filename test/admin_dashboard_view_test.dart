@@ -5,10 +5,12 @@ import 'package:starlink_app/features/admin/sections/admin_dashboard_view.dart';
 void main() {
   final now = DateTime.utc(2026, 11, 6, 12);
 
-  Map<String, dynamic> line(String sln, int dayOffset) => {
+  // Widgets compare end dates with the real clock, so widget tests pass
+  // `from: DateTime.now()`; the pure sorting tests use the fixed [now].
+  Map<String, dynamic> line(String sln, int dayOffset, {DateTime? from}) => {
     'serviceLineNumber': sln,
     'nickname': 'NICK-$sln',
-    'endDate': now.add(Duration(days: dayOffset)).toIso8601String(),
+    'endDate': (from ?? now).add(Duration(days: dayOffset)).toIso8601String(),
   };
 
   test('days are rounded up and go negative once lapsed', () {
@@ -74,7 +76,10 @@ void main() {
                     'status': 'in_progress',
                   },
               ],
-              expiring: [for (var i = 0; i < 5; i++) line('SL-$i', i + 1)],
+              expiring: [
+                for (var i = 0; i < 5; i++)
+                  line('SL-$i', i + 1, from: DateTime.now()),
+              ],
               onViewTickets: () => viewed++,
             ),
           ),

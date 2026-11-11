@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math';
@@ -10,7 +11,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:starlink_app/features/ticket/ticket_details_view.dart';
 import 'package:starlink_app/services/api_service.dart';
+import 'package:starlink_app/shared/widgets/notifications.dart';
 
 /// Push notifications via Firebase Cloud Messaging — same setup as
 /// eforward_app / hris_mobile:
@@ -177,10 +180,42 @@ class PushService {
     } catch (_) {}
   }
 
-  /// A tap opens the app (the OS does that). Screen routing by `type` /
-  /// `ticket_id` in the data payload can be added here later.
-  static void _onNotificationTap(Map<String, dynamic> data) {
-    debugPrint('👆 Notification tapped: $data');
+  /// A tap on a ticket notification opens that ticket; any other tap opens the
+  /// notifications list. A tap that launched the app arrives before the first
+  /// screen exists, so it waits for the navigator (up to ~10 s).
+  static void _onNotificationTap(Map<String, dynamic> data, [int tries = 0]) {
+    final nav = navigatorKey?.currentState;
+    if (nav == null) {
+      if (tries < 20) {
+        Future.delayed(
+          const Duration(milliseconds: 500),
+          () => _onNotificationTap(data, tries + 1),
+        );
+      }
+      return;
+    }
+    unawaited(_openFor(nav, data));
+  }
+
+  static Future<void> _openFor(
+    NavigatorState nav,
+    Map<String, dynamic> data,
+  ) async {
+    // Signed out (or the session expired in the background): the login screen
+    // stays; the person can find it under notifications after signing in.
+    final token = await ApiService.getAccessToken();
+    if (token == null || token.isEmpty) return;
+
+    final ticketId = int.tryParse('${data['ticket_id'] ?? ''}');
+    nav.push(
+      MaterialPageRoute(
+        builder:
+            (_) =>
+                ticketId != null && ticketId > 0
+                    ? TicketDetailsView(ticketId: '$ticketId')
+                    : const NotificationsPage(),
+      ),
+    );
   }
 
   // ─── Device token ↔ backend ───────────────────────────────────────────────

@@ -7,6 +7,8 @@ import 'package:http_parser/http_parser.dart';
 import 'package:http/io_client.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MissingPluginException;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:starlink_app/core/config/ssl_config.dart';
@@ -20,14 +22,14 @@ class ApiService {
 
   static String get baseUrl =>
       '${dotenv.env['API_BASE_URL'] /* ?? 'https://startlink-sandbox-api.ardentnetworks.com.ph/api' */}';
-  static bool _isRefreshingToken = false;
 
   static http.Client get _client {
     if (kIsWeb) return http.Client();
     final httpClient =
         HttpClient()
           ..connectionTimeout = const Duration(seconds: 15)
-          ..badCertificateCallback = (cert, host, port) => true; // dev only
+          ..badCertificateCallback =
+              kDebugMode ? (cert, host, port) => true : null;
     return IOClient(httpClient);
   }
 
@@ -133,7 +135,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -243,7 +245,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -383,7 +385,7 @@ class ApiService {
       } catch (e) {
         return {
           'status': 'error',
-          'message': e.toString().replaceAll('Exception: ', ''),
+          'message': friendlyError(e),
         };
       }
     }
@@ -406,35 +408,107 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
 
   // ─── Token management ─────────────────────────────────────────────────────
 
-  static Future<String?> getAccessToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('accessToken');
+  /// Message for the user from a caught error: connection problems get one
+  /// plain sentence instead of socket/handshake details; messages the server
+  /// sent (thrown as `Exception(message)`) pass through.
+  static String friendlyError(Object e) {
+    final text = e.toString();
+    const network = [
+      'SocketException',
+      'ClientException',
+      'HandshakeException',
+      'TimeoutException',
+      'Failed host lookup',
+      'Connection refused',
+      'Connection closed',
+      'Connection reset',
+      'Network is unreachable',
+    ];
+    if (network.any(text.contains)) {
+      return 'Cannot reach the server. Check your connection and try again.';
+    }
+    if (e is FormatException) {
+      return 'The server sent an unexpected response. Please try again.';
+    }
+    return text.replaceAll('Exception: ', '');
   }
 
-  static Future<String?> getRefreshToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('refreshToken');
+  // Tokens live in the Keychain / EncryptedSharedPreferences. Older installs
+  // kept them in plain SharedPreferences; those are moved over on first read.
+  static const _tokenStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
+  // Unit tests have no secure-storage plugin; they keep using SharedPreferences.
+  // Once it's known to be missing, skip it so tests keep their usual timing.
+  static bool _noSecureStorage = false;
+
+  static Future<String?> _secureRead(String key) async {
+    if (_noSecureStorage) return null;
+    try {
+      return await _tokenStorage.read(key: key);
+    } on MissingPluginException {
+      _noSecureStorage = true;
+      return null;
+    }
   }
 
-  static Future<void> setAccessToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('accessToken', token);
+  static Future<bool> _secureWrite(String key, String value) async {
+    if (_noSecureStorage) return false;
+    try {
+      await _tokenStorage.write(key: key, value: value);
+      return true;
+    } on MissingPluginException {
+      _noSecureStorage = true;
+      return false;
+    }
   }
+
+  static Future<String?> _readToken(String key) async {
+    final secure = await _secureRead(key);
+    if (secure != null && secure.isNotEmpty) return secure;
+    final prefs = await SharedPreferences.getInstance();
+    final legacy = prefs.getString(key);
+    if (legacy != null && await _secureWrite(key, legacy)) {
+      await prefs.remove(key);
+    }
+    return legacy;
+  }
+
+  static Future<void> _writeToken(String key, String value) async {
+    if (await _secureWrite(key, value)) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(key, value);
+  }
+
+  static Future<String?> getAccessToken() => _readToken('accessToken');
+
+  static Future<String?> getRefreshToken() => _readToken('refreshToken');
+
+  static Future<void> setAccessToken(String token) =>
+      _writeToken('accessToken', token);
 
   static Future<void> setRefreshToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('refreshToken', token);
+    await _writeToken('refreshToken', token);
     await BiometricService.syncRefreshToken(token);
   }
 
   static Future<void> clearTokens() async {
+    if (!_noSecureStorage) {
+      try {
+        await _tokenStorage.delete(key: 'accessToken');
+        await _tokenStorage.delete(key: 'refreshToken');
+      } on MissingPluginException {
+        _noSecureStorage = true;
+      }
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('accessToken');
     await prefs.remove('refreshToken');
@@ -482,18 +556,18 @@ class ApiService {
     if (inner is Map) inner['refreshToken'] ??= token;
   }
 
-  static Future<Map<String, dynamic>> refreshToken() async {
-    if (_isRefreshingToken) {
-      // Avoid parallel refresh calls racing and wiping tokens unexpectedly.
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      final latestToken = await getAccessToken();
-      if (latestToken != null && latestToken.isNotEmpty) {
-        return {'status': 'success', 'accessToken': latestToken};
-      }
-    }
+  // Every caller that needs a refresh while one is running gets that same
+  // result. Two refreshes would present the same rotated token twice, and the
+  // second would be rejected as reuse.
+  static Future<Map<String, dynamic>>? _refreshInFlight;
 
+  static Future<Map<String, dynamic>> refreshToken() =>
+      _refreshInFlight ??= _refreshOnce().whenComplete(
+        () => _refreshInFlight = null,
+      );
+
+  static Future<Map<String, dynamic>> _refreshOnce() async {
     try {
-      _isRefreshingToken = true;
       final refreshTokenValue = await getRefreshToken();
       if (refreshTokenValue == null || refreshTokenValue.isEmpty) {
         throw Exception('No refresh token available');
@@ -555,8 +629,6 @@ class ApiService {
         await clearTokens();
       }
       return {'status': 'error', 'message': message};
-    } finally {
-      _isRefreshingToken = false;
     }
   }
 
@@ -700,9 +772,20 @@ class ApiService {
   static Future<Map<String, dynamic>> startTwoFactorSetup() =>
       _authorizedWrite('POST', '/v1/auth/2fa/setup');
 
-  /// Confirms setup with a code from the app and turns 2FA on.
-  static Future<Map<String, dynamic>> confirmTwoFactorSetup(String code) =>
-      _authorizedWrite('POST', '/v1/auth/2fa/verify', body: {'code': code});
+  /// Confirms setup with a code from the new app and turns 2FA on. When an app
+  /// is already linked, [currentCode] (from that app) is required to replace it.
+  static Future<Map<String, dynamic>> confirmTwoFactorSetup(
+    String code, {
+    String? currentCode,
+  }) => _authorizedWrite(
+    'POST',
+    '/v1/auth/2fa/verify',
+    body: {
+      'code': code,
+      if (currentCode != null && currentCode.isNotEmpty)
+        'current_code': currentCode,
+    },
+  );
 
   /// Turns 2FA off (needs a current code). Refused for roles where it's required.
   static Future<Map<String, dynamic>> disableTwoFactor(String code) =>
@@ -740,6 +823,7 @@ class ApiService {
 
     final msg = res['message']?.toString() ?? '';
     final unreachable =
+        msg.contains('Cannot reach the server') ||
         msg.contains('SocketException') ||
         msg.contains('Failed host lookup') ||
         msg.contains('TimeoutException') ||
@@ -930,7 +1014,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -1092,7 +1176,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -1178,7 +1262,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -1255,7 +1339,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -1332,7 +1416,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -1527,7 +1611,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -1821,7 +1905,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
         'data': null,
       };
     }
@@ -2163,7 +2247,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -2266,7 +2350,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -2672,7 +2756,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -2755,7 +2839,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -2894,7 +2978,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }
@@ -2976,7 +3060,7 @@ class ApiService {
     } catch (e) {
       return {
         'status': 'error',
-        'message': e.toString().replaceAll('Exception: ', ''),
+        'message': friendlyError(e),
       };
     }
   }

@@ -190,8 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
   http.Client get _httpClient {
     final httpClient =
         HttpClient()
-          ..connectionTimeout = const Duration(seconds: 15)
-          ..badCertificateCallback = (cert, host, port) => true;
+          ..connectionTimeout = const Duration(seconds: 15);
     return IOClient(httpClient);
   }
 
@@ -225,7 +224,9 @@ class _HomeScreenState extends State<HomeScreen> {
             final decoded = json.decode(res.body);
             if (decoded is Map<String, dynamic>) {
               final extraData =
-                  (decoded['data'] as Map<String, dynamic>?) ?? decoded;
+                  decoded['data'] is Map<String, dynamic>
+                      ? decoded['data'] as Map<String, dynamic>
+                      : decoded;
               merged.addAll(extraData);
             }
           }
@@ -247,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
       try {
         final prefs = await SharedPreferences.getInstance();
         final profileStr = prefs.getString('userProfile');
-        if (profileStr != null) {
+        if (profileStr != null && mounted) {
           setState(
             () =>
                 _userProfile = Map<String, dynamic>.from(

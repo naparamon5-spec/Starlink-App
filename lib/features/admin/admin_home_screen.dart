@@ -442,7 +442,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         return [
           SliverFillRemaining(
             hasScrollBody: true,
-            child: _SettingsSection(me: _me),
+            child: _SettingsSection(me: _me, onProfileSaved: _loadDashboard),
           ),
         ];
       default:
@@ -619,7 +619,8 @@ class _SectionHeader extends StatelessWidget {
 
 class _SettingsSection extends StatelessWidget {
   final Map<String, dynamic>? me;
-  const _SettingsSection({this.me});
+  final VoidCallback? onProfileSaved;
+  const _SettingsSection({this.me, this.onProfileSaved});
 
   String? _extractString(List<String> keys) {
     if (me == null) return null;
@@ -778,12 +779,14 @@ class _SettingsSection extends StatelessWidget {
             iconColor: _primaryDark,
             title: 'Edit Profile',
             subtitle: 'Update your admin account information and preferences.',
-            onTap:
-                () => Navigator.of(context).push(
+            onTap: () async {
+                final saved = await Navigator.of(context).push<bool>(
                   MaterialPageRoute(
                     builder: (_) => const AdminEditProfilePage(),
                   ),
-                ),
+                );
+                if (saved == true) onProfileSaved?.call();
+                },
           ),
           const SizedBox(height: 10),
           _SettingsCard(

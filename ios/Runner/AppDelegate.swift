@@ -29,5 +29,33 @@ class SceneDelegate: FlutterSceneDelegate {
       connectionOptions.urlContexts.first?.url
       ?? connectionOptions.userActivities.first?.webpageURL
     if let url { AppLinks.shared.handleLink(url: url) }
+
+    // Notifications, not overrides: FlutterSceneDelegate keeps its own
+    // handling of these lifecycle events.
+    let center = NotificationCenter.default
+    center.addObserver(
+      forName: UIScene.willDeactivateNotification, object: scene, queue: .main
+    ) { [weak self] _ in self?.showPrivacyCover(on: scene) }
+    center.addObserver(
+      forName: UIScene.didActivateNotification, object: scene, queue: .main
+    ) { [weak self] _ in self?.hidePrivacyCover() }
+  }
+
+  // The app switcher shows a plain cover instead of billing or router Wi-Fi
+  // details.
+  private var privacyCover: UIView?
+
+  private func showPrivacyCover(on scene: UIScene) {
+    guard privacyCover == nil, let window = (scene as? UIWindowScene)?.windows.first else { return }
+    let cover = UIView(frame: window.bounds)
+    cover.backgroundColor = .systemBackground
+    cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    window.addSubview(cover)
+    privacyCover = cover
+  }
+
+  private func hidePrivacyCover() {
+    privacyCover?.removeFromSuperview()
+    privacyCover = nil
   }
 }

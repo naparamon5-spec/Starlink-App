@@ -88,8 +88,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
   http.Client get _client {
     final httpClient =
         HttpClient()
-          ..connectionTimeout = const Duration(seconds: 20)
-          ..badCertificateCallback = (cert, host, port) => true;
+          ..connectionTimeout = const Duration(seconds: 20);
     return IOClient(httpClient);
   }
 
@@ -931,8 +930,7 @@ class _CustomerTicketModalState extends State<CustomerTicketModal>
 
       final httpClient =
           HttpClient()
-            ..connectionTimeout = const Duration(seconds: 20)
-            ..badCertificateCallback = (cert, host, port) => true;
+            ..connectionTimeout = const Duration(seconds: 20);
       final client = IOClient(httpClient);
 
       final response = await client

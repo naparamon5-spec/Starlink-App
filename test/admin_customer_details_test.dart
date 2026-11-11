@@ -179,4 +179,23 @@ void main() {
     expect(find.text('Edit end users'), findsOneWidget);
     await finish(t);
   });
+
+  testWidgets('editing end users swaps in Cancel and Save; Cancel backs out', (
+    t,
+  ) async {
+    await open(t);
+    expect(find.text('Link service lines'), findsOneWidget);
+    await t.tap(find.text('Edit end users'));
+    await t.pump();
+    expect(find.text('Cancel'), findsOneWidget);
+    expect(find.text('Save end users'), findsOneWidget);
+    expect(find.text('Link service lines'), findsNothing);
+
+    await t.tap(find.text('Cancel'));
+    await t.pump();
+    expect(find.text('Edit end users'), findsOneWidget);
+    expect(find.text('Link service lines'), findsOneWidget);
+    expect(writes, isEmpty);
+    await finish(t);
+  });
 }

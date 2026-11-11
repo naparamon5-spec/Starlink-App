@@ -54,7 +54,41 @@ class AgentDashboard extends StatefulWidget {
   State<AgentDashboard> createState() => _AgentDashboardState();
 }
 
+/// The signed-in agent from /auth/me, shared by the app bar and Settings.
+final _agentMe = ValueNotifier<Map<String, dynamic>?>(null);
+
+Future<void> _refreshAgentMe() async {
+  final res = await ApiService.getMe();
+  final data = res['data'];
+  if (res['status'] == 'success' && data is Map) {
+    _agentMe.value = Map<String, dynamic>.from(data);
+  }
+}
+
+String _meField(Map<String, dynamic>? me, String key) =>
+    (me?[key] ?? '').toString().trim();
+
+String _agentNameOf(Map<String, dynamic>? me) {
+  final full =
+      '${_meField(me, 'first_name')} ${_meField(me, 'last_name')}'.trim();
+  return full.isNotEmpty ? full : _meField(me, 'name');
+}
+
+String _agentInitialsOf(Map<String, dynamic>? me) {
+  final parts =
+      _agentNameOf(me).split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return '?';
+  final last = parts.length > 1 ? parts.last[0] : '';
+  return (parts.first[0] + last).toUpperCase();
+}
+
 class _AgentDashboardState extends State<AgentDashboard> {
+  @override
+  void initState() {
+    super.initState();
+    _refreshAgentMe();
+  }
+
   int _selectedIndex = 0;
   AgentQuickAction? _quickAction;
   bool _quickMenuOpen = false;
@@ -244,14 +278,18 @@ class _AgentAppBarDelegate extends SliverPersistentHeaderDelegate {
                     width: 2,
                   ),
                 ),
-                child: const Center(
-                  child: Text(
-                    'JD',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                child: Center(
+                  child: ValueListenableBuilder(
+                    valueListenable: _agentMe,
+                    builder:
+                        (_, me, __) => Text(
+                          _agentInitialsOf(me),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                   ),
                 ),
               ),
@@ -295,14 +333,18 @@ class _AgentAppBarDelegate extends SliverPersistentHeaderDelegate {
                 ),
               ),
               const SizedBox(height: 2),
-              const Text(
-                'James Davis',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  height: 1.1,
-                ),
+              ValueListenableBuilder(
+                valueListenable: _agentMe,
+                builder:
+                    (_, me, __) => Text(
+                      me == null ? 'Loading…' : _agentNameOf(me),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        height: 1.1,
+                      ),
+                    ),
               ),
             ],
           ),
@@ -2847,8 +2889,40 @@ class _ActivityTile extends StatelessWidget {
 
 // ─── Settings (index 4) ───────────────────────────────────────────────────────
 
-class _AgentSettingsPage extends StatelessWidget {
+class _AgentSettingsPage extends StatefulWidget {
   const _AgentSettingsPage();
+
+  @override
+  State<_AgentSettingsPage> createState() => _AgentSettingsPageState();
+}
+
+class _AgentSettingsPageState extends State<_AgentSettingsPage> {
+  Map<String, dynamic>? _me;
+
+  @override
+  void initState() {
+    super.initState();
+    _me = _agentMe.value;
+    _loadMe();
+  }
+
+  Future<void> _loadMe() async {
+    await _refreshAgentMe();
+    if (mounted) setState(() => _me = _agentMe.value);
+  }
+
+  String _field(String key) => _meField(_me, key);
+
+  String get _name => _agentNameOf(_me);
+
+  String get _initials => _agentInitialsOf(_me);
+
+  String get _roleLabel {
+    final position = _field('position');
+    if (position.isNotEmpty) return position;
+    final role = _field('role');
+    return role.isEmpty ? 'Agent' : role[0].toUpperCase() + role.substring(1);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2883,10 +2957,10 @@ class _AgentSettingsPage extends StatelessWidget {
                       end: Alignment.bottomRight,
                     ),
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Text(
-                      'JD',
-                      style: TextStyle(
+                      _initials,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -2899,17 +2973,17 @@ class _AgentSettingsPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'James Davis',
-                        style: TextStyle(
+                      Text(
+                        _me == null ? 'Loading…' : _name,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
                       ),
                       const SizedBox(height: 2),
-                      const Text(
-                        'james.davis@support.io',
+                      Text(
+                        _field('email'),
                         style: TextStyle(
                           fontSize: 12,
                           color: Color(0xFF94A3B8),
@@ -2925,8 +2999,8 @@ class _AgentSettingsPage extends StatelessWidget {
                           color: const Color(0xFF3B82F6).withOpacity(0.12),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text(
-                          'Support Agent · Level 2',
+                        child: Text(
+                          _roleLabel,
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -2955,13 +3029,14 @@ class _AgentSettingsPage extends StatelessWidget {
             icon: Icons.person_outline,
             label: 'Edit Profile',
             subtitle: 'Update your name, photo and info',
-            onTap: () {
-              Navigator.push(
+            onTap: () async {
+              final saved = await Navigator.push<bool>(
                 context,
                 MaterialPageRoute(
                   builder: (context) => const AdminEditProfilePage(),
                 ),
               );
+              if (saved == true) _loadMe();
             },
           ),
           const SizedBox(height: 8),

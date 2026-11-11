@@ -103,8 +103,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   http.Client get _httpClient {
     final httpClient =
         HttpClient()
-          ..connectionTimeout = const Duration(seconds: 15)
-          ..badCertificateCallback = (cert, host, port) => true;
+          ..connectionTimeout = const Duration(seconds: 15);
     return IOClient(httpClient);
   }
 
@@ -143,7 +142,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             final decoded = json.decode(res.body);
             if (decoded is Map<String, dynamic>) {
               final extraData =
-                  (decoded['data'] as Map<String, dynamic>?) ?? decoded;
+                  decoded['data'] is Map<String, dynamic>
+                      ? decoded['data'] as Map<String, dynamic>
+                      : decoded;
               merged.addAll(extraData);
             }
           }
@@ -169,6 +170,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           userData['customerCode']?.toString() ??
           userData['company']?.toString();
 
+      if (!mounted) return;
       setState(() {
         _userId = parsedId;
         _euCode = euCode;
@@ -204,6 +206,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     } catch (e) {
       debugPrint('[CustomerHome] _loadUserData error: $e');
       final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
       setState(() {
         _userId = prefs.getInt('user_id');
         _userName = prefs.getString('name');
@@ -219,6 +222,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   Future<void> _loadTicketStats() async {
+    if (!mounted) return;
     setState(() => _loadingTickets = true);
     try {
       final results = await Future.wait([
@@ -333,7 +337,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             response['data'] is List ? response['data'] : [];
         final subscriptions =
             rawList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        setState(() => _subscriptions = subscriptions);
+        if (mounted) setState(() => _subscriptions = subscriptions);
       }
     } catch (e) {
       debugPrint('[CustomerHome] _loadSubscriptions error: $e');

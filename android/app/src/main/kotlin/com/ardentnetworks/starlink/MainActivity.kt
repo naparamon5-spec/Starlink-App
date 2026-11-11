@@ -3,6 +3,7 @@ package com.ardentnetworks.starlink
 import android.content.ContentValues
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -12,6 +13,15 @@ import java.io.IOException
 
 class MainActivity : FlutterFragmentActivity() {
   private val channelName = "starlink_app/downloads"
+
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    // Recent-apps shows a blank card instead of billing or router Wi-Fi details.
+    // Screenshots still work, so people can send an error to support.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      setRecentsScreenshotEnabled(false)
+    }
+  }
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
