@@ -16,18 +16,31 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
-// A release signed with the debug key can't update the Play Store app and
-// fails App Links verification, so don't build one by accident. For a quick
-// local test build only, set STARLINK_ALLOW_DEBUG_RELEASE=1.
-val allowDebugRelease = System.getenv("STARLINK_ALLOW_DEBUG_RELEASE") == "1"
-val buildingRelease =
-    gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
-if (buildingRelease && !keystorePropertiesFile.exists() && !allowDebugRelease) {
-    throw GradleException(
-        "android/key.properties is missing, so this release would be signed with the " +
-            "debug key. Add the release keystore (see android/key.properties.example), " +
-            "or set STARLINK_ALLOW_DEBUG_RELEASE=1 for a local test build only."
-    )
+// Without android/key.properties a release is signed with the debug key. That
+// is fine for an APK to test on a phone, but such a build can't update the
+// Play Store app and fails App Links verification. The store takes app
+// bundles, so a bundle build stops instead (STARLINK_ALLOW_DEBUG_RELEASE=1
+// overrides); an APK build only warns.
+if (!keystorePropertiesFile.exists()) {
+    val tasks = gradle.startParameter.taskNames
+    val buildingBundle = tasks.any {
+        it.contains("bundle", ignoreCase = true) && it.contains("Release", ignoreCase = true)
+    }
+    val buildingRelease = tasks.any { it.contains("Release", ignoreCase = true) }
+    val allowDebugRelease = System.getenv("STARLINK_ALLOW_DEBUG_RELEASE") == "1"
+    if (buildingBundle && !allowDebugRelease) {
+        throw GradleException(
+            "android/key.properties is missing, so this app bundle would be signed with " +
+                "the debug key and can't go to the Play Store. Add the release keystore " +
+                "(see android/key.properties.example)."
+        )
+    }
+    if (buildingRelease) {
+        logger.warn(
+            "WARNING: android/key.properties is missing; this release APK is signed with " +
+                "the debug key. Use it for testing only, not for the Play Store."
+        )
+    }
 }
 
 android {
